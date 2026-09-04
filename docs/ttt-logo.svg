@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="232 324 790 576" role="img" aria-labelledby="title desc">
+  <title id="title">Talk To Teammate logo</title>
+  <desc id="desc">Three terminal chat bubbles connected by color-matched lines to a central TTT monogram, above the Talk To Teammate wordmark.</desc>
+
+  <defs>
+    <style>
+      .talk-stroke { stroke: #7B5BE7; }
+      .talk-fill { fill: #7B5BE7; }
+      .to-stroke { stroke: #0E9BB5; }
+      .to-fill { fill: #0E9BB5; }
+      .teammate-stroke { stroke: #DE6E0B; }
+      .teammate-fill { fill: #DE6E0B; }
+
+      @media (prefers-color-scheme: dark) {
+        .talk-stroke { stroke: #A176FF; }
+        .talk-fill { fill: #A176FF; }
+        .to-stroke { stroke: #22C7DF; }
+        .to-fill { fill: #22C7DF; }
+        .teammate-stroke { stroke: #F59E0B; }
+        .teammate-fill { fill: #F59E0B; }
+      }
+    </style>
+
+    <!--
+      Real transparent clearance around the TTT glyphs.
+      White keeps connector strokes visible; black punches them out.
+      The same font metrics are used by the visible monogram below.
+    -->
+    <mask id="connector-clearance" maskUnits="userSpaceOnUse" x="0" y="0" width="1254" height="1254">
+      <rect width="1254" height="1254" fill="white"/>
+      <g font-family="Inter, Arial, Helvetica, sans-serif"
+         font-size="108"
+         font-weight="700"
+         text-anchor="middle"
+         fill="black"
+         stroke="black"
+         stroke-width="20"
+         stroke-linejoin="round"
+         paint-order="stroke fill">
+        <text x="582" y="700">t</text>
+        <text x="622" y="700">t</text>
+        <text x="662" y="700">t</text>
+      </g>
+    </mask>
+  </defs>
+
+  <!--
+    Three independent, color-matched connections.
+    Each line originates at its bubble tail and continues behind the
+    corresponding letter. The mask above creates transparent breathing room
+    around the actual glyph instead of painting a theme-colored halo.
+  -->
+  <g fill="none"
+     stroke-width="12"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     mask="url(#connector-clearance)">
+    <path d="M520 642 L582 682" class="talk-stroke"/>
+    <path d="M622 554 L622 682" class="to-stroke"/>
+    <path d="M734 642 L662 682" class="teammate-stroke"/>
+  </g>
+
+  <!-- Top terminal/chat bubble: matches To / middle t -->
+  <g fill="none" class="to-stroke" stroke-linejoin="round">
+    <path d="M543 350 H701 A28 28 0 0 1 729 378 V492 A28 28 0 0 1 701 520 H648 L622 554 L596 520 H543 A28 28 0 0 1 515 492 V378 A28 28 0 0 1 543 350 Z"
+          stroke-width="12"/>
+    <path d="M553 385 L575 400 L553 415" stroke-width="10" stroke-linecap="round"/>
+    <path d="M582 419 H600" stroke-width="10" stroke-linecap="round"/>
+  </g>
+  <g class="to-fill">
+    <circle cx="589" cy="467" r="8"/>
+    <circle cx="622" cy="467" r="8"/>
+    <circle cx="655" cy="467" r="8"/>
+  </g>
+
+  <!-- Left terminal/chat bubble: moved outward; matches Talk / first t -->
+  <g fill="none" class="talk-stroke" stroke-linejoin="round">
+    <path d="M286 548 H448 A28 28 0 0 1 476 576 V618 L520 642 L476 666 V696 A28 28 0 0 1 448 724 H286 A28 28 0 0 1 258 696 V576 A28 28 0 0 1 286 548 Z"
+          stroke-width="12"/>
+    <path d="M299 584 L321 599 L299 614" stroke-width="10" stroke-linecap="round"/>
+    <path d="M330 618 H347" stroke-width="10" stroke-linecap="round"/>
+  </g>
+
+  <!-- Right terminal/chat bubble: moved outward; matches Teammate / last t -->
+  <g fill="none" class="teammate-stroke" stroke-linejoin="round">
+    <path d="M806 548 H968 A28 28 0 0 1 996 576 V696 A28 28 0 0 1 968 724 H806 A28 28 0 0 1 778 696 V666 L734 642 L778 618 V576 A28 28 0 0 1 806 548 Z"
+          stroke-width="12"/>
+    <path d="M819 584 L841 599 L819 614" stroke-width="10" stroke-linecap="round"/>
+    <path d="M850 618 H868" stroke-width="10" stroke-linecap="round"/>
+  </g>
+
+  <!-- Central monogram: each connector terminates at its corresponding letter -->
+  <g font-family="Inter, Arial, Helvetica, sans-serif"
+     font-size="108"
+     font-weight="700"
+     text-anchor="middle">
+    <text x="582" y="700" class="talk-fill">t</text>
+    <text x="622" y="700" class="to-fill">t</text>
+    <text x="662" y="700" class="teammate-fill">t</text>
+  </g>
+
+  <!--
+    Wordmark: one middle-anchored text with a tspan per word, so centering is
+    the renderer's job and survives font substitution. Trailing spaces inside
+    the first two tspans separate the words.
+  -->
+  <g font-family="Inter, Arial, Helvetica, sans-serif"
+     font-size="94"
+     font-weight="700"
+     letter-spacing="-3">
+    <text x="627" y="858" text-anchor="middle" xml:space="preserve"><tspan class="talk-fill">Talk </tspan><tspan class="to-fill">To </tspan><tspan class="teammate-fill">Teammate</tspan></text>
+  </g>
+</svg>
