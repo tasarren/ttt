@@ -28,10 +28,10 @@ usage:
   ttt send TARGET [options] --file PATH         (or pipe the body on stdin)
   ttt reply MESSAGE_ID [--to sender|receiver|both] [options] -- MESSAGE
   ttt broadcast TARGET... [options] -- MESSAGE  ttt broadcast --all [options] -- MESSAGE
-  ttt ack MESSAGE_ID [-- NOTE]
+  ttt ack MESSAGE_ID [NOTE]                     ttt ack --all [-- NOTE]
 
-  ttt read [--max COUNT] [--peek] [--latest]
-  ttt inbox [--count]
+  ttt read [--max COUNT] [--peek] [--latest] [--headers-only]
+  ttt inbox [--count]                           ttt inbox --detail [--max COUNT]
   ttt status MESSAGE_ID
   ttt thread MESSAGE_ID
   ttt capture TARGET [--lines COUNT] [--raw] [--grep PATTERN]

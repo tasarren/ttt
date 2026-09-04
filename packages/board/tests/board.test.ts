@@ -133,3 +133,15 @@ test("cancelNotification removes only the matching marker so a failed spawn can 
   const retry = await board.send("A", ["B"], "two", NORMAL)
   assert.equal(retry.notifications.length, 1)
 })
+
+test("ackAll marks every unacked receipt in one lock with one note", async() => {
+  const board = await freshBoard()
+  await board.send("A", ["B"], "one", NORMAL)
+  await board.send("A", ["B"], "two", NORMAL)
+  await board.read("B", { max: 1, peek: false, latest: false })
+  const acked = await board.ackAll("B", "batch")
+  assert.equal(acked.length, 2)
+  assert.ok(acked.every((receipt) => receipt.state === "acked" && receipt.ackNote === "batch"))
+  assert.deepEqual(await board.ackAll("B"), [])
+  assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 2, superseded: 0 })
+})

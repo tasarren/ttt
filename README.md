@@ -68,8 +68,12 @@ Acking without a prior `ttt read` warns on stderr; the receipt is still marked a
 | `ttt broadcast TARGET... [options] -- MESSAGE` | One message, several recipients. |
 | `ttt broadcast --all [options] -- MESSAGE` | Every other window in the session. |
 | `ttt ack MESSAGE_ID [-- NOTE]` | Mark a message handled. Board state only; nothing is sent. |
+| `ttt ack MESSAGE_ID [NOTE]` | Same, with a bare note (no `--` needed). Acking unread warns on stderr. |
+| `ttt ack --all [-- NOTE]` | Ack every unacked message in your mailbox at once. |
 | `ttt read [--max N] [--peek] [--latest]` | Print unread messages (oldest first) and mark them read. `--peek` keeps them unread; `--latest` picks the newest N. |
+| `ttt read --headers-only` | Triage without bodies or state change: headers + one-line previews, stays unread. |
 | `ttt inbox [--count]` | Counts by state. `--count` prints only the unread number. |
+| `ttt inbox --detail [--max N]` | Same as headers-only triage for the oldest unread. |
 | `ttt status MESSAGE_ID` | Per-recipient receipt state and timestamps. |
 | `ttt thread MESSAGE_ID` | Every message in the thread, oldest first. |
 | `ttt capture TARGET [--lines N] [--raw]` | Last N lines of another window's pane. `--raw` keeps tmux's line wrapping. |

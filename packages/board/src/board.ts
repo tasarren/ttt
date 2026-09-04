@@ -185,6 +185,30 @@ export class Board {
     })
   }
 
+  /** Marks every unacked, non-superseded receipt in `agent`'s mailbox acked. One lock, one timestamp. */
+  async ackAll(agent: string, note?: string): Promise<MessageReceipt[]> {
+    return this.withMailboxLock(agent, async() => {
+      const ackedAt = new Date().toISOString()
+      const clean = note?.trim() ? note.trim() : undefined
+      const acked: MessageReceipt[] = []
+      const receipts = (await this.receiptsUnlocked(agent)).sort((a, b) =>
+        a.enqueuedAt.localeCompare(b.enqueuedAt) || a.messageId.localeCompare(b.messageId))
+      for (const receipt of receipts) {
+        if (receipt.state !== ReceiptState.Unread && receipt.state !== ReceiptState.Read) continue
+        const next: MessageReceipt = {
+          ...receipt,
+          state: ReceiptState.Acked,
+          ackedAt,
+          readAt: receipt.readAt ?? ackedAt,
+          ...(clean ? { ackNote: clean } : {}),
+        }
+        await this.writeReceipt(next)
+        acked.push(next)
+      }
+      return acked
+    })
+  }
+
   async messageStatus(messageId: string): Promise<{ message: BoardMessage; receipts: MessageReceipt[] }> {
     const message = await this.findMessage(messageId)
     const receipts: MessageReceipt[] = []

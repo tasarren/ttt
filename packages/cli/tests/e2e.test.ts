@@ -99,6 +99,25 @@ test("urgent send is pasted immediately and stays unread until read", async() =>
   assert.match(await ttt("B", "read", "--peek"), /stop now/)
 })
 
+test("triage stays unread; bare-note ack and ack --all clear the mailbox", async() => {
+  const queued = await ttt("A", "send", "B", "--no-reply", "--", "detail probe body line one\nline two")
+  const probeId = /^queued (ttt-\S+) -> B/.exec(queued)?.[1]
+  assert.ok(probeId, `unexpected send output: ${queued}`)
+  assert.match(await ttt("B", "inbox", "--detail"), /detail probe body line one/)
+  assert.doesNotMatch(await ttt("B", "inbox", "--detail"), /line two/)
+  const headers = await ttt("B", "read", "--headers-only")
+  assert.match(headers, /\(headers; still unread\)/)
+  assert.match(headers, /\(no-reply\)/)
+  assert.doesNotMatch(headers, /line two/)
+  const before = await ttt("B", "inbox", "--count")
+  assert.ok(Number(before) >= 1, `expected unread, got ${before}`)
+  assert.equal(await ttt("B", "ack", probeId, "bare", "note", "words"), `acked ${probeId}`)
+  const acked = await ttt("B", "ack", "--all", "--", "batch handled")
+  assert.match(acked, /^acked ttt-/m)
+  assert.equal(await ttt("B", "inbox", "--count"), "0")
+  assert.equal(await ttt("B", "ack", "--all"), "ttt: nothing to ack.")
+})
+
 test("refuses to message itself and unknown windows; capture peeks at the other pane", async() => {
   await assert.rejects(ttt("A", "send", "A", "--", "me"), /refusing to send a message to the current window/)
   await assert.rejects(ttt("A", "send", "ZZZ", "--", "x"), /tmux window does not exist: work:ZZZ/)
