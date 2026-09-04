@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { formatBatch, formatHeaders, formatThread, formatThreadHeaders, previewBody, shortStamp } from "../src/commands/inbox.ts"
+import { formatBatch, formatHeaders, formatThread, formatThreadHeaders, previewBody, shortStamp, topicOf } from "../src/commands/inbox.ts"
 import { BOARD_VERSION, MessageKind } from "@ttt/board"
 import type { BoardMessage } from "@ttt/board"
 
@@ -42,16 +42,23 @@ test("formatHeaders triages without bodies", () => {
   assert.equal(formatHeaders([], 0), "ttt: no unread messages.")
 })
 
-test("subjects surface in headers and thread views", () => {
+test("threads resolve topic and members in full and triage views", () => {
   const root = message({ subject: "launch" })
   const headers = formatHeaders([root], 1)
   assert.match(headers, /\(subj: launch\)/)
-  assert.match(formatThread([root]), /\(1 message\) subj: launch/)
-  const triage = formatThreadHeaders([root])
-  assert.match(triage, /\(headers\)/)
+  assert.match(formatThread([root], ["A", "B"]), /\(1 message\) topic: launch members: A, B/)
+  const triage = formatThreadHeaders([root], ["A", "B"])
+  assert.match(triage, /topic: launch members: A, B \(headers\)/)
   assert.match(triage, /first line/)
   assert.doesNotMatch(triage, /second line/)
-  assert.equal(formatThreadHeaders([]), "ttt: empty thread.")
+  assert.equal(formatThreadHeaders([], []), "ttt: empty thread.")
+  assert.equal(formatThread([], []), "ttt: empty thread.")
+})
+
+test("topic falls back to the root first line without a subject", () => {
+  const text = formatThread([message()], ["A", "B"])
+  assert.match(text, /topic: first line members: A, B/)
+  assert.equal(topicOf(message({ body: "   \n  spaced  \n" })), "spaced")
 })
 
 test("partial reads name what is shown and what is left", () => {

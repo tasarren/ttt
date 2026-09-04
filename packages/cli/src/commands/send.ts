@@ -37,20 +37,24 @@ export const broadcast: Handler = async(argv, ctx) => {
 }
 
 const REPLY_OPTIONS = { ...MESSAGE_OPTIONS, to: { type: "string", default: "sender" } } as const
-const AUDIENCES = ["sender", "receiver", "both"]
+const AUDIENCES = ["sender", "receiver", "both", "thread"]
 
 export const reply: Handler = async(argv, ctx) => {
   const { head, body } = splitAtTerminator(argv)
   const { values, positionals } = parseCommandArgs(head, REPLY_OPTIONS)
   const [originalId, ...extra] = positionals
   if (originalId === undefined || extra.length > 0) throw usageError("usage: ttt reply MESSAGE_ID [options] -- MESSAGE")
-  if (!AUDIENCES.includes(values.to)) throw usageError("--to must be sender, receiver, or both")
+  if (!AUDIENCES.includes(values.to)) throw usageError("--to must be sender, receiver, both, or thread")
 
   const original = await ctx.board.findMessage(originalId)
   if (values.subject !== undefined) throw usageError("--subject is set on the thread root only")
   const audience = new Set<string>()
-  if (values.to !== "receiver") audience.add(original.from)
-  if (values.to !== "sender") for (const recipient of original.recipients) audience.add(recipient)
+  if (values.to === "thread") {
+    for (const name of await ctx.board.threadParticipants(original.threadId)) audience.add(name)
+  } else {
+    if (values.to !== "receiver") audience.add(original.from)
+    if (values.to !== "sender") for (const recipient of original.recipients) audience.add(recipient)
+  }
   audience.delete(ctx.senderName)
   if (audience.size === 0) throw new CliError(`message ${originalId} has no reply audience other than yourself`)
 

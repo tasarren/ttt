@@ -116,7 +116,7 @@ Ways to send something:
 |---|---|
 | `ttt send TARGET [options] -- MESSAGE` | Queue a message for window `TARGET`. `ttt TARGET -- MESSAGE` is a shorthand. |
 | `ttt send TARGET [options] --file PATH` | Same, body read from a file. With neither `--` nor `--file`, the body is read from stdin. |
-| `ttt reply MESSAGE_ID [--to sender\|receiver\|both] [options] -- MESSAGE` | Reply in the same thread. Default audience is the original sender. |
+| `ttt reply MESSAGE_ID [--to sender\|receiver\|both\|thread] [options] -- MESSAGE` | Reply in the same thread. Default audience is the original sender; `--to thread` reaches every participant. Open group threads with `broadcast` + `--subject`, continue with `--to thread`. |
 | `ttt broadcast TARGET... [options] -- MESSAGE` | One message, several recipients. |
 | `ttt broadcast --all [options] -- MESSAGE` | Every other window in the session. |
 
@@ -136,7 +136,7 @@ Ways to check what happened to something you sent, or to look at a teammate's sc
 | Command | What it does |
 |---|---|
 | `ttt status MESSAGE_ID` | Per-recipient receipt state and short stamps (`q/n/r/a` = queued/notified/read/acked). |
-| `ttt thread MESSAGE_ID [--headers-only]` | Every message in the thread, oldest first. `--headers-only` triages without bodies. |
+| `ttt thread MESSAGE_ID [--headers-only]` | Every message in the thread, oldest first, with `topic:` and `members:` header. `--headers-only` triages without bodies. |
 | `ttt capture TARGET [--lines N] [--raw] [--grep PATTERN] [--around PATTERN] [--context N]` | Last N lines of another window's pane. TUI chrome (borders, spinners, padding) is cleaned; `--raw` skips the cleanup and keeps tmux line wrapping. `--grep` keeps matching lines. `--around` keeps matches plus N context lines each side (default 3). |
 | `ttt windows` | List windows in this session with ids. `(you)` marks the caller. |
 | `ttt whoami` | Print your session, window name, id, and board path. |

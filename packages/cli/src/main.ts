@@ -32,7 +32,7 @@ export const USAGE = `ttt — durable, batched messaging between windows of the 
 usage:
   ttt send TARGET [options] -- MESSAGE          ttt TARGET -- MESSAGE (shorthand)
   ttt send TARGET [options] --file PATH         (or pipe the body on stdin)
-  ttt reply MESSAGE_ID [--to sender|receiver|both] [options] -- MESSAGE
+  ttt reply MESSAGE_ID [--to sender|receiver|both|thread] [options] -- MESSAGE
   ttt broadcast TARGET... [options] -- MESSAGE  ttt broadcast --all [options] -- MESSAGE
   ttt ack MESSAGE_ID [NOTE]                     ttt ack --all [-- NOTE]
 

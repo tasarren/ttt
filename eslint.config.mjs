@@ -79,6 +79,8 @@ export default defineConfig(
       "**/*.tsbuildinfo",
       ".orchestrator/**",
       "**/docs/**",
+      // Predecessor single-file prototype, kept as reference; not part of the build.
+      "talk-to-teammate.ts",
     ],
   },
   js.configs.recommended,

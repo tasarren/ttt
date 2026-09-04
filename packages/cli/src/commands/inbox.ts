@@ -104,7 +104,9 @@ export const thread: Handler = async(argv, ctx) => {
   const [messageId, ...extra] = positionals
   if (messageId === undefined || extra.length > 0) throw usageError("usage: ttt thread MESSAGE_ID [--headers-only]")
   const messages = await ctx.board.thread(messageId)
-  process.stdout.write(`${values["headers-only"] ? formatThreadHeaders(messages) : formatThread(messages)}\n`)
+  const first = messages[0]
+  const members = first ? await ctx.board.threadParticipants(first.threadId) : []
+  process.stdout.write(`${values["headers-only"] ? formatThreadHeaders(messages, members) : formatThread(messages, members)}\n`)
 }
 
 function plural(count: number, noun: string): string {
@@ -206,11 +208,15 @@ export function formatStatus(message: BoardMessage, receipts: MessageReceipt[]):
   return lines.join("\n")
 }
 
-export function formatThread(messages: BoardMessage[]): string {
+/** Every thread resolves a topic: explicit `--subject` wins, else the root body's first line. */
+export function topicOf(root: BoardMessage): string {
+  return root.subject ?? previewBody(root.body, 80)
+}
+
+export function formatThread(messages: BoardMessage[], members: string[]): string {
   const first = messages[0]
   if (!first) return "ttt: empty thread."
-  const subject = first.subject ? ` subj: ${first.subject}` : ""
-  const lines = [`thread ${first.threadId} (${plural(messages.length, "message")})${subject}`]
+  const lines = [`thread ${first.threadId} (${plural(messages.length, "message")}) topic: ${topicOf(first)} members: ${members.join(", ")}`]
   for (const message of messages) {
     lines.push(
       "",
@@ -223,11 +229,10 @@ export function formatThread(messages: BoardMessage[]): string {
 }
 
 /** Thread triage: headers + one-line previews, no bodies. */
-export function formatThreadHeaders(messages: BoardMessage[]): string {
+export function formatThreadHeaders(messages: BoardMessage[], members: string[]): string {
   const first = messages[0]
   if (!first) return "ttt: empty thread."
-  const subject = first.subject ? ` subj: ${first.subject}` : ""
-  const lines = [`thread ${first.threadId} (${plural(messages.length, "message")})${subject} (headers)`]
+  const lines = [`thread ${first.threadId} (${plural(messages.length, "message")}) topic: ${topicOf(first)} members: ${members.join(", ")} (headers)`]
   messages.forEach((message, index) => {
     lines.push(
       `[${index + 1}/${messages.length}] ${shortStamp(message.timestamp)} ${message.from} [${message.messageId}]`,

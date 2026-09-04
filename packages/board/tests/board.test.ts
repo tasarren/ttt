@@ -62,6 +62,16 @@ test("send -> read -> ack round trip, with status and thread", async() => {
   assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 1, superseded: 0 })
 })
 
+test("threadParticipants unions senders and recipients across nested replies", async() => {
+  const board = await freshBoard()
+  const root = await board.send("A", ["B", "C"], "group root", { ...NORMAL, subject: "launch" })
+  assert.deepEqual(await board.threadParticipants(root.message.threadId), ["A", "B", "C"])
+  const nested = await board.send("B", ["A"], "b nested", { ...NORMAL, kind: MessageKind.Reply, inReplyTo: root.message.messageId })
+  assert.deepEqual(await board.threadParticipants(nested.message.threadId), ["A", "B", "C"])
+  const widener = await board.send("C", ["A", "B"], "c widens", { ...NORMAL, kind: MessageKind.Reply, inReplyTo: nested.message.messageId })
+  assert.deepEqual(await board.threadParticipants(widener.message.threadId), ["A", "B", "C"])
+})
+
 test("--replace supersedes only unread messages from the same sender with the same key", async() => {
   const board = await freshBoard()
   await board.send("A", ["B"], "status 1", { ...NORMAL, replaceKey: "status" })

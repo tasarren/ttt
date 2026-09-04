@@ -282,6 +282,16 @@ export class Board {
     return messages.sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.messageId.localeCompare(b.messageId))
   }
 
+  /** Union of every sender and recipient across a thread, sorted. Computed on read; no new index. */
+  async threadParticipants(threadId: string): Promise<string[]> {
+    const names = new Set<string>()
+    for (const message of await this.thread(threadId)) {
+      names.add(message.from)
+      for (const recipient of message.recipients) names.add(recipient)
+    }
+    return [...names].sort((a, b) => a.localeCompare(b))
+  }
+
   /**
    * One-time index builder used by the v4→v5 migration: groups every message by thread and writes the
    * `threads/*.json` files that are missing. Returns the number of threads indexed. Idempotent.

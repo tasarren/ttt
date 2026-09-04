@@ -21,7 +21,8 @@ tmux window name. Teammates are the other window names; list them with `ttt wind
 | Need | Run |
 |---|---|
 | Message a teammate | `ttt send NAME -- your message` (`--file PATH` for multi-line) |
-| Reply | `ttt reply MESSAGE_ID -- your answer` (`--to receiver` to widen the audience) |
+| Reply | `ttt reply MESSAGE_ID -- your answer` (`--to receiver` to widen, `--to thread` for group threads) |
+| Group thread | `ttt broadcast A B --subject TOPIC -- message`, then `ttt reply ID --to thread -- answer` |
 | Several recipients | `ttt broadcast A B -- message`, or `--all` for every other window |
 | Triage a busy mailbox (stays unread) | `ttt inbox --detail`, `ttt read --headers-only`, `ttt inbox --detail --from NAME` |
 | Mark handled | `ttt ack MESSAGE_ID -- note`, or `ttt ack --all -- note` for the whole mailbox |
