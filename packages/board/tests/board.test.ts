@@ -145,3 +145,24 @@ test("ackAll marks every unacked receipt in one lock with one note", async() => 
   assert.deepEqual(await board.ackAll("B"), [])
   assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 2, superseded: 0 })
 })
+
+test("thread resolves via the index and prune GCs only terminal history", async() => {
+  const board = await freshBoard()
+  const first = await board.send("A", ["B"], "q", NORMAL)
+  const reply = await board.send("B", ["A"], "a", { ...NORMAL, kind: MessageKind.Reply, inReplyTo: first.message.messageId })
+  assert.deepEqual(
+    (await board.thread(first.message.messageId)).map((m) => m.messageId).sort(),
+    [first.message.messageId, reply.message.messageId].sort(),
+  )
+  const dry = await board.prune({ olderThanMs: 0, dryRun: true })
+  assert.equal(dry.messages, 0, "unread history is never pruned, even dry")
+  await board.ack("B", first.message.messageId, "done")
+  await board.ack("A", reply.message.messageId, "done")
+  const preview = await board.prune({ olderThanMs: 0, dryRun: true })
+  assert.equal(preview.messages, 2)
+  const done = await board.prune({ olderThanMs: 0, dryRun: false })
+  assert.equal(done.messages, 2)
+  assert.equal(done.receipts, 2)
+  assert.deepEqual(await board.thread(reply.message.messageId).catch(() => []), [])
+  assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 0, superseded: 0 })
+})

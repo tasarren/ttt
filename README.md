@@ -54,8 +54,8 @@ ttt status ttt-20260902-173355-a1b2c3d4
 Your identity is your tmux window name. Rename windows to name your agents (`tmux rename-window CODER`).
 Window names are expected to be unique; when two windows share a name, the lowest window id (`@1` beats
 `@2`) receives the paste. Duplicates share one mailbox, so either twin can `ttt read` the same messages.
-A window named like a command (`send`, `read`, `inbox`, `status`, `thread`, `capture`, `broadcast`, `reply`)
-needs the explicit `ttt send` form; the shorthand `ttt NAME -- MESSAGE` resolves the command first.
+A window named like a command (`send`, `read`, `inbox`, `status`, `thread`, `capture`, `broadcast`, `reply`,
+`windows`, `prune`) needs the explicit `ttt send` form; the shorthand `ttt NAME -- MESSAGE` resolves the command first.
 Acking without a prior `ttt read` warns on stderr; the receipt is still marked acked.
 
 ## Commands
@@ -79,6 +79,7 @@ Acking without a prior `ttt read` warns on stderr; the receipt is still marked a
 | `ttt capture TARGET [--lines N] [--raw]` | Last N lines of another window's pane. `--raw` keeps tmux's line wrapping. |
 | `ttt capture TARGET [--grep PATTERN]` | Same, but only lines containing PATTERN (token-saving filter). |
 | `ttt windows` | List windows in this session with ids; `(you)` marks the caller. |
+| `ttt prune --days N [--dry-run]` | Delete acked/superseded messages + receipts older than N days. Unread/read history is never touched. |
 
 Message options (for `send`, `reply`, `broadcast`):
 

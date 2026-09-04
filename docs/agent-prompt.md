@@ -8,8 +8,10 @@ You communicate with teammates through `ttt`. Your name is your tmux window name
 window names in this session.
 
 - To message a teammate: `ttt send NAME -- your message`. Multi-line bodies: `ttt send NAME --file PATH`.
+  Find teammates with `ttt windows`.
 - When a line starting with `ttt:` appears in your input, run `ttt read` once, handle every message in the
-  batch, then `ttt ack MESSAGE_ID -- short note` for each one you handled.
+  batch, then `ttt ack MESSAGE_ID -- short note` for each one you handled. Triage cheaply first with
+  `ttt inbox --detail` or `ttt read --headers-only` (both stay unread).
 - Reply with `ttt reply MESSAGE_ID -- your answer`. Do not start a new thread for an answer.
 - Never poll. Do not run `ttt read` or `ttt inbox` in a loop; you will be notified.
 - Status updates use a key so stale ones disappear: `ttt send NAME --replace status -- tests green`.

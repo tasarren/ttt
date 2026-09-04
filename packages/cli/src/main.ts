@@ -2,6 +2,7 @@ import { usageError } from "./cli-error.ts"
 import { capture } from "./commands/capture.ts"
 import { ack, inbox, read, status, thread } from "./commands/inbox.ts"
 import { notify } from "./commands/notify.ts"
+import { prune } from "./commands/prune.ts"
 import { broadcast, reply, send } from "./commands/send.ts"
 import { windows } from "./commands/windows.ts"
 import { createContext } from "./context.ts"
@@ -18,6 +19,7 @@ const COMMANDS: Record<string, Handler> = {
   thread,
   capture,
   windows,
+  prune,
   _notify: notify,
 }
 
@@ -36,6 +38,7 @@ usage:
   ttt thread MESSAGE_ID
   ttt capture TARGET [--lines COUNT] [--raw] [--grep PATTERN]
   ttt windows
+  ttt prune --days N [--dry-run]
 
 message options:
   --no-reply      the recipient does not need to reply
@@ -46,7 +49,7 @@ message options:
 Normal messages are queued. A target gets one notification per burst and reads the batch with
 "ttt read". ACK is board state only; it sends nothing. Settings: ~/.ttt/settings.jsonc
 Shorthand "ttt TARGET -- MESSAGE" sends; a window named like a command (send, read, inbox,
-status, thread, capture, broadcast, reply) needs the explicit "ttt send" form.
+status, thread, capture, broadcast, reply, windows, prune) needs the explicit "ttt send" form.
 Recovery overrides need both flags: --session NAME --from WINDOW.`
 
 

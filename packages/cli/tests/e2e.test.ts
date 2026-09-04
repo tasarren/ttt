@@ -116,6 +116,8 @@ test("triage stays unread; bare-note ack and ack --all clear the mailbox", async
   assert.match(acked, /^acked ttt-/m)
   assert.equal(await ttt("B", "inbox", "--count"), "0")
   assert.equal(await ttt("B", "ack", "--all"), "ttt: nothing to ack.")
+  await assert.rejects(ttt("B", "prune"), /prune needs --days/)
+  assert.match(await ttt("B", "prune", "--days", "30", "--dry-run"), /would prune 0 messages, 0 receipts older than 30 days\./)
 })
 
 test("refuses to message itself and unknown windows; capture peeks at the other pane", async() => {

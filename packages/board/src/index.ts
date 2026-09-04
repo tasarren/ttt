@@ -3,6 +3,8 @@ export type {
   BoardOptions,
   InboxSummary,
   NotificationSummary,
+  PruneOptions,
+  PruneResult,
   ReadOptions,
   ReadResult,
   SendOptions,

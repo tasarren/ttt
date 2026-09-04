@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { rm } from "node:fs/promises"
+import { readdir, rm } from "node:fs/promises"
 import { join } from "node:path"
 import { setTimeout as sleep } from "node:timers/promises"
 
@@ -18,7 +18,7 @@ import type {
   MessageReceipt,
   NotificationMarker,
 } from "./model.ts"
-import { atomicWriteJson, readJsonIfExists, readJsonTree, sweepTempFiles, withDirectoryLock } from "./store.ts"
+import { atomicWriteJson, isErrno, readJsonIfExists, readJsonTree, sweepTempFiles, withDirectoryLock } from "./store.ts"
 import type { LockOptions } from "./store.ts"
 
 export interface BoardOptions {
@@ -56,6 +56,17 @@ export interface ReadResult {
   remaining: number
 }
 
+export interface PruneOptions {
+  olderThanMs: number
+  /** Count only; delete nothing. */
+  dryRun: boolean
+}
+
+export interface PruneResult {
+  messages: number
+  receipts: number
+}
+
 export type InboxSummary = Record<ReceiptState, number>
 
 export interface NotificationSummary {
@@ -80,6 +91,7 @@ export class Board {
   private readonly mailboxesRoot: string
   private readonly stateRoot: string
   private readonly locksRoot: string
+  private readonly threadsRoot: string
 
   constructor(options: BoardOptions) {
     this.options = options
@@ -87,6 +99,7 @@ export class Board {
     this.mailboxesRoot = join(options.sessionRoot, "mailboxes")
     this.stateRoot = join(options.sessionRoot, "state")
     this.locksRoot = join(options.sessionRoot, "locks")
+    this.threadsRoot = join(options.sessionRoot, "threads")
   }
 
   async send(from: string, recipients: string[], body: string, options: SendOptions): Promise<SendResult> {
@@ -113,6 +126,7 @@ export class Board {
       body,
     }
     await atomicWriteJson(this.messagePath(messageId, messageDay(messageId)!), message)
+    await this.appendThreadIndex(message.threadId, messageId)
 
     const notifications: NotificationMarker[] = []
     for (const target of targets) {
@@ -221,9 +235,28 @@ export class Board {
 
   async thread(messageId: string): Promise<BoardMessage[]> {
     const { threadId } = await this.findMessage(messageId)
-    return (await readJsonTree<BoardMessage>(this.messagesRoot))
+    const indexed = await this.readThreadIndex(threadId)
+    if (indexed) {
+      const messages: BoardMessage[] = []
+      for (const id of indexed) {
+        try {
+          messages.push(await this.findMessage(id))
+        } catch {
+          // Pruned messages drop out of the thread; the rest still resolve.
+        }
+      }
+      if (messages.length > 0) {
+        return messages.sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.messageId.localeCompare(b.messageId))
+      }
+    }
+    // Fallback for threads written before the index existed; rebuilds it best-effort.
+    const scanned = (await readJsonTree<BoardMessage>(this.messagesRoot))
       .filter((message) => message.threadId === threadId)
       .sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.messageId.localeCompare(b.messageId))
+    if (scanned.length > 0) {
+      await this.writeThreadIndex(threadId, scanned.map((message) => message.messageId)).catch(() => undefined)
+    }
+    return scanned
   }
 
   // ponytail: ids always embed their day shard, so lookups are one direct read; no tree walk fallback.
@@ -256,6 +289,66 @@ export class Board {
       await rm(this.markerPath(target), { force: true })
       return true
     })
+  }
+
+  /**
+   * Garbage-collects terminal history: messages older than the cutoff whose every listed recipient holds a
+   * terminal (acked/superseded) receipt at least that old, plus orphan terminal receipts whose message is gone.
+   * Unread/read history is never touched. Message files are removed before their receipts so a crash leaves
+   * orphan receipts (reaped next run) rather than untracked messages.
+   */
+  async prune(options: PruneOptions): Promise<PruneResult> {
+    const cutoff = Date.now() - options.olderThanMs
+    const terminal = (receipt: MessageReceipt | undefined): receipt is MessageReceipt => {
+      if (!receipt || (receipt.state !== ReceiptState.Acked && receipt.state !== ReceiptState.Superseded)) return false
+      return Date.parse(receipt.ackedAt ?? receipt.supersededAt ?? receipt.enqueuedAt) <= cutoff
+    }
+    let messages = 0
+    let receipts = 0
+    for (const message of await readJsonTree<BoardMessage>(this.messagesRoot)) {
+      if (Date.parse(message.timestamp) > cutoff) continue
+      const states = await Promise.all(message.recipients.map(async(recipient) => ({
+        recipient,
+        receipt: await readJsonIfExists<MessageReceipt>(this.receiptPath(recipient, message.messageId)),
+      })))
+      if (!states.every((entry) => terminal(entry.receipt))) continue
+      if (!options.dryRun) {
+        await rm(this.messagePath(message.messageId, messageDay(message.messageId)!), { force: true }).catch(() => undefined)
+        await this.removeFromThreadIndex(message.threadId, message.messageId).catch(() => undefined)
+        for (const entry of states) {
+          try {
+            await this.withMailboxLock(entry.recipient, async() => {
+              const current = await readJsonIfExists<MessageReceipt>(this.receiptPath(entry.recipient, message.messageId))
+              if (current && (current.state === ReceiptState.Acked || current.state === ReceiptState.Superseded)) {
+                await rm(this.receiptPath(entry.recipient, message.messageId), { force: true })
+                receipts += 1
+              }
+            })
+          } catch {
+            // A busy mailbox keeps its receipt; the orphan sweep reaps it on a later run.
+          }
+        }
+      } else {
+        receipts += states.length
+      }
+      messages += 1
+    }
+    for (const mailbox of await this.mailboxNames()) {
+      try {
+        await this.withMailboxLock(mailbox, async() => {
+          for (const receipt of await this.receiptsUnlocked(mailbox)) {
+            if (!terminal(receipt)) continue
+            const day = messageDay(receipt.messageId)
+            if (day && await readJsonIfExists(this.messagePath(receipt.messageId, day))) continue
+            if (!options.dryRun) await rm(this.receiptPath(mailbox, receipt.messageId), { force: true })
+            receipts += 1
+          }
+        })
+      } catch {
+        // A busy mailbox is skipped; pruning is best-effort and rerunnable.
+      }
+    }
+    return { messages, receipts }
   }
 
   /**
@@ -324,6 +417,50 @@ export class Board {
 
   private markerPath(agent: string): string {
     return join(this.stateRoot, `${agent}.notification.json`)
+  }
+
+  private threadPath(threadId: string): string {
+    return join(this.threadsRoot, `${threadId}.json`)
+  }
+
+  private async withThreadLock<T>(threadId: string, callback: () => Promise<T>): Promise<T> {
+    assertName(threadId, "thread id")
+    return withDirectoryLock(join(this.locksRoot, `thread-${threadId}.lock`), this.options.lock, callback)
+  }
+
+  private async readThreadIndex(threadId: string): Promise<string[] | undefined> {
+    return readJsonIfExists<string[]>(this.threadPath(threadId))
+  }
+
+  private async writeThreadIndex(threadId: string, messageIds: string[]): Promise<void> {
+    await this.withThreadLock(threadId, () => atomicWriteJson(this.threadPath(threadId), messageIds))
+  }
+
+  private async appendThreadIndex(threadId: string, messageId: string): Promise<void> {
+    await this.withThreadLock(threadId, async() => {
+      const existing = await readJsonIfExists<string[]>(this.threadPath(threadId)) ?? []
+      if (!existing.includes(messageId)) await atomicWriteJson(this.threadPath(threadId), [...existing, messageId])
+    })
+  }
+
+  private async removeFromThreadIndex(threadId: string, messageId: string): Promise<void> {
+    await this.withThreadLock(threadId, async() => {
+      const existing = await readJsonIfExists<string[]>(this.threadPath(threadId))
+      if (!existing) return
+      const kept = existing.filter((id) => id !== messageId)
+      if (kept.length === 0) await rm(this.threadPath(threadId), { force: true })
+      else await atomicWriteJson(this.threadPath(threadId), kept)
+    })
+  }
+
+  private async mailboxNames(): Promise<string[]> {
+    try {
+      const entries = await readdir(this.mailboxesRoot, { withFileTypes: true })
+      return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+    } catch(error) {
+      if (isErrno(error, "ENOENT")) return []
+      throw error
+    }
   }
 
   private seqPath(agent: string): string {
