@@ -1,25 +1,35 @@
 {
-  "name": "@ttt/cli",
+  "name": "@tasarren/ttt",
   "version": "0.1.0",
   "description": "ttt — durable, batched messaging between agents in a tmux session",
   "private": false,
   "type": "module",
   "sideEffects": false,
   "license": "MIT",
+  "author": "tasarren",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tasarren/ttt.git"
+  },
+  "homepage": "https://github.com/tasarren/ttt#readme",
+  "bugs": "https://github.com/tasarren/ttt/issues",
   "engines": {
     "node": ">=24.11.0"
   },
-  "files": ["dist", "README.md"],
+  "files": ["dist", "README.md", "LICENSE"],
   "bin": {
     "ttt": "./src/ttt.ts"
   },
   "publishConfig": {
+    "access": "public",
     "bin": {
       "ttt": "./dist/ttt.mjs"
     }
   },
   "scripts": {
     "build": "tsdown",
+    "prepack": "pnpm build && rm -f ./README.md ./LICENSE && cp ../../README.md ./README.md && cp ../../LICENSE ./LICENSE",
+    "postpack": "rm -f ./README.md ./LICENSE",
     "test": "node --test tests/*.test.ts"
   },
   "dependencies": {

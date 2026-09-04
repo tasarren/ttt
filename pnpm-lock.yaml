@@ -44,9 +44,16 @@ catalogs:
       specifier: 3.3.1
       version: 3.3.1
 
+overrides:
+  '@tasarren/ttt': link:packages/cli
+
 importers:
 
   .:
+    dependencies:
+      '@tasarren/ttt':
+        specifier: link:packages/cli
+        version: link:packages/cli
     devDependencies:
       '@eslint/js':
         specifier: catalog:devTools
@@ -89,12 +96,21 @@ importers:
       '@ttt/board':
         specifier: workspace:*
         version: link:../board
+      '@ttt/migrations':
+        specifier: workspace:*
+        version: link:../migrations
       '@ttt/tmux':
         specifier: workspace:*
         version: link:../tmux
       jsonc-parser:
         specifier: catalog:runtime
         version: 3.3.1
+
+  packages/migrations:
+    dependencies:
+      '@ttt/board':
+        specifier: workspace:*
+        version: link:../board
 
   packages/tmux: {}
 
@@ -1277,7 +1293,7 @@ snapshots:
   '@typescript-eslint/project-service@8.68.0(typescript@6.0.3)':
     dependencies:
       '@typescript-eslint/tsconfig-utils': 8.68.0(typescript@6.0.3)
-      '@typescript-eslint/types': 8.68.0
+      '@typescript-eslint/types': 8.69.0
       debug: 4.4.3
       typescript: 6.0.3
     transitivePeerDependencies:

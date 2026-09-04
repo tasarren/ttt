@@ -4,3 +4,6 @@ dist/
 *.tsbuildinfo
 *.tgz
 /release/
+# prepack copies for the published tarball (removed by postpack); the sources live at the root
+packages/cli/README.md
+packages/cli/LICENSE

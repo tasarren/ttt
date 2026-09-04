@@ -21,4 +21,4 @@ allowBuilds:
   unrs-resolver: true
 
 overrides:
-  '@ttt/cli': link:packages/cli
+  '@tasarren/ttt': link:packages/cli

@@ -6,7 +6,7 @@ before changing a package.
 ## Ownership
 
 - `@ttt/tmux` owns talking to tmux. `@ttt/board` owns the message board on disk and never imports tmux.
-  `@ttt/cli` owns settings, argument parsing, commands, output, and the only bin.
+  `@tasarren/ttt` owns settings, argument parsing, commands, output, and the only bin.
 - `process.env` is read only in `packages/cli/src/settings.ts`. Everything else receives typed options.
 - One operation, one file. Split only on unrelated reasons to change; length is not a reason.
 - No forwarding layers, no `utils`/`helpers` buckets, no interface with a single implementation. The two

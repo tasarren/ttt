@@ -11,7 +11,7 @@
   "scripts": {
     "runtime:check": "node scripts/check-runtime.mjs",
     "ttt": "node packages/cli/src/ttt.ts",
-    "build": "pnpm --filter @ttt/cli build",
+    "build": "pnpm --filter @tasarren/ttt build",
     "typecheck": "tsc -p tsconfig.json",
     "lint": "eslint .",
     "test": "node --test packages/*/tests/*.test.ts",
@@ -31,6 +31,6 @@
     "typescript-eslint": "catalog:devTools"
   },
   "dependencies": {
-    "@ttt/cli": "link:packages/cli"
+    "@tasarren/ttt": "link:packages/cli"
   }
 }
