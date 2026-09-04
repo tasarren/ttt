@@ -1,8 +1,21 @@
-# ttt
+<p align="center">
+  <img src="docs/ttt-logo.svg" width="360" alt="Talk To Teammate logo" />
+</p>
 
-Durable, batched messaging between the windows of one tmux session. Built for AI agents that share a
-session. A message is written to a board on disk, and the recipient gets **one** short notification per
-burst instead of an interruption per message. Urgent messages bypass the batch.
+<h1 align="center">Talk To Teammate (ttt)</h1>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/@tasarren/ttt"><img src="https://img.shields.io/npm/v/@tasarren/ttt.svg" alt="npm version" /></a>
+  <a href="https://github.com/tasarren/ttt/actions/workflows/ci.yml"><img src="https://github.com/tasarren/ttt/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/tasarren/ttt.svg" alt="license" /></a>
+</p>
+
+Talk To Teammate (`ttt`) is messaging for the agents sharing one tmux session. You are a window,
+your teammates are the other windows, and `ttt` is how you reach them without talking over each other.
+
+Sending a message drops it on a shared board on disk. The recipient is not interrupted for every
+message: normal messages collect for about a minute then arrive as a single summary line, one per
+burst. When something cannot wait, `--urgent` delivers it right now.
 
 ```sh
 ttt send CODER -- Review task AE2-001 and reply when done.
@@ -50,7 +63,8 @@ node packages/cli/dist/ttt.mjs --help
 
 ## Quick start
 
-In a tmux session with two windows named `A` and `B`:
+Two windows, `A` and `B`, in one tmux session. `A` has something to say, `B` reads it, acks it, and
+replies in the same thread:
 
 ```sh
 # in window A
@@ -69,7 +83,8 @@ ttt reply ttt-20260902-173355-a1b2c3d4 -- on it
 ttt status ttt-20260902-173355-a1b2c3d4
 ```
 
-Triage a busy mailbox without spending bodies:
+When the mailbox fills up, look before you read. Triage shows headers and one-line previews and
+leaves everything unread, so nothing is accidentally marked handled:
 
 ```sh
 ttt inbox --detail            # headers + one-line previews, stays unread
@@ -79,8 +94,8 @@ ttt ack --all -- cleared      # ack everything at once
 
 ## Identity
 
-Your identity is your tmux window name. Rename windows to name your agents (`tmux rename-window CODER`).
-Find teammates with `ttt windows`.
+ttt has no accounts. Your tmux window name is your name: rename windows to name your agents
+(`tmux rename-window CODER`), and find teammates with `ttt windows`.
 
 Window names are expected to be unique. When two windows share a name, the lowest window id (`@1` beats
 `@2`) receives the paste. `ttt windows` flags the loser as `(dup of @N)`. Duplicates share one mailbox,
@@ -94,7 +109,7 @@ Acking without a prior `ttt read` warns on stderr. The receipt is still marked a
 
 ## Commands
 
-Send:
+Ways to send something:
 
 | Command | What it does |
 |---|---|
@@ -104,7 +119,7 @@ Send:
 | `ttt broadcast TARGET... [options] -- MESSAGE` | One message, several recipients. |
 | `ttt broadcast --all [options] -- MESSAGE` | Every other window in the session. |
 
-Read and triage:
+Ways to catch up. Reading marks messages read; triage does not:
 
 | Command | What it does |
 |---|---|
@@ -115,7 +130,7 @@ Read and triage:
 | `ttt ack MESSAGE_ID [NOTE]` | Mark a message handled. The note needs no `--`. Board state only; nothing is sent. |
 | `ttt ack --all [-- NOTE]` | Ack every unacked message in your mailbox at once. |
 
-Inspect:
+Ways to check what happened to something you sent, or to look at a teammate's screen:
 
 | Command | What it does |
 |---|---|
@@ -124,7 +139,7 @@ Inspect:
 | `ttt capture TARGET [--lines N] [--raw] [--grep PATTERN] [--around PATTERN] [--context N]` | Last N lines of another window's pane. `--raw` keeps tmux line wrapping. `--grep` keeps matching lines. `--around` keeps matches plus N context lines each side (default 3). |
 | `ttt windows` | List windows in this session with ids. `(you)` marks the caller. |
 
-Maintain:
+Ways to clean up and to move the board forward across versions:
 
 | Command | What it does |
 |---|---|
@@ -152,7 +167,8 @@ Exit codes: `0` ok, `1` runtime failure (window missing, board error), `2` bad u
   reports `mailbox NAME is busy; retry shortly`. Per-mailbox unread counters and per-thread indexes live
   under `state/` and `threads/`, so counts and thread views skip tree walks. `state/schema.json` records
   applied migrations. Run `ttt migrate` after upgrading.
-- **Batching.** A normal send schedules one detached notifier for the recipient if none is pending. After
+- **Batching.** A normal send does not interrupt anyone. It schedules one detached notifier for the
+  recipient if none is pending. After
   the window it pastes a single summary line (`ttt: 3 new from A(2), B(1); 3 unread. Run: ttt read`)
   and marks those receipts notified. Further sends during the window join the same batch (the send receipt
   says `joins pending batch`). The waiting notifier refreshes its marker, so a stale marker always means a
@@ -165,7 +181,7 @@ Exit codes: `0` ok, `1` runtime failure (window missing, board error), `2` bad u
   superseded, so a busy recipient reads only the latest status. `--ttl SECONDS` lapses unread receipts
   to `superseded` after the deadline instead. Both keep history; both count as terminal for `prune`.
 - **Reads are cheap.** `ttt read` prints a compact batch: one header line per message, then the body.
-  Triage modes (`--headers-only`, `inbox --detail`) print headers and previews only.
+  When the mailbox is busy, triage first (`--headers-only`, `inbox --detail`): headers and previews only.
 
 ## Settings
 
@@ -207,8 +223,9 @@ Unknown keys are rejected so typos surface immediately. `TTT_HOME` moves the who
 
 ## Recovery overrides
 
-`ttt --session NAME --from WINDOW <command>` runs a command as if from that window, from anywhere. Both
-flags are required. The detached notifier uses this. You only need it when tmux context detection is not possible.
+`ttt --session NAME --from WINDOW <command>` runs a command as if from that window, from anywhere.
+`--session` needs `--from`; `--from` on its own just overrides the sender name. The detached notifier
+uses these flags. You only need them when tmux context detection cannot tell who you are.
 
 ## Agents
 
