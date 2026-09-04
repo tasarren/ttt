@@ -1,6 +1,6 @@
 {
   "name": "@tasarren/ttt",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "ttt — durable, batched messaging between agents in a tmux session",
   "private": false,
   "type": "module",
@@ -32,7 +32,8 @@
     "postpack": "rm -f ./README.md ./LICENSE",
     "test": "node --test tests/*.test.ts"
   },
-  "dependencies": {
+  "dependencies": {},
+  "devDependencies": {
     "@ttt/board": "workspace:*",
     "@ttt/migrations": "workspace:*",
     "@ttt/tmux": "workspace:*",
