@@ -92,7 +92,7 @@ importers:
   packages/board: {}
 
   packages/cli:
-    dependencies:
+    devDependencies:
       '@ttt/board':
         specifier: workspace:*
         version: link:../board
