@@ -20,5 +20,6 @@ export {
   makeMessageId,
   messageDay,
 } from "./model.ts"
-export type { BoardMessage, MessageReceipt, NotificationMarker } from "./model.ts"
+export type { Actor, BoardMessage, MessageReceipt, NotificationMarker, PaneBinding } from "./model.ts"
 export type { LockOptions } from "./store.ts"
+export { isErrno } from "./store.ts"

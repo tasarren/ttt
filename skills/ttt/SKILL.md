@@ -13,7 +13,7 @@ tmux window name. Teammates are the other window names; list them with `ttt wind
 1. A line starting with `ttt:` appears in your input → run `ttt read` **once**.
 2. Handle every message in the batch.
 3. `ttt ack MESSAGE_ID -- short note` for each one you handled. Never skip the ack.
-4. Reply in-thread when an answer is owed: `ttt reply MESSAGE_ID -- your answer`.
+4. Reply in-thread when an answer is owed: `ttt reply MESSAGE_ID -- your answer`. Triage tags it: `(needs reply)` means open the batch and answer, `(no-reply)` means ack and move on.
    Never start a new thread for an answer.
 
 ## Commands
@@ -21,14 +21,15 @@ tmux window name. Teammates are the other window names; list them with `ttt wind
 | Need | Run |
 |---|---|
 | Message a teammate | `ttt send NAME -- your message` (`--file PATH` for multi-line) |
-| Reply | `ttt reply MESSAGE_ID -- your answer` (`--to receiver` to widen the audience) |
+| Reply | `ttt reply MESSAGE_ID -- your answer` (`--to receiver` to widen, `--to thread` for group threads) |
+| Group thread | `ttt broadcast A B --subject TOPIC -- message`, then `ttt reply ID --to thread -- answer` |
 | Several recipients | `ttt broadcast A B -- message`, or `--all` for every other window |
 | Triage a busy mailbox (stays unread) | `ttt inbox --detail`, `ttt read --headers-only`, `ttt inbox --detail --from NAME` |
 | Mark handled | `ttt ack MESSAGE_ID -- note`, or `ttt ack --all -- note` for the whole mailbox |
-| Check delivery | `ttt status MESSAGE_ID` (`q/n/r/a` = queued/notified/read/acked) |
-| Full thread | `ttt thread MESSAGE_ID` (`--headers-only` to triage) |
-| Peek at a teammate's screen | `ttt capture NAME --lines 40` (`--grep PATTERN`, or `--around PATTERN --context N`) |
-| Who/where am I (session, window, board) | `ttt whoami` |
+| Check delivery | `ttt status MESSAGE_ID` (`q/n/r/a` = queued/notified/read/acked; `by WINDOW` when someone else read or acked) |
+| Full thread | `ttt thread MESSAGE_ID` (header shows `topic:` + `members:`; `--headers-only` to triage) |
+| Peek at a teammate's screen | `ttt capture NAME --lines 40` (their agent pane, never the focused one; `--grep PATTERN`, or `--around PATTERN --context N`; TUI chrome is cleaned unless `--raw`) |
+| Who/where am I (session, window, board) | `ttt whoami` (check `via:`; wrong window = broken runner env) |
 
 ## Rules
 
@@ -40,6 +41,8 @@ tmux window name. Teammates are the other window names; list them with `ttt wind
 - Name the thread when it matters: `ttt send NAME --subject TEXT -- your message`.
 - Expiring notes: `ttt send NAME --ttl SECONDS -- FYI only`.
 - Read `ttt capture` instead of asking "what are you doing".
+- Notifications find the pane you last sent from: split panes freely.
+- If `ttt whoami` shows the wrong window, prefix every command with `--session SESSION --from YOUR-WINDOW` until the runner is fixed.
 - Bodies are plain text read by a model: request first, context second, keep them short.
 - A window named like a command needs the explicit form: `ttt send NAME -- message`.
 

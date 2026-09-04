@@ -100,6 +100,24 @@ inside a pane (`TMUX`, `TMUX_PANE`, plus a temp `TTT_HOME` with `notifySeconds: 
 4. Record the ledger in `state/schema.json` and cover the step in `migrations.test.ts` (dry-run counts,
    idempotent rerun, newer-than-code refusal).
 
+## Structure audit (2026-09 cleanup)
+
+Source is ~2,580 lines. `jscpd --min-lines 10` reports 0 clones; `--min-lines 5`
+reports only small shared guards (winner-pick, readdir guard, inbox tags), each with
+one shared helper.
+
+- `packages/board/src/board.ts` (764 lines) is intentionally large: one cohesive board
+  owner covering send/read/ack/notify/pane-registry/schema/prune/thread-index. Split
+  only on unrelated reasons to change, never on length alone.
+- `packages/cli/src/commands/inbox.ts` (250 lines) keeps the read side and its
+  formatters together. The formatters have one caller; moving them out would shred
+  the flow.
+- Shared helpers live with their owner: `winnersByName` beside `compareWindowIds`
+  in `@ttt/tmux`, `readdirRecursive` and `isErrno` in `@ttt/board`, `messageTags`
+  local to the inbox formatters.
+- Test tmp roots stay per-package. Sharing fixtures across packages would couple
+  owners for ~6 lines; `board.test.ts` reuses its own `freshSession` overrides instead.
+
 ## Release
 
 Releases are owner-gated in two steps: publishing a GitHub Release (tag `vX.Y.Z`, matching

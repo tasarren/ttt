@@ -23,7 +23,7 @@ test("no settings file yields the defaults rooted at TTT_HOME", async() => {
   const settings = await resolveSettings({ TTT_HOME: dir })
   assert.deepEqual(settings, defaultSettings(dir))
   assert.equal(settings.boardRoot, join(dir, "boards"))
-  assert.equal(settings.notifySeconds, 60)
+  assert.equal(settings.notifySeconds, 20)
 })
 
 test("settings.jsonc accepts comments, trailing commas, partial overrides, and ~ expansion", async() => {

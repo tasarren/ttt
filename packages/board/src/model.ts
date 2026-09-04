@@ -58,6 +58,16 @@ export interface MessageReceipt {
   ackNote?: string
   supersededAt?: string
   supersededBy?: string
+  /** Detected performer of the read flip; absent on peeks, system transitions, and old receipts. */
+  readBy?: Actor
+  /** Detected performer of the ack; absent when acked before actors existed. */
+  ackedBy?: Actor
+}
+
+/** Who performed a read/ack: the detected window and session, whatever `--from` claimed. */
+export interface Actor {
+  window: string
+  session: string
 }
 
 /** One pending batched notification per target; the token lets a stale notifier detect it was replaced. */
@@ -66,6 +76,18 @@ export interface NotificationMarker {
   target: string
   createdAt: string
   delaySeconds: number
+}
+
+/**
+ * Last-known pane binding for a window: which exact pane its agent sends from.
+ * `session` is absent for same-board entries (the file's own session) and names
+ * the origin board whenever an entry comes from elsewhere.
+ */
+export interface PaneBinding {
+  paneId: string
+  windowId: string
+  updatedAt: string
+  session?: string
 }
 
 /** Window, agent, and session names double as directory names, so keep them to a safe charset. */

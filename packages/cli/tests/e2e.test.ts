@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict"
 import { execFile } from "node:child_process"
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { setTimeout as sleep } from "node:timers/promises"
@@ -109,6 +109,9 @@ test("triage stays unread; bare-note ack and ack --all clear the mailbox", async
   assert.match(headers, /\(headers; still unread\)/)
   assert.match(headers, /\(no-reply\)/)
   assert.doesNotMatch(headers, /line two/)
+  const owed = await ttt("A", "send", "B", "--", "triage reply owed")
+  assert.match(owed, /queued ttt-\S+ -> B/)
+  assert.match(await ttt("B", "inbox", "--detail"), /\(needs reply\)/)
   const before = await ttt("B", "inbox", "--count")
   assert.ok(Number(before) >= 1, `expected unread, got ${before}`)
   assert.equal(await ttt("B", "ack", probeId, "bare", "note", "words"), `acked ${probeId}`)
@@ -127,17 +130,94 @@ test("subjects tag threads; sender filter and thread triage stay unread", async(
   const queued = await ttt("A", "send", "B", "--subject", "launch", "--", "subject probe")
   const rootId = /^queued (ttt-\S+) -> B/.exec(queued)?.[1]
   assert.ok(rootId, `unexpected send output: ${queued}`)
-  assert.match(await ttt("B", "inbox", "--detail"), /\(subj: launch\)/)
+  assert.match(await ttt("B", "inbox", "--detail"), /\(subj: launch; needs reply\)/)
   assert.match(await ttt("B", "inbox", "--detail", "--from", "A"), /subject probe/)
   assert.equal(await ttt("B", "inbox", "--detail", "--from", "ZZZ", "--max", "10").then((out) => out.includes("subject probe") ? "leak" : "clean"), "clean")
   await assert.rejects(ttt("B", "inbox", "--detail", "--from", "../x"), /sender name/)
   await assert.rejects(ttt("B", "inbox", "--from", "A"), /--from needs --detail/)
   const triage = await ttt("B", "thread", rootId, "--headers-only")
-  assert.match(triage, /subj: launch/)
+  assert.match(triage, /topic: launch members: A, B/)
   assert.match(triage, /\(headers\)/)
   await assert.rejects(ttt("B", "reply", rootId, "--subject", "x", "--", "nope"), /root only/)
   assert.match(await ttt("B", "ack", "--all"), /^acked ttt-/m)
   assert.equal(await ttt("B", "inbox", "--count"), "0")
+})
+
+test("group threads converge via reply --to thread", async() => {
+  await tmux("new-window", "-t", SESSION, "-n", "C", "sh")
+  panes["C"] = (await tmux("display-message", "-p", "-t", `${SESSION}:C`, "#{pane_id}")).trim()
+  const queued = await ttt("A", "broadcast", "B", "C", "--subject", "launch", "--", "group probe")
+  const rootId = /^queued (ttt-\S+) -> B, C/.exec(queued)?.[1]
+  assert.ok(rootId, `unexpected broadcast output: ${queued}`)
+  const nested = await ttt("B", "reply", rootId, "--", "b nested")
+  assert.match(nested, /-> A \(notify in ~1s\) \(thread /)
+  const widened = await ttt("C", "reply", rootId, "--to", "thread", "--", "c widens")
+  assert.match(widened, /-> A, B \(notify in ~1s|joins pending batch\) \(thread /)
+  await assert.rejects(ttt("C", "reply", rootId, "--to", "everyone", "--", "x"), /--to must be sender, receiver, both, or thread/)
+  const batchB = await ttt("B", "read")
+  assert.match(batchB, /group probe/)
+  assert.match(batchB, /c widens/)
+  const thread = await ttt("A", "thread", rootId)
+  assert.match(thread, /topic: launch members: A, B, C/)
+  assert.match(thread, /b nested/)
+  assert.match(thread, /c widens/)
+  assert.match(await ttt("A", "ack", "--all", "--", "group done"), /^acked ttt-/m)
+  assert.match(await ttt("B", "ack", "--all", "--", "group done"), /^acked ttt-/m)
+  assert.match(await ttt("C", "ack", "--all", "--", "group done"), /^acked ttt-/m)
+})
+
+test("identity resolves by PID ancestry, never the active window", async() => {
+  await assert.rejects(ttt("A", "--from", "ZZZ", "windows"), /--from needs --session/)
+  await tmux("send-keys", "-t", `${SESSION}:B`, `TMUX_PANE=%99999 "${process.execPath}" "${BIN}" whoami`, "Enter")
+  await paneShows("B", "via: pid-walk")
+  await paneShows("B", "window: B")
+})
+
+test("override reads are attributed to the detected window", async() => {
+  const queued = await ttt("B", "send", "A", "--", "audit probe")
+  const id = /^queued (ttt-\S+) -> A/.exec(queued)?.[1]
+  assert.ok(id, `unexpected send output: ${queued}`)
+  const env = { ...process.env, TTT_HOME: home, TMUX: `${socketPath},0,0`, TMUX_PANE: panes["B"] }
+  const out = (await execFileAsync(process.execPath, [BIN, "--session", SESSION, "--from", "A", "read"], { env })).stdout
+  assert.match(out, /audit probe/)
+  const status = await ttt("B", "status", id)
+  assert.match(status, /\bby B\b/)
+  assert.match(await ttt("A", "ack", id, "--", "audit done"), new RegExp(`acked ${id}`))
+})
+
+test("delivery targets the sending pane and prunes dead panes", async() => {
+  const newPane = (await tmux("split-window", "-t", `${SESSION}:A`, "-P", "-F", "#{pane_id}", "sh")).trim()
+  const splitEnv = { ...process.env, TTT_HOME: home, TMUX: `${socketPath},0,0`, TMUX_PANE: newPane }
+  const sent = (await execFileAsync(process.execPath, [BIN, "send", "B", "--", "pane probe"], { env: splitEnv })).stdout.trim()
+  assert.match(sent, /queued ttt-\S+ -> B/)
+  const registry = JSON.parse(await readFile(join(home, "boards", SESSION, "state", "panes.json"), "utf8"))
+  assert.equal(registry["A"].paneId, newPane)
+  await tmux("kill-pane", "-t", newPane)
+  await tmux("clear-history", "-t", `${SESSION}:A`)
+  await tmux("send-keys", "-t", `${SESSION}:A`, "clear", "Enter")
+  const probe = await ttt("B", "send", "A", "--no-reply", "--", "fallback probe")
+  assert.match(probe, /queued ttt-\S+ -> A/)
+  await paneShows("A", "ttt: 1 new from B(1); 1 unread. Run: ttt read")
+  const pruned = JSON.parse(await readFile(join(home, "boards", SESSION, "state", "panes.json"), "utf8"))
+  assert.equal("A" in pruned, false)
+  // A focused foreign pane must not steal the delivery: unregistered windows land on pane index 0.
+  const focusPane = (await tmux("split-window", "-t", `${SESSION}:A`, "-P", "-F", "#{pane_id}", "sh")).trim()
+  await tmux("select-pane", "-t", focusPane)
+  const focusProbe = await ttt("B", "send", "A", "--no-reply", "--", "focus probe")
+  assert.match(focusProbe, /queued ttt-\S+ -> A/)
+  const deadline = Date.now() + 10_000
+  for (;;) {
+    const original = await tmux("capture-pane", "-p", "-t", panes["A"]!)
+    if (original.includes("ttt: 1 new from B(1);")) break
+    if (Date.now() > deadline) assert.fail(`original pane never showed the focus probe:\n${original}`)
+    await sleep(200)
+  }
+  const focused = await tmux("capture-pane", "-p", "-t", focusPane)
+  assert.doesNotMatch(focused, /ttt: 1 new from B\(1\);/)
+  // Capture follows the same pane truth: agent pane, never the focused one.
+  assert.match(await ttt("B", "capture", "A", "--lines", "20"), /ttt: 1 new from B\(1\);/)
+  assert.match(await ttt("A", "ack", "--all", "--", "pane done"), /^acked ttt-/m)
+  assert.match(await ttt("B", "ack", "--all", "--", "pane done"), /^acked ttt-/m)
 })
 
 test("refuses to message itself and unknown windows; capture peeks at the other pane", async() => {
@@ -156,7 +236,20 @@ test("refuses to message itself and unknown windows; capture peeks at the other 
   assert.match(me, /^window: A$/m)
   assert.match(me, /^id: @\d+$/m)
   assert.match(me, /boards\/work$/m)
+  assert.match(me, /^via: pane-env$/m)
   await assert.rejects(ttt("A", "whoami", "extra"), /usage: ttt whoami/)
+})
+
+test("capture strips TUI chrome unless --raw", async() => {
+  const border = String.fromCharCode(0x2503).repeat(3)
+  const marker = "e2e-chrome-42"
+  await tmux("send-keys", "-t", `${SESSION}:B`, `printf '%s\\n' '${border}' 'e2e-chrome-42' '${border}'`, "Enter")
+  await paneShows("B", marker)
+  const near = await ttt("A", "capture", "B", "--lines", "8", "--around", marker, "--context", "1")
+  assert.match(near, new RegExp(`^${marker}$`, "m"))
+  assert.doesNotMatch(near, new RegExp(`^${border}$`, "m"))
+  const nearRaw = await ttt("A", "capture", "B", "--lines", "8", "--raw", "--around", marker, "--context", "1")
+  assert.match(nearRaw, new RegExp(`^${border}$`, "m"))
 })
 
 test("duplicate names flag the loser; around shows context", async() => {

@@ -14,7 +14,7 @@ Talk To Teammate (`ttt`) is messaging for the agents sharing one tmux session. Y
 your teammates are the other windows, and `ttt` is how you reach them without talking over each other.
 
 Sending a message drops it on a shared board on disk. The recipient is not interrupted for every
-message: normal messages collect for about a minute then arrive as a single summary line, one per
+message: normal messages collect for about twenty seconds then arrive as a single summary line, one per
 burst. When something cannot wait, `--urgent` delivers it right now.
 
 ```sh
@@ -69,9 +69,9 @@ replies in the same thread:
 ```sh
 # in window A
 ttt send B -- hello from A
-# queued ttt-20260902-173355-a1b2c3d4 -> B (notify in ~60s)
+# queued ttt-20260902-173355-a1b2c3d4 -> B (notify in ~20s)
 
-# window B receives, about a minute later, one pasted line:
+# window B receives, about twenty seconds later, one pasted line:
 # ttt: 1 new from A(1); 1 unread. Run: ttt read
 
 # in window B
@@ -116,7 +116,7 @@ Ways to send something:
 |---|---|
 | `ttt send TARGET [options] -- MESSAGE` | Queue a message for window `TARGET`. `ttt TARGET -- MESSAGE` is a shorthand. |
 | `ttt send TARGET [options] --file PATH` | Same, body read from a file. With neither `--` nor `--file`, the body is read from stdin. |
-| `ttt reply MESSAGE_ID [--to sender\|receiver\|both] [options] -- MESSAGE` | Reply in the same thread. Default audience is the original sender. |
+| `ttt reply MESSAGE_ID [--to sender\|receiver\|both\|thread] [options] -- MESSAGE` | Reply in the same thread. Default audience is the original sender; `--to thread` reaches every participant. Open group threads with `broadcast` + `--subject`, continue with `--to thread`. |
 | `ttt broadcast TARGET... [options] -- MESSAGE` | One message, several recipients. |
 | `ttt broadcast --all [options] -- MESSAGE` | Every other window in the session. |
 
@@ -124,7 +124,7 @@ Ways to catch up. Reading marks messages read; triage does not:
 
 | Command | What it does |
 |---|---|
-| `ttt read [--max N] [--peek] [--latest]` | Print unread messages (oldest first) and mark them read. `--peek` keeps them unread. `--latest` picks the newest N. Partial reads report `N shown, M still unread`. |
+| `ttt read [--max N] [--peek] [--latest]` | Print unread messages (oldest first) and mark them read. Every message states its reply obligation explicitly (`reply: ...` or `reply: none needed`). | `--peek` keeps them unread. `--latest` picks the newest N. Partial reads report `N shown, M still unread`. |
 | `ttt read --headers-only` | Headers + one-line previews. No bodies, no state change. |
 | `ttt inbox [--count]` | Counts by state. `--count` prints only the unread number. |
 | `ttt inbox --detail [--max N] [--from NAME]` | Headers + previews for the oldest unread. `--from` filters by sender. |
@@ -135,9 +135,9 @@ Ways to check what happened to something you sent, or to look at a teammate's sc
 
 | Command | What it does |
 |---|---|
-| `ttt status MESSAGE_ID` | Per-recipient receipt state and short stamps (`q/n/r/a` = queued/notified/read/acked). |
-| `ttt thread MESSAGE_ID [--headers-only]` | Every message in the thread, oldest first. `--headers-only` triages without bodies. |
-| `ttt capture TARGET [--lines N] [--raw] [--grep PATTERN] [--around PATTERN] [--context N]` | Last N lines of another window's pane. `--raw` keeps tmux line wrapping. `--grep` keeps matching lines. `--around` keeps matches plus N context lines each side (default 3). |
+| `ttt status MESSAGE_ID` | Per-recipient receipt state and short stamps (`q/n/r/a` = queued/notified/read/acked), with `by WINDOW` when someone else read or acked. |
+| `ttt thread MESSAGE_ID [--headers-only]` | Every message in the thread, oldest first, with `topic:` and `members:` header. `--headers-only` triages without bodies. |
+| `ttt capture TARGET [--lines N] [--raw] [--grep PATTERN] [--around PATTERN] [--context N]` | Last N lines of the teammate's agent pane (their first pane, never the focused one). TUI chrome (borders, spinners, padding) is cleaned; `--raw` skips the cleanup and keeps tmux line wrapping. `--grep` keeps matching lines. `--around` keeps matches plus N context lines each side (default 3). |
 | `ttt windows` | List windows in this session with ids. `(you)` marks the caller. |
 | `ttt whoami` | Print your session, window name, id, and board path. |
 
@@ -175,10 +175,14 @@ Exit codes: `0` ok, `1` runtime failure (window missing, board error), `2` bad u
   and marks those receipts notified. Further sends during the window join the same batch (the send receipt
   says `joins pending batch`). The waiting notifier refreshes its marker, so a stale marker always means a
   dead notifier. A failed paste re-arms a live notifier instead of stranding the burst.
+  The paste lands in the exact pane the recipient last sent from (remembered per window
+  in `state/panes.json`), else the window's first pane (pane index 0, the agent's
+  original pane) -- never the active pane, which is whoever touched it last.
 - **Urgent.** `--urgent` pastes the full message immediately, with the reply instruction. If the paste
   fails, the message falls back to a batched notification, so nothing is lost. Pasting clears the target
   input line (`C-u`) before pasting, so it can clobber in-progress typing. Urgent broadcasts paste
-  serially, one recipient at a time.
+  serially, one recipient at a time. Like batched notifications, the paste targets the
+  recipient's last-sending pane when known, else the window's first pane.
 - **Replace and expiry.** `--replace KEY` marks your earlier unread messages with the same KEY as
   superseded, so a busy recipient reads only the latest status. `--ttl SECONDS` lapses unread receipts
   to `superseded` after the deadline instead. Both keep history; both count as terminal for `prune`.
@@ -193,7 +197,7 @@ Unknown keys are rejected so typos surface immediately. `TTT_HOME` moves the who
 ```jsonc
 {
   // seconds a normal message waits for company before the recipient is notified
-  "notifySeconds": 60,
+  "notifySeconds": 20,
   "notifyOverrides": { "WATCHER": 10 },   // per-window batching windows
   "readMax": 10,
   "boardRoot": "~/.ttt/boards",
@@ -211,7 +215,7 @@ Unknown keys are rejected so typos surface immediately. `TTT_HOME` moves the who
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `boardRoot` | string | `~/.ttt/boards` | Boards live at `<boardRoot>/<session>`. `~/` is expanded. |
-| `notifySeconds` | integer | `60` | Batching window for normal messages. |
+| `notifySeconds` | integer | `20` | Batching window for normal messages. |
 | `notifyOverrides` | object | `{}` | Per-window batching windows (`{ NAME: seconds }`), else `notifySeconds`. |
 | `readMax` | integer >= 1 | `10` | Default `--max` for `ttt read`. |
 | `capture.lines` | integer >= 1 | `40` | Default `--lines` for `ttt capture`. |
@@ -223,11 +227,17 @@ Unknown keys are rejected so typos surface immediately. `TTT_HOME` moves the who
 | `tmux.enterPresses` | integer | `3` | See above. |
 | `tmux.postSendMs` | integer | `300` | See above. |
 
-## Recovery overrides
+## Identity
+
+ttt figures out who you are on its own: first your own process ancestry matched against live
+tmux panes, then the `TMUX_PANE` environment hint. It never trusts the tmux active window, so a
+human switching panes cannot reassign your identity. `ttt whoami` prints the resolved session,
+window, id, board path, and which link identified you (`via: pid-walk | pane-env | override`).
 
 `ttt --session NAME --from WINDOW <command>` runs a command as if from that window, from anywhere.
-`--session` needs `--from`; `--from` on its own just overrides the sender name. The detached notifier
-uses these flags. You only need them when tmux context detection cannot tell who you are.
+The flags only come as a pair; a lone `--from` is rejected. The detached notifier uses them, and
+so should any runner whose tmux environment is broken (wrong `whoami` → prefix every command with
+the pair until the runner is fixed).
 
 ## Agents
 

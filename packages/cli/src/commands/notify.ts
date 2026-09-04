@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process"
 
 import type { BoardMessage, NotificationMarker, NotificationSummary } from "@ttt/board"
-import type { TmuxWindow } from "@ttt/tmux"
+import { resolveAgentPane, type TmuxWindow } from "@ttt/tmux"
 
 import { parseCommandArgs } from "../args.ts"
 import { CliError, usageError } from "../cli-error.ts"
@@ -47,7 +47,7 @@ export const notify: Handler = async(argv, ctx) => {
     await ctx.board.deliverNotification(target, token, async(summary) => {
       try {
         const window = await requireWindow(ctx, target)
-        await ctx.tmux.sendText(window.id, formatNotification(summary))
+        await pasteToTeammate(ctx, target, window, formatNotification(summary))
       } catch(error) {
         process.stderr.write(`ttt: notification paste to ${target} failed: ${error instanceof Error ? error.message : String(error)}\n`)
         throw new CancelledNotification(target)
@@ -75,6 +75,19 @@ export function formatNotification(summary: NotificationSummary): string {
   return `ttt: ${summary.newCount} new from ${senders}; ${summary.unreadTotal} unread. Run: ttt read`
 }
 
+/**
+ * Pastes into the target's agent pane (see `resolveAgentPane`); dead bindings
+ * are pruned. Failures propagate so the notifier re-arms and urgent falls
+ * back, as before.
+ */
+async function pasteToTeammate(ctx: Context, target: string, window: TmuxWindow, text: string): Promise<void> {
+  const live = await ctx.tmux.listAllPanes().catch(() => [])
+  const binding = await ctx.board.resolvePane(target)
+  const hit = binding && live.some((pane) => pane.pane === binding.paneId && pane.windowId === binding.windowId)
+  if (binding && !hit) await ctx.board.prunePane(target)
+  await ctx.tmux.sendText(resolveAgentPane(live, window.id, hit ? binding : undefined), text)
+}
+
 export function formatUrgent(message: BoardMessage): string {
   const instruction = message.replyExpected
     ? `Reply with: ttt reply ${message.messageId} -- MESSAGE`
@@ -87,7 +100,7 @@ export async function pushUrgent(ctx: Context, message: BoardMessage, windows: M
   const failures: string[] = []
   for (const [name, window] of windows) {
     try {
-      await ctx.board.deliverUrgent(message, name, (urgent) => ctx.tmux.sendText(window.id, formatUrgent(urgent)))
+      await ctx.board.deliverUrgent(message, name, (urgent) => pasteToTeammate(ctx, name, window, formatUrgent(urgent)))
     } catch(error) {
       failures.push(name)
       process.stderr.write(`ttt: urgent delivery to ${name} failed: ${error instanceof Error ? error.message : String(error)}\n`)

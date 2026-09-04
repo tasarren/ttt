@@ -1,10 +1,21 @@
 import { randomUUID } from "node:crypto"
+import type { Dirent } from "node:fs"
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { setTimeout as sleep } from "node:timers/promises"
 
 export function isErrno(error: unknown, code: string): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === code
+}
+
+/** Recursive `readdir` that reads as empty when the root is missing; other errors throw. */
+async function readdirRecursive(root: string): Promise<Dirent[]> {
+  try {
+    return await readdir(root, { recursive: true, withFileTypes: true })
+  } catch(error) {
+    if (isErrno(error, "ENOENT")) return []
+    throw error
+  }
 }
 
 /** Write via a sibling temp file + rename so readers never observe a half-written document. */
@@ -26,13 +37,7 @@ export async function readJsonIfExists<T>(path: string): Promise<T | undefined> 
 
 /** Every parseable `.json` document under `root` (recursively). Corrupt or vanished files are skipped. */
 export async function readJsonTree<T>(root: string): Promise<T[]> {
-  let entries
-  try {
-    entries = await readdir(root, { recursive: true, withFileTypes: true })
-  } catch(error) {
-    if (isErrno(error, "ENOENT")) return []
-    throw error
-  }
+  const entries = await readdirRecursive(root)
   const documents: T[] = []
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith(".json")) continue
@@ -52,13 +57,7 @@ export async function readJsonTree<T>(root: string): Promise<T[]> {
  * concurrent live writer is never disturbed. Never throws.
  */
 export async function sweepTempFiles(root: string, olderThanMs: number): Promise<number> {
-  let entries
-  try {
-    entries = await readdir(root, { recursive: true, withFileTypes: true })
-  } catch(error) {
-    if (isErrno(error, "ENOENT")) return 0
-    throw error
-  }
+  const entries = await readdirRecursive(root)
   const cutoff = Date.now() - olderThanMs
   let removed = 0
   for (const entry of entries) {

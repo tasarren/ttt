@@ -6,7 +6,7 @@ import { parse, printParseErrorCode } from "jsonc-parser"
 import type { ParseError } from "jsonc-parser"
 import { DEFAULT_TMUX_OPTIONS } from "@ttt/tmux"
 import type { TmuxOptions } from "@ttt/tmux"
-import { assertName } from "@ttt/board"
+import { assertName, isErrno } from "@ttt/board"
 import type { LockOptions } from "@ttt/board"
 
 import { CliError } from "./cli-error.ts"
@@ -33,7 +33,7 @@ export function defaultSettings(home: string): Settings {
   return {
     home,
     boardRoot: join(home, "boards"),
-    notifySeconds: 60,
+    notifySeconds: 20,
     notifyOverrides: {},
     readMax: 10,
     capture: { lines: 40, maxLines: 500 },
@@ -58,7 +58,7 @@ async function readSettingsFile(home: string): Promise<{ file: string; text: str
     try {
       return { file, text: await readFile(file, "utf8") }
     } catch(error) {
-      if (!(typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT")) throw error
+      if (!isErrno(error, "ENOENT")) throw error
     }
   }
   return undefined

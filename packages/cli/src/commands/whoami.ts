@@ -10,6 +10,7 @@ export const whoami: Handler = async(argv, ctx) => {
   if (positionals.length > 0) throw usageError("usage: ttt whoami")
   const lines = [`session: ${ctx.session}`, `window: ${ctx.senderName}`]
   if (ctx.senderId) lines.push(`id: ${ctx.senderId}`)
+  lines.push(`via: ${ctx.via}`)
   lines.push(`board: ${join(ctx.settings.boardRoot, ctx.session)}`)
   process.stdout.write(`${lines.join("\n")}\n`)
 }
