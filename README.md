@@ -21,6 +21,11 @@ pnpm add -g .
 ttt --help
 ```
 
+Global live link: the command above puts a `ttt` on your PATH that runs the checkout source, so edits
+under `packages/*/src` take effect on the next invocation with no build. Verify with `which ttt` and
+`ttt windows` from outside the checkout (inside any tmux session). Re-run `pnpm add -g .` only if the
+`bin` entry itself changes; never point the link at `dist/` for development.
+
 Portable single file, for machines without the checkout:
 
 ```sh
