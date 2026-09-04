@@ -102,10 +102,13 @@ inside a pane (`TMUX`, `TMUX_PANE`, plus a temp `TTT_HOME` with `notifySeconds: 
 
 ## Release
 
-Releases are owner-gated: publishing a GitHub Release (tag `vX.Y.Z`, matching `packages/cli` version)
-runs `.github/workflows/release.yml`, which verifies the tag, dry-runs the pack, and publishes to npm
-via OIDC trusted publishing. Merging to `main` never publishes; neither does a bare tag push without
-a release. Prereleases are skipped by the workflow and never reach npm. First-ever publish is manual
+Releases are owner-gated in two steps: publishing a GitHub Release (tag `vX.Y.Z`, matching
+`packages/cli` version) runs `.github/workflows/release.yml`, which verifies the tag, dry-runs the pack,
+and *stages* the package on npm via OIDC trusted publishing. A maintainer then approves it
+(`pnpm stage approve <id>` with 2FA, or the Approve button on npmjs.com) and only then does the version
+go live. Merging to `main` never publishes; neither does a bare tag push without a release. Prereleases
+are skipped by the workflow and never reach npm. The trusted publisher entry is stage-only on purpose:
+CI can stage, only humans can ship. First-ever publish is manual
 (the package must exist before a trusted publisher can be attached):
 `pnpm --filter @tasarren/ttt publish --access public` from a clean checkout, then attach the trusted
 publisher (repo `tasarren/ttt`, workflow `release.yml`, no environment) on the package page. Never
