@@ -73,6 +73,8 @@ Acking without a prior `ttt read` warns on stderr; the receipt is still marked a
 | `ttt status MESSAGE_ID` | Per-recipient receipt state and timestamps. |
 | `ttt thread MESSAGE_ID` | Every message in the thread, oldest first. |
 | `ttt capture TARGET [--lines N] [--raw]` | Last N lines of another window's pane. `--raw` keeps tmux's line wrapping. |
+| `ttt capture TARGET [--grep PATTERN]` | Same, but only lines containing PATTERN (token-saving filter). |
+| `ttt windows` | List windows in this session with ids; `(you)` marks the caller. |
 
 Message options (for `send`, `reply`, `broadcast`):
 
@@ -94,7 +96,9 @@ Exit codes: `0` ok, `1` runtime failure (window missing, board error), `2` bad u
   `notifySeconds` it pastes a single summary line (`ttt: 3 new from A(2), B(1); 3 unread. Run: ttt read`)
   and marks those receipts notified. Further sends during the window join the same batch.
 - **Urgent.** `--urgent` pastes the full message immediately, with the reply instruction. If the paste
-  fails the message falls back to a batched notification, so nothing is lost.
+  fails the message falls back to a batched notification, so nothing is lost. Pasting clears the target's
+  input line (`C-u`) before pasting, so it can clobber in-progress typing; urgent broadcasts paste serially,
+  about one batching-free paste per recipient.
 - **Replace.** `--replace KEY` marks your earlier unread messages with the same KEY as superseded, so a
   recipient that was busy reads only the latest status.
 - **Reads are cheap.** `ttt read` prints a compact batch: one header line per message, then the body.
@@ -110,7 +114,7 @@ Unknown keys are rejected so typos surface immediately. `TTT_HOME` moves the who
   "notifySeconds": 60,
   "readMax": 10,
   "boardRoot": "~/.ttt/boards",
-  "capture": { "lines": 80, "maxLines": 500 },
+  "capture": { "lines": 40, "maxLines": 500 },
   "lock": { "timeoutMs": 10000, "staleMs": 60000 },
   "tmux": {
     "inputSettleMs": 800,   // after clearing the target's input line
@@ -126,7 +130,7 @@ Unknown keys are rejected so typos surface immediately. `TTT_HOME` moves the who
 | `boardRoot` | string | `~/.ttt/boards` | Boards live at `<boardRoot>/<session>`. `~/` is expanded. |
 | `notifySeconds` | integer | `60` | Batching window for normal messages. |
 | `readMax` | integer >= 1 | `10` | Default `--max` for `ttt read`. |
-| `capture.lines` | integer >= 1 | `80` | Default `--lines` for `ttt capture`. |
+| `capture.lines` | integer >= 1 | `40` | Default `--lines` for `ttt capture`. |
 | `capture.maxLines` | integer >= 1 | `500` | Upper bound for `--lines`. |
 | `lock.timeoutMs` | integer | `10000` | How long a command waits for a busy mailbox. |
 | `lock.staleMs` | integer | `60000` | A lock older than this is treated as abandoned. |

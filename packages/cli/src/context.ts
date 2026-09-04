@@ -68,6 +68,7 @@ export async function createContext(overrides: GlobalOverrides, binPath: string)
     notifySeconds: settings.notifySeconds,
     lock: settings.lock,
   })
+  void board.sweepTempFiles()
   return { settings, session, senderName, senderId, tmux, board, binPath }
 }
 

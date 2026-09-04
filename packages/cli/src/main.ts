@@ -3,6 +3,7 @@ import { capture } from "./commands/capture.ts"
 import { ack, inbox, read, status, thread } from "./commands/inbox.ts"
 import { notify } from "./commands/notify.ts"
 import { broadcast, reply, send } from "./commands/send.ts"
+import { windows } from "./commands/windows.ts"
 import { createContext } from "./context.ts"
 import type { GlobalOverrides, Handler } from "./context.ts"
 
@@ -16,6 +17,7 @@ const COMMANDS: Record<string, Handler> = {
   status,
   thread,
   capture,
+  windows,
   _notify: notify,
 }
 
@@ -32,7 +34,8 @@ usage:
   ttt inbox [--count]
   ttt status MESSAGE_ID
   ttt thread MESSAGE_ID
-  ttt capture TARGET [--lines COUNT] [--raw]
+  ttt capture TARGET [--lines COUNT] [--raw] [--grep PATTERN]
+  ttt windows
 
 message options:
   --no-reply      the recipient does not need to reply

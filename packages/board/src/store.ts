@@ -46,6 +46,36 @@ export async function readJsonTree<T>(root: string): Promise<T[]> {
   return documents
 }
 
+/**
+ * Best-effort cleanup of `atomicWriteJson` temp files orphaned by crashed writers
+ * (`<name>.tmp.<pid>.<uuid>`). Only files older than `olderThanMs` are removed so a
+ * concurrent live writer is never disturbed. Never throws.
+ */
+export async function sweepTempFiles(root: string, olderThanMs: number): Promise<number> {
+  let entries
+  try {
+    entries = await readdir(root, { recursive: true, withFileTypes: true })
+  } catch(error) {
+    if (isErrno(error, "ENOENT")) return 0
+    throw error
+  }
+  const cutoff = Date.now() - olderThanMs
+  let removed = 0
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.includes(".tmp.")) continue
+    const path = join(entry.parentPath, entry.name)
+    try {
+      const info = await stat(path)
+      if (info.mtimeMs > cutoff) continue
+      await rm(path, { force: true })
+      removed += 1
+    } catch {
+      // A concurrent writer may rename the file first; that just means no cleanup is needed.
+    }
+  }
+  return removed
+}
+
 export interface LockOptions {
   timeoutMs: number
   /** A lock directory older than this is assumed to belong to a dead process and is removed. */

@@ -32,7 +32,7 @@ export function defaultSettings(home: string): Settings {
     boardRoot: join(home, "boards"),
     notifySeconds: 60,
     readMax: 10,
-    capture: { lines: 80, maxLines: 500 },
+    capture: { lines: 40, maxLines: 500 },
     lock: { timeoutMs: 10_000, staleMs: 60_000 },
     tmux: { ...DEFAULT_TMUX_OPTIONS },
     currentPane: undefined,

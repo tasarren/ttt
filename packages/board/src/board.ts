@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { mkdir, rm } from "node:fs/promises"
+import { rm } from "node:fs/promises"
 import { join } from "node:path"
 import { setTimeout as sleep } from "node:timers/promises"
 
@@ -18,7 +18,7 @@ import type {
   MessageReceipt,
   NotificationMarker,
 } from "./model.ts"
-import { atomicWriteJson, readJsonIfExists, readJsonTree, withDirectoryLock } from "./store.ts"
+import { atomicWriteJson, readJsonIfExists, readJsonTree, sweepTempFiles, withDirectoryLock } from "./store.ts"
 import type { LockOptions } from "./store.ts"
 
 export interface BoardOptions {
@@ -215,6 +215,15 @@ export class Board {
     return this.withMailboxLock(target, () => this.ensureMarkerUnlocked(target))
   }
 
+  /** Best-effort removal of crashed-writer temp files under this session root. Never throws. */
+  async sweepTempFiles(): Promise<number> {
+    try {
+      return await sweepTempFiles(this.options.sessionRoot, 3_600_000)
+    } catch {
+      return 0
+    }
+  }
+
   /** Deletes a notification marker only when its token still matches; used to clean up after a failed spawn. */
   async cancelNotification(target: string, token: string): Promise<boolean> {
     return this.withMailboxLock(target, async() => {
@@ -315,7 +324,6 @@ export class Board {
   }
 
   private async receiptsUnlocked(agent: string): Promise<MessageReceipt[]> {
-    await mkdir(join(this.mailboxesRoot, agent), { recursive: true })
     return readJsonTree<MessageReceipt>(join(this.mailboxesRoot, agent))
   }
 
