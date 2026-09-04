@@ -31,12 +31,14 @@ test("settings.jsonc accepts comments, trailing commas, partial overrides, and ~
     "settings.jsonc": `{
       // batching window
       "notifySeconds": 5,
+      "notifyOverrides": { "WATCHER": 10 },
       "boardRoot": "~/boards-elsewhere",
       "tmux": { "enterPresses": 1, },
     }`,
   })
   const settings = await resolveSettings({ TTT_HOME: dir })
   assert.equal(settings.notifySeconds, 5)
+  assert.deepEqual(settings.notifyOverrides, { WATCHER: 10 })
   assert.equal(settings.tmux.enterPresses, 1)
   assert.equal(settings.tmux.postPasteMs, 500, "untouched keys keep their defaults")
   assert.ok(settings.boardRoot.endsWith("/boards-elsewhere"))
@@ -61,6 +63,9 @@ test("bad values, unknown keys, and syntax errors are exit-2 errors naming the f
   }
   await bad("{\"notifySeconds\": -1}", /notifySeconds must be/)
   await bad("{\"notifySeconds\": \"60\"}", /notifySeconds must be/)
+  await bad("{\"notifyOverrides\": {\"../x\": 5}}", /notifyOverrides window name/)
+  await bad("{\"notifyOverrides\": {\"B\": -1}}", /notifyOverrides\.B must be/)
+  await bad("{\"notifyOverrides\": 5}", /notifyOverrides must be an object/)
   await bad("{\"readMax\": 0}", /readMax must be an integer of at least 1/)
   await bad("{\"capture\": {\"lines\": 0}}", /capture\.lines must be an integer of at least 1/)
   await bad("{\"capture\": {\"maxLines\": 0}}", /capture\.maxLines must be an integer of at least 1/)

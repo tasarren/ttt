@@ -199,6 +199,7 @@ export function formatStatus(message: BoardMessage, receipts: MessageReceipt[]):
       ...(receipt.ackedAt ? [`a ${shortStamp(receipt.ackedAt)}`] : []),
       ...(receipt.ackNote ? [`note ${JSON.stringify(receipt.ackNote)}`] : []),
       ...(receipt.supersededBy ? [`superseded by ${receipt.supersededBy}`] : []),
+      ...(!receipt.supersededBy && receipt.supersededAt ? ["expired"] : []),
     ]
     lines.push(`${recipient}: ${receipt.state}  ${stamps.join("  ")}`)
   }

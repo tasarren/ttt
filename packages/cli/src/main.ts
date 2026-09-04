@@ -48,6 +48,7 @@ message options:
   --urgent        skip the batching window and paste into the target window now
   --replace KEY   supersede your older unread messages that carry the same KEY
   --subject TEXT  thread subject, set once on the root message (not on replies)
+  --ttl SECONDS   unread receipts lapse to superseded after SECONDS (1..2592000)
   --file PATH     read the message body from PATH
 
 Normal messages are queued. A target gets one notification per burst and reads the batch with

@@ -26,6 +26,8 @@ export interface BoardOptions {
   sessionRoot: string
   /** Batching window: a target gets one notification per burst of normal messages. */
   notifySeconds: number
+  /** Per-window batching windows; a missing name falls back to `notifySeconds`. */
+  notifyOverrides?: Record<string, number>
   lock: LockOptions
 }
 
@@ -37,6 +39,8 @@ export interface SendOptions {
   inReplyTo?: string
   /** Thread subject; only stored on root messages (replies inherit by thread). */
   subject?: string
+  /** Milliseconds after creation when unread receipts lapse to `superseded`. */
+  ttlMs?: number
 }
 
 export interface SendResult {
@@ -132,6 +136,7 @@ export class Board {
       priority: options.priority,
       ...(options.replaceKey ? { replaceKey: options.replaceKey } : {}),
       ...(subject ? { subject } : {}),
+      ...(options.ttlMs !== undefined ? { expiresAt: new Date(createdAt.getTime() + options.ttlMs).toISOString() } : {}),
       body,
     }
     await atomicWriteJson(this.messagePath(messageId, messageDay(messageId)!), message)
@@ -201,6 +206,14 @@ export class Board {
       if (receipt.state === ReceiptState.Superseded) {
         throw new Error(`message ${messageId} was superseded by ${receipt.supersededBy ?? "another message"}`)
       }
+      if (receipt.state === ReceiptState.Unread) {
+        const message = await this.findMessage(messageId).catch(() => undefined)
+        if (message?.expiresAt && Date.parse(message.expiresAt) <= Date.now()) {
+          await this.writeReceipt({ ...receipt, state: ReceiptState.Superseded, supersededAt: new Date().toISOString() })
+          await this.addUnreadUnlocked(agent, -1)
+          throw new Error(`message ${messageId} expired before it was handled`)
+        }
+      }
       const ackedAt = new Date().toISOString()
       const wasUnread = receipt.state === ReceiptState.Unread
       const acked: MessageReceipt = {
@@ -219,6 +232,7 @@ export class Board {
   /** Marks every unacked, non-superseded receipt in `agent`'s mailbox acked. One lock, one timestamp. */
   async ackAll(agent: string, note?: string): Promise<MessageReceipt[]> {
     return this.withMailboxLock(agent, async() => {
+      await this.expireUnlocked(agent)
       const ackedAt = new Date().toISOString()
       const clean = note?.trim() ? note.trim() : undefined
       const acked: MessageReceipt[] = []
@@ -476,6 +490,11 @@ export class Board {
     return join(this.mailboxesRoot, agent, `${messageId}.json`)
   }
 
+  /** Batching delay for one target: its override, else the session default. */
+  notifyDelay(target: string): number {
+    return this.options.notifyOverrides?.[target] ?? this.options.notifySeconds
+  }
+
   private markerPath(agent: string): string {
     return join(this.stateRoot, `${agent}.notification.json`)
   }
@@ -569,6 +588,7 @@ export class Board {
   }
 
   private async unreadUnlocked(agent: string): Promise<Unread[]> {
+    await this.expireUnlocked(agent)
     const unread: Unread[] = []
     for (const receipt of await this.receiptsUnlocked(agent)) {
       if (receipt.state !== ReceiptState.Unread) continue
@@ -579,6 +599,28 @@ export class Board {
       }
     }
     return unread
+  }
+
+  /**
+   * Lapses expired unread receipts to `superseded`. Expiry settles on mailbox access (read, ack,
+   * delivery, migration), never by timer; counts stay exact because every flip adjusts the counter.
+   */
+  private async expireUnlocked(agent: string): Promise<number> {
+    const now = Date.now()
+    let expired = 0
+    for (const receipt of await this.receiptsUnlocked(agent)) {
+      if (receipt.state !== ReceiptState.Unread) continue
+      try {
+        const message = await this.findMessage(receipt.messageId)
+        if (!message.expiresAt || Date.parse(message.expiresAt) > now) continue
+        await this.writeReceipt({ ...receipt, state: ReceiptState.Superseded, supersededAt: new Date(now).toISOString() })
+        expired += 1
+      } catch {
+        // A missing message must not make the whole inbox unusable.
+      }
+    }
+    if (expired > 0) await this.addUnreadUnlocked(agent, -expired)
+    return expired
   }
 
   private async supersedeUnlocked(replacement: BoardMessage, recipient: string): Promise<void> {
@@ -647,7 +689,7 @@ export class Board {
       token: randomUUID(),
       target,
       createdAt: new Date().toISOString(),
-      delaySeconds: this.options.notifySeconds,
+      delaySeconds: this.notifyDelay(target),
     }
     await atomicWriteJson(markerPath, marker)
     return marker

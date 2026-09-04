@@ -6,6 +6,7 @@ import { parse, printParseErrorCode } from "jsonc-parser"
 import type { ParseError } from "jsonc-parser"
 import { DEFAULT_TMUX_OPTIONS } from "@ttt/tmux"
 import type { TmuxOptions } from "@ttt/tmux"
+import { assertName } from "@ttt/board"
 import type { LockOptions } from "@ttt/board"
 
 import { CliError } from "./cli-error.ts"
@@ -16,6 +17,8 @@ export interface Settings {
   /** Boards live at `<boardRoot>/<tmux session name>`. */
   boardRoot: string
   notifySeconds: number
+  /** Per-window batching windows; a missing name falls back to `notifySeconds`. */
+  notifyOverrides: Record<string, number>
   readMax: number
   capture: { lines: number; maxLines: number }
   lock: LockOptions
@@ -31,6 +34,7 @@ export function defaultSettings(home: string): Settings {
     home,
     boardRoot: join(home, "boards"),
     notifySeconds: 60,
+    notifyOverrides: {},
     readMax: 10,
     capture: { lines: 40, maxLines: 500 },
     lock: { timeoutMs: 10_000, staleMs: 60_000 },
@@ -66,7 +70,7 @@ function applySettings(defaults: Settings, file: string, text: string): Settings
   if (errors[0]) {
     throw new CliError(`${file}: ${printParseErrorCode(errors[0].error)} at offset ${errors[0].offset}`, 2)
   }
-  const root = section(raw, file, "settings", ["boardRoot", "notifySeconds", "readMax", "capture", "lock", "tmux"])
+  const root = section(raw, file, "settings", ["boardRoot", "notifySeconds", "notifyOverrides", "readMax", "capture", "lock", "tmux"])
   const capture = section(root["capture"], file, "capture", ["lines", "maxLines"])
   const lock = section(root["lock"], file, "lock", ["timeoutMs", "staleMs"])
   const tmux = section(root["tmux"], file, "tmux", ["inputSettleMs", "postPasteMs", "enterPresses", "postSendMs"])
@@ -81,6 +85,7 @@ function applySettings(defaults: Settings, file: string, text: string): Settings
     home: defaults.home,
     boardRoot: expandHome(text_(root["boardRoot"], file, "boardRoot", defaults.boardRoot)),
     notifySeconds: int(root["notifySeconds"], "notifySeconds", defaults.notifySeconds),
+    notifyOverrides: notifyOverrides(root["notifyOverrides"], file),
     readMax: atLeastOne(root["readMax"], "readMax", defaults.readMax),
     capture: {
       lines: atLeastOne(capture["lines"], "capture.lines", defaults.capture.lines),
@@ -100,7 +105,7 @@ function applySettings(defaults: Settings, file: string, text: string): Settings
   }
 }
 
-// ponytail: a 3-helper validator instead of a schema library; the settings shape is flat and tiny.
+// ponytail: a 4-helper validator instead of a schema library; the settings shape is flat and tiny.
 function section(value: unknown, file: string, path: string, known: string[]): Record<string, unknown> {
   if (value === undefined) return {}
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -117,6 +122,27 @@ function positiveInt(value: unknown, file: string, path: string, fallback: numbe
     throw new CliError(`${file}: ${path} must be a non-negative integer`, 2)
   }
   return value
+}
+
+/** Per-window batching windows. Keys are window names, values are non-negative seconds. */
+function notifyOverrides(value: unknown, file: string): Record<string, number> {
+  if (value === undefined) return {}
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new CliError(`${file}: notifyOverrides must be an object`, 2)
+  }
+  const overrides: Record<string, number> = {}
+  for (const [name, seconds] of Object.entries(value)) {
+    try {
+      assertName(name, "notifyOverrides window name")
+    } catch(error) {
+      throw new CliError(`${file}: ${error instanceof Error ? error.message : String(error)}`, 2)
+    }
+    if (typeof seconds !== "number" || !Number.isInteger(seconds) || seconds < 0) {
+      throw new CliError(`${file}: notifyOverrides.${name} must be a non-negative integer`, 2)
+    }
+    overrides[name] = seconds
+  }
+  return overrides
 }
 
 function text_(value: unknown, file: string, path: string, fallback: string): string {

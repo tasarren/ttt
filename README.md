@@ -92,6 +92,7 @@ Message options (for `send`, `reply`, `broadcast`):
 | `--urgent` | Skip the batching window: paste the message into the target window now. |
 | `--replace KEY` | Supersede your own older *unread* messages to that recipient that carry the same KEY. Use it for status updates. |
 | `--subject TEXT` | Thread subject, set once on the root message. Replies inherit the thread; `--subject` on a reply is rejected. |
+| `--ttl SECONDS` | Self-expiring message: unread receipts lapse to `superseded` after SECONDS (max 30 days). History is kept. |
 | `--file PATH` | Read the body from PATH. |
 
 Exit codes: `0` ok, `1` runtime failure (window missing, board error), `2` bad usage or bad settings.
@@ -125,6 +126,7 @@ Unknown keys are rejected so typos surface immediately. `TTT_HOME` moves the who
 {
   // seconds a normal message waits for company before the recipient is notified
   "notifySeconds": 60,
+  "notifyOverrides": { "WATCHER": 10 },   // per-window batching windows
   "readMax": 10,
   "boardRoot": "~/.ttt/boards",
   "capture": { "lines": 40, "maxLines": 500 },
@@ -142,6 +144,7 @@ Unknown keys are rejected so typos surface immediately. `TTT_HOME` moves the who
 |---|---|---|---|
 | `boardRoot` | string | `~/.ttt/boards` | Boards live at `<boardRoot>/<session>`. `~/` is expanded. |
 | `notifySeconds` | integer | `60` | Batching window for normal messages. |
+| `notifyOverrides` | object | `{}` | Per-window batching windows (`{ NAME: seconds }`), else `notifySeconds`. |
 | `readMax` | integer >= 1 | `10` | Default `--max` for `ttt read`. |
 | `capture.lines` | integer >= 1 | `40` | Default `--lines` for `ttt capture`. |
 | `capture.maxLines` | integer >= 1 | `500` | Upper bound for `--lines`. |

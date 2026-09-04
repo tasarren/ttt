@@ -66,6 +66,7 @@ export async function createContext(overrides: GlobalOverrides, binPath: string)
   const board = new Board({
     sessionRoot: join(settings.boardRoot, session),
     notifySeconds: settings.notifySeconds,
+    notifyOverrides: settings.notifyOverrides,
     lock: settings.lock,
   })
   void board.sweepTempFiles()

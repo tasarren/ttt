@@ -79,6 +79,7 @@ async function deliver(
     ...(payload.replaceKey ? { replaceKey: payload.replaceKey } : {}),
     ...(route.inReplyTo ? { inReplyTo: route.inReplyTo } : {}),
     ...(payload.subject ? { subject: payload.subject } : {}),
+    ...(payload.ttlMs !== undefined ? { ttlMs: payload.ttlMs } : {}),
   })
   for (const marker of notifications) spawnNotifier(ctx, marker)
 
@@ -90,7 +91,8 @@ async function deliver(
   } else if (notifications.length === 0) {
     process.stdout.write(`queued ${message.messageId} -> ${to} (joins pending batch)${thread}\n`)
   } else {
-    process.stdout.write(`queued ${message.messageId} -> ${to} (notify in ~${ctx.settings.notifySeconds}s)${thread}\n`)
+    const delay = message.recipients.length === 1 ? ctx.board.notifyDelay(message.recipients[0]!) : ctx.settings.notifySeconds
+    process.stdout.write(`queued ${message.messageId} -> ${to} (notify in ~${delay}s)${thread}\n`)
   }
 }
 

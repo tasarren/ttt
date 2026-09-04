@@ -34,6 +34,7 @@ export const MESSAGE_OPTIONS = {
   replace: { type: "string" },
   file: { type: "string" },
   subject: { type: "string" },
+  ttl: { type: "string" },
 } as const satisfies ParseArgsOptionsConfig
 
 export interface MessagePayload {
@@ -42,7 +43,11 @@ export interface MessagePayload {
   priority: MessagePriority
   replaceKey?: string
   subject?: string
+  ttlMs?: number
 }
+
+/** Upper bound for `--ttl` (30 days, in seconds). */
+export const MAX_TTL_SECONDS = 2_592_000
 
 /** Body precedence: words after `--`, else `--file PATH`, else stdin. */
 export async function readMessagePayload(
@@ -67,6 +72,14 @@ export async function readMessagePayload(
   if (!body.trim()) throw usageError("message cannot be empty")
   if (values.replace !== undefined && !values.replace.trim()) throw usageError("--replace key cannot be empty")
   if (values.subject !== undefined && !values.subject.trim()) throw usageError("--subject cannot be empty")
+  let ttlMs: number | undefined
+  if (values.ttl !== undefined) {
+    const seconds = Number(values.ttl)
+    if (!Number.isInteger(seconds) || seconds < 1 || seconds > MAX_TTL_SECONDS) {
+      throw usageError(`--ttl must be an integer between 1 and ${MAX_TTL_SECONDS} seconds`)
+    }
+    ttlMs = seconds * 1_000
+  }
 
   return {
     body,
@@ -74,6 +87,7 @@ export async function readMessagePayload(
     priority: values.urgent ? MessagePriority.Urgent : MessagePriority.Normal,
     ...(values.replace ? { replaceKey: values.replace } : {}),
     ...(values.subject ? { subject: values.subject } : {}),
+    ...(ttlMs !== undefined ? { ttlMs } : {}),
   }
 }
 

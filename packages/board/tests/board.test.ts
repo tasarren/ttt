@@ -233,3 +233,32 @@ test("thread resolves via the index and prune GCs only terminal history", async(
   assert.deepEqual(await board.thread(reply.message.messageId).catch(() => []), [])
   assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 0, superseded: 0 })
 })
+
+test("per-window notify overrides resolve per target", async() => {
+  const { board } = await freshSession()
+  assert.equal(board.notifyDelay("B"), 0)
+  const sessionRoot2 = await mkdtemp(join(tmpdir(), "ttt-board-"))
+  roots.push(sessionRoot2)
+  const custom = new Board({ sessionRoot: sessionRoot2, notifySeconds: 60, notifyOverrides: { B: 5 }, lock: { timeoutMs: 2_000, staleMs: 60_000 } })
+  assert.equal(custom.notifyDelay("B"), 5)
+  assert.equal(custom.notifyDelay("C"), 60)
+  const sent = await custom.send("A", ["B"], "hi", NORMAL)
+  assert.equal(sent.notifications[0]!.delaySeconds, 5)
+})
+
+test("ttl lapses unread receipts to superseded on next access; acking expired rejects", async() => {
+  const board = await freshBoard()
+  const sent = await board.send("A", ["B"], "ping", { ...NORMAL, ttlMs: 200 })
+  assert.ok(sent.message.expiresAt)
+  assert.equal(await board.unreadCount("B"), 1)
+  await sleep(400)
+  const batch = await board.read("B", { max: 10, peek: false, latest: false })
+  assert.equal(batch.messages.length, 0, "expired messages never surface")
+  assert.equal(batch.remaining, 0)
+  assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 0, superseded: 1 })
+
+  const late = await board.send("A", ["B"], "ping2", { ...NORMAL, ttlMs: 200 })
+  await sleep(400)
+  await assert.rejects(board.ack("B", late.message.messageId), /expired/)
+  assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 0, superseded: 2 })
+})

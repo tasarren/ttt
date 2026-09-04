@@ -39,6 +39,8 @@ export interface BoardMessage {
   replaceKey?: string
   /** Thread subject, set once on the root message via `send --subject`. */
   subject?: string
+  /** ISO timestamp after which unread receipts lapse to `superseded` on next mailbox access. */
+  expiresAt?: string
   body: string
 }
 

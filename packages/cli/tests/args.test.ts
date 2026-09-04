@@ -62,6 +62,14 @@ test("readMessagePayload passes --subject through and rejects empties", async() 
   await assert.rejects(readMessagePayload(parseCommandArgs(["--subject", "  "], MESSAGE_OPTIONS).values, ["hi"]), /--subject cannot be empty/)
 })
 
+test("readMessagePayload parses --ttl seconds and rejects bad values", async() => {
+  const withTtl = await readMessagePayload(parseCommandArgs(["--ttl", "60"], MESSAGE_OPTIONS).values, ["hi"])
+  assert.equal(withTtl.ttlMs, 60_000)
+  for (const bad of ["0", "x", "1.5", "2592001"]) {
+    await assert.rejects(readMessagePayload(parseCommandArgs(["--ttl", bad], MESSAGE_OPTIONS).values, ["hi"]), /--ttl must be/)
+  }
+})
+
 test("boundedInt validates numeric flags", () => {
   assert.equal(boundedInt(undefined, "--max", 10, 1000), 10)
   assert.equal(boundedInt("7", "--max", 10, 1000), 7)

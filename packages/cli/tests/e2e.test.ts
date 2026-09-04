@@ -160,3 +160,12 @@ test("duplicate names flag the loser; around shows context", async() => {
   assert.match(await ttt("A", "capture", "B", "--lines", "20", "--around", "stop now", "--context", "1"), /stop now/)
   await assert.rejects(ttt("A", "capture", "B", "--grep", "x", "--around", "y"), /cannot be combined/)
 })
+
+test("per-window notify overrides change the send receipt", async() => {
+  const settings = join(home, "settings.jsonc")
+  await writeFile(settings, "{\"notifySeconds\": 1, \"notifyOverrides\": {\"B\": 7}}")
+  const queued = await ttt("A", "send", "B", "--", "override probe")
+  assert.match(queued, /\(notify in ~7s\)/)
+  await writeFile(settings, "{\"notifySeconds\": 1}")
+  assert.match(await ttt("A", "send", "B", "--", "backoff probe"), /joins pending batch|notify in ~1s/)
+})
