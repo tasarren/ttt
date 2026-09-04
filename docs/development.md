@@ -47,21 +47,23 @@ The package `bin` points at `src/ttt.ts`, so `pnpm add -g .` in `packages/cli` p
 that runs the current source. Edit, save, run: no build. `publishConfig.bin` swaps to `dist/ttt.mjs` for
 `pnpm pack` and publishing.
 
-`pnpm build` bundles the three packages plus `jsonc-parser` into one file with tsdown
+`pnpm build` bundles the workspace packages plus `jsonc-parser` into one file with tsdown
 (`packages/cli/tsdown.config.ts`, `deps.alwaysBundle`).
 
 ## How a normal send flows
 
-1. `commands/send.ts` resolves the target windows (must exist, must not be the caller), reads the body,
-   and calls `board.send`.
-2. `board.send` writes `messages/<day>/<id>.json`, then under each recipient's mailbox lock writes an
-   `unread` receipt, supersedes older messages with the same `--replace` key, and creates a notification
-   marker (`state/<recipient>.notification.json`) if none is live. It returns the new markers.
+1. `commands/send.ts` resolves the target windows (lowest id wins on duplicate names, must not be the
+   caller), reads the body, and calls `board.send`.
+2. `board.send` writes `messages/<day>/<id>.json`, appends the thread index, then under each recipient's
+   mailbox lock writes an `unread` receipt, bumps the unread counter, supersedes older messages with the
+   same `--replace` key, and creates a notification marker (`state/<recipient>.notification.json`,
+   carrying that target's resolved delay) if none is live. It returns the new markers.
 3. For each marker the CLI spawns a detached copy of itself:
    `ttt --session S --from ttt _notify --target T --token K`.
-4. The child sleeps `notifySeconds`, re-reads the marker, and if the token still matches pastes the
-   one-line summary into the window and marks the receipts notified. A newer marker means a newer child
-   owns the burst; the old one exits silently.
+4. The child heartbeats the marker through the batching window, then (if the token still matches) pastes
+   the one-line summary into the window and marks the receipts notified. A newer marker means a newer
+   child owns the burst; the old one exits silently. A failed paste cancels the dead token and re-arms
+   a live notifier.
 
 `--urgent` skips the marker: the CLI pastes the formatted message right away through
 `board.deliverUrgent`, which marks the receipt notified but leaves it unread.
@@ -88,6 +90,15 @@ inside a pane (`TMUX`, `TMUX_PANE`, plus a temp `TTT_HOME` with `notifySeconds: 
 3. Parse arguments with `parseCommandArgs` (`node:util` parseArgs, strict) and `splitAtTerminator` when the
    command takes a `-- body`.
 4. Cover it in `e2e.test.ts` if it touches tmux, otherwise in a unit test.
+
+## Adding a schema version
+
+1. Append one step in `packages/migrations/src/steps/` and register it in `manifest.ts`. Bump
+   `CURRENT_SCHEMA_VERSION` and `BOARD_VERSION` together.
+2. Steps are idempotent and rerunnable. They count first for `--dry-run` and write only on a real run.
+3. Readers stay strict: unknown newer versions are a hard error pointing at `ttt migrate`. No fallbacks.
+4. Record the ledger in `state/schema.json` and cover the step in `migrations.test.ts` (dry-run counts,
+   idempotent rerun, newer-than-code refusal).
 
 ## Release
 
