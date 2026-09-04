@@ -151,6 +151,12 @@ test("refuses to message itself and unknown windows; capture peeks at the other 
   const listed = await ttt("A", "windows")
   assert.match(listed, /^A\t@\d+\t\(you\)$/m)
   assert.match(listed, /^B\t@\d+$/m)
+  const me = await ttt("A", "whoami")
+  assert.match(me, /^session: work$/m)
+  assert.match(me, /^window: A$/m)
+  assert.match(me, /^id: @\d+$/m)
+  assert.match(me, /boards\/work$/m)
+  await assert.rejects(ttt("A", "whoami", "extra"), /usage: ttt whoami/)
 })
 
 test("duplicate names flag the loser; around shows context", async() => {
