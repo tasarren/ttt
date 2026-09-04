@@ -1,0 +1,6 @@
+node_modules/
+.cocoindex_code/
+dist/
+*.tsbuildinfo
+*.tgz
+/release/

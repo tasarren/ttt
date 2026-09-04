@@ -1,0 +1,36 @@
+{
+  "name": "@ttt/workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": "26.8.1",
+    "pnpm": "11.24.0"
+  },
+  "scripts": {
+    "runtime:check": "node scripts/check-runtime.mjs",
+    "ttt": "node packages/cli/src/ttt.ts",
+    "build": "pnpm --filter @ttt/cli build",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "node --test packages/*/tests/*.test.ts",
+    "check": "pnpm run runtime:check && pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "catalog:devTools",
+    "@stylistic/eslint-plugin": "catalog:devTools",
+    "@types/node": "catalog:devTools",
+    "eslint": "catalog:devTools",
+    "eslint-import-resolver-typescript": "catalog:devTools",
+    "eslint-plugin-import-x": "catalog:devTools",
+    "eslint-plugin-unused-imports": "catalog:devTools",
+    "globals": "catalog:devTools",
+    "tsdown": "catalog:devTools",
+    "typescript": "catalog:devTools",
+    "typescript-eslint": "catalog:devTools"
+  },
+  "dependencies": {
+    "@ttt/cli": "link:packages/cli"
+  }
+}

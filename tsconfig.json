@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["packages/*/src/**/*.ts", "packages/*/tests/**/*.ts", "packages/*/tsdown.config.ts"]
+}

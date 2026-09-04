@@ -1,0 +1,30 @@
+{
+  "name": "@ttt/cli",
+  "version": "0.1.0",
+  "description": "ttt — durable, batched messaging between agents in a tmux session",
+  "private": false,
+  "type": "module",
+  "sideEffects": false,
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.11.0"
+  },
+  "files": ["dist", "README.md"],
+  "bin": {
+    "ttt": "./src/ttt.ts"
+  },
+  "publishConfig": {
+    "bin": {
+      "ttt": "./dist/ttt.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "test": "node --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@ttt/board": "workspace:*",
+    "@ttt/tmux": "workspace:*",
+    "jsonc-parser": "catalog:runtime"
+  }
+}
