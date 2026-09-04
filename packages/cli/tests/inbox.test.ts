@@ -2,12 +2,12 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 
 import { formatHeaders, previewBody, shortStamp } from "../src/commands/inbox.ts"
-import { MessageKind } from "@ttt/board"
+import { BOARD_VERSION, MessageKind } from "@ttt/board"
 import type { BoardMessage } from "@ttt/board"
 
 function message(overrides: Partial<BoardMessage> = {}): BoardMessage {
   return {
-    boardVersion: 4,
+    boardVersion: BOARD_VERSION,
     messageId: "ttt-20260902-120000-aaaaaaaa",
     threadId: "ttt-20260902-120000-aaaaaaaa",
     kind: MessageKind.Message,

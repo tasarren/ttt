@@ -236,34 +236,62 @@ export class Board {
   async thread(messageId: string): Promise<BoardMessage[]> {
     const { threadId } = await this.findMessage(messageId)
     const indexed = await this.readThreadIndex(threadId)
-    if (indexed) {
-      const messages: BoardMessage[] = []
-      for (const id of indexed) {
-        try {
-          messages.push(await this.findMessage(id))
-        } catch {
-          // Pruned messages drop out of the thread; the rest still resolve.
-        }
-      }
-      if (messages.length > 0) {
-        return messages.sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.messageId.localeCompare(b.messageId))
+    if (!indexed) throw new Error(`thread index missing for ${threadId}; run ttt migrate`)
+    const messages: BoardMessage[] = []
+    for (const id of indexed) {
+      try {
+        messages.push(await this.findMessage(id))
+      } catch {
+        // Pruned messages drop out of the thread; the rest still resolve.
       }
     }
-    // Fallback for threads written before the index existed; rebuilds it best-effort.
-    const scanned = (await readJsonTree<BoardMessage>(this.messagesRoot))
-      .filter((message) => message.threadId === threadId)
-      .sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.messageId.localeCompare(b.messageId))
-    if (scanned.length > 0) {
-      await this.writeThreadIndex(threadId, scanned.map((message) => message.messageId)).catch(() => undefined)
-    }
-    return scanned
+    return messages.sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.messageId.localeCompare(b.messageId))
   }
 
-  // ponytail: ids always embed their day shard, so lookups are one direct read; no tree walk fallback.
+  /**
+   * One-time index builder used by the v4→v5 migration: groups every message by thread and writes the
+   * `threads/*.json` files that are missing. Returns the number of threads indexed. Idempotent.
+   */
+  async rebuildThreadIndex(): Promise<number> {
+    const byThread = new Map<string, BoardMessage[]>()
+    for (const message of await readJsonTree<BoardMessage>(this.messagesRoot)) {
+      const group = byThread.get(message.threadId) ?? []
+      group.push(message)
+      byThread.set(message.threadId, group)
+    }
+    let rebuilt = 0
+    for (const [threadId, messages] of byThread) {
+      if (await this.readThreadIndex(threadId)) continue
+      const ids = messages
+        .sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.messageId.localeCompare(b.messageId))
+        .map((message) => message.messageId)
+      await this.writeThreadIndex(threadId, ids)
+      rebuilt += 1
+    }
+    return rebuilt
+  }
+
+  /** Counts threads missing their index file (dry-run counterpart of `rebuildThreadIndex`). */
+  async unindexedThreadCount(): Promise<number> {
+    const threadIds = new Set<string>()
+    for (const message of await readJsonTree<BoardMessage>(this.messagesRoot)) threadIds.add(message.threadId)
+    let missing = 0
+    for (const threadId of threadIds) {
+      if (!await this.readThreadIndex(threadId)) missing += 1
+    }
+    return missing
+  }
+
+  // ponytail: ids always embed their day shard, so lookups are one direct read; versions gate strictly.
   async findMessage(messageId: string): Promise<BoardMessage> {
     const day = messageDay(messageId)
     const message = day ? await readJsonIfExists<BoardMessage>(this.messagePath(messageId, day)) : undefined
     if (!message) throw new Error(`message not found: ${messageId}`)
+    if (message.boardVersion > BOARD_VERSION) {
+      throw new Error(
+        `message ${messageId} uses schema v${message.boardVersion}, newer than this ttt (v${BOARD_VERSION}); upgrade ttt`,
+      )
+    }
     return message
   }
 
@@ -465,6 +493,17 @@ export class Board {
 
   private seqPath(agent: string): string {
     return join(this.stateRoot, `${agent}.seq.json`)
+  }
+
+  /** Session schema ledger version, or undefined when no migration ever ran. */
+  async schemaVersion(): Promise<number | undefined> {
+    const ledger = await readJsonIfExists<{ version: number }>(join(this.stateRoot, "schema.json"))
+    return ledger?.version
+  }
+
+  /** Records the session schema version after a migration step. */
+  async setSchemaVersion(version: number): Promise<void> {
+    await atomicWriteJson(join(this.stateRoot, "schema.json"), { version })
   }
 
   /** Monotonic per-mailbox enqueue order. Runs under the mailbox lock; missing counters start at 1. */

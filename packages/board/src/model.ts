@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto"
 
-export const BOARD_VERSION = 4
+export const BOARD_VERSION = 5
 export const RECEIPT_VERSION = 1
 
 export const MessageKind = {
@@ -25,7 +25,8 @@ export const ReceiptState = {
 export type ReceiptState = (typeof ReceiptState)[keyof typeof ReceiptState]
 
 export interface BoardMessage {
-  boardVersion: typeof BOARD_VERSION
+  /** Schema version of the writer; readers accept any version up to their own and refuse newer ones. */
+  boardVersion: number
   messageId: string
   threadId: string
   kind: MessageKind

@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@ttt/board": "workspace:*",
+    "@ttt/migrations": "workspace:*",
     "@ttt/tmux": "workspace:*",
     "jsonc-parser": "catalog:runtime"
   }

@@ -4,15 +4,18 @@
 
 ```
 packages/
-  tmux/    @ttt/tmux   the tmux adapter: detect context, list windows, paste text, capture a pane
-  board/   @ttt/board  the message board on disk: messages, receipts, locks, notification markers
-  cli/     @ttt/cli    the `ttt` bin: settings, argument parsing, commands, output
+  tmux/        @ttt/tmux        the tmux adapter: detect context, list windows, paste text, capture a pane
+  board/       @ttt/board       the message board on disk: messages, receipts, locks, notification markers
+  migrations/  @ttt/migrations  ordered schema steps over a session root; rerunnable, with a version ledger
+  cli/         @ttt/cli         the `ttt` bin: settings, argument parsing, commands, output
 ```
 
 Ownership rules:
 
 - `@ttt/board` never imports tmux. Delivering text is a callback the CLI passes in
   (`board.deliverNotification(target, token, deliver)`, `board.deliverUrgent(message, recipient, deliver)`).
+- `@ttt/migrations` orchestrates `@ttt/board` over a session root and owns the version ledger
+  (`state/schema.json`). Steps are idempotent; unknown newer versions are a hard error, never a fallback.
 - `@ttt/tmux` never reads settings or the board. It takes `TmuxOptions` and an injectable command runner.
 - `process.env` is read in exactly one file, `packages/cli/src/settings.ts` (`TTT_HOME`, `TMUX_PANE`).
   Everything else receives the resolved `Settings` object.

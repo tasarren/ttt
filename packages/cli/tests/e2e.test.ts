@@ -118,6 +118,9 @@ test("triage stays unread; bare-note ack and ack --all clear the mailbox", async
   assert.equal(await ttt("B", "ack", "--all"), "ttt: nothing to ack.")
   await assert.rejects(ttt("B", "prune"), /prune needs --days/)
   assert.match(await ttt("B", "prune", "--days", "30", "--dry-run"), /would prune 0 messages, 0 receipts older than 30 days\./)
+  assert.match(await ttt("B", "migrate", "--dry-run"), /session work: v4 -> v5, 0 threads indexed \(dry-run\)\./)
+  assert.match(await ttt("B", "migrate"), /session work: v4 -> v5, 0 threads indexed\./)
+  assert.match(await ttt("B", "migrate"), /session work: already v5, 0 threads indexed\./)
 })
 
 test("refuses to message itself and unknown windows; capture peeks at the other pane", async() => {
