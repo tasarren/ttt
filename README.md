@@ -10,7 +10,20 @@ ttt send CODER -- Review task AE2-001 and reply when done.
 
 ## Install
 
-Prerequisites: Node.js 24.11 or newer (development pins 26.8.1), pnpm 11.24.0, tmux.
+Prerequisites: Node.js 24.11 or newer, tmux.
+
+From the registry (no checkout needed):
+
+```sh
+pnpm add -g @tasarren/ttt   # or: npm install -g @tasarren/ttt
+ttt --help
+```
+
+One-shot, without installing:
+
+```sh
+pnpx @tasarren/ttt --help   # or: npx @tasarren/ttt --help
+```
 
 From a checkout, with no build step (the bin runs the TypeScript source directly):
 

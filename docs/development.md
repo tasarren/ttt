@@ -7,7 +7,7 @@ packages/
   tmux/        @ttt/tmux        the tmux adapter: detect context, list windows, paste text, capture a pane
   board/       @ttt/board       the message board on disk: messages, receipts, locks, notification markers
   migrations/  @ttt/migrations  ordered schema steps over a session root; rerunnable, with a version ledger
-  cli/         @ttt/cli         the `ttt` bin: settings, argument parsing, commands, output
+  cli/         @tasarren/ttt    the `ttt` bin: settings, argument parsing, commands, output
 ```
 
 Ownership rules:
@@ -102,9 +102,24 @@ inside a pane (`TMUX`, `TMUX_PANE`, plus a temp `TTT_HOME` with `notifySeconds: 
 
 ## Release
 
+Releases are tag-based: pushing `vX.Y.Z` (matching `packages/cli` version) runs
+`.github/workflows/release.yml`, which verifies the tag, dry-runs the pack, and publishes to npm
+via OIDC trusted publishing. First-ever publish is manual (the package must exist before a trusted
+publisher can be attached): `pnpm --filter @tasarren/ttt publish --access public` from a clean
+checkout, then attach the trusted publisher on the package page. Never publish from a dev machine
+after that.
+
 ```sh
 pnpm run check
+# bump packages/cli version, commit
+git tag vX.Y.Z && git push --tags
+```
+
+Local tarball check (no registry involved):
+
+```sh
 cd packages/cli
-pnpm pack                       # ttt-cli-<version>.tgz with bin -> dist/ttt.mjs
-pnpm add -g ./ttt-cli-*.tgz     # install the tarball anywhere
+pnpm pack --dry-run             # asserts dist/ttt.mjs + README + LICENSE land in the tarball
+pnpm pack                       # tasarren-ttt-<version>.tgz with bin -> dist/ttt.mjs
+pnpm add -g ./tasarren-ttt-*.tgz  # install the tarball anywhere
 ```
