@@ -35,6 +35,8 @@ export interface SendOptions {
   replyExpected: boolean
   replaceKey?: string
   inReplyTo?: string
+  /** Thread subject; only stored on root messages (replies inherit by thread). */
+  subject?: string
 }
 
 export interface SendResult {
@@ -111,6 +113,9 @@ export class Board {
 
     const createdAt = new Date()
     const messageId = makeMessageId(createdAt)
+    const subject = options.subject?.trim() ? options.subject.trim() : undefined
+    if (options.subject !== undefined && subject === undefined) throw new Error("--subject cannot be empty")
+    if (subject !== undefined && options.inReplyTo) throw new Error("--subject is set on the thread root only")
     const message: BoardMessage = {
       boardVersion: BOARD_VERSION,
       messageId,
@@ -123,6 +128,7 @@ export class Board {
       replyExpected: options.replyExpected,
       priority: options.priority,
       ...(options.replaceKey ? { replaceKey: options.replaceKey } : {}),
+      ...(subject ? { subject } : {}),
       body,
     }
     await atomicWriteJson(this.messagePath(messageId, messageDay(messageId)!), message)
@@ -140,6 +146,7 @@ export class Board {
           state: ReceiptState.Unread,
           seq: await this.nextSeqUnlocked(target),
         })
+        await this.addUnreadUnlocked(target, 1)
         return options.priority === MessagePriority.Normal ? this.ensureMarkerUnlocked(target) : undefined
       })
       if (marker) notifications.push(marker)
@@ -161,6 +168,7 @@ export class Board {
         for (const { receipt } of selected) {
           await this.writeReceipt({ ...receipt, state: ReceiptState.Read, readAt })
         }
+        await this.addUnreadUnlocked(agent, -selected.length)
       }
       const remaining = unread.length - (options.peek ? 0 : selected.length)
       return { messages: selected.map((item) => item.message), remaining }
@@ -168,7 +176,11 @@ export class Board {
   }
 
   async unreadCount(agent: string): Promise<number> {
-    return this.withMailboxLock(agent, async() => (await this.unreadUnlocked(agent)).length)
+    return this.withMailboxLock(agent, async() => {
+      const indexed = await readJsonIfExists<{ count: number }>(this.unreadPath(agent))
+      if (indexed) return indexed.count
+      return this.setUnreadUnlocked(agent)
+    })
   }
 
   async inboxSummary(agent: string): Promise<InboxSummary> {
@@ -187,6 +199,7 @@ export class Board {
         throw new Error(`message ${messageId} was superseded by ${receipt.supersededBy ?? "another message"}`)
       }
       const ackedAt = new Date().toISOString()
+      const wasUnread = receipt.state === ReceiptState.Unread
       const acked: MessageReceipt = {
         ...receipt,
         state: ReceiptState.Acked,
@@ -195,6 +208,7 @@ export class Board {
         ...(note?.trim() ? { ackNote: note.trim() } : {}),
       }
       await this.writeReceipt(acked)
+      await this.addUnreadUnlocked(agent, wasUnread ? -1 : 0)
       return acked
     })
   }
@@ -205,10 +219,12 @@ export class Board {
       const ackedAt = new Date().toISOString()
       const clean = note?.trim() ? note.trim() : undefined
       const acked: MessageReceipt[] = []
+      let wasUnread = 0
       const receipts = (await this.receiptsUnlocked(agent)).sort((a, b) =>
         a.enqueuedAt.localeCompare(b.enqueuedAt) || a.messageId.localeCompare(b.messageId))
       for (const receipt of receipts) {
         if (receipt.state !== ReceiptState.Unread && receipt.state !== ReceiptState.Read) continue
+        if (receipt.state === ReceiptState.Unread) wasUnread += 1
         const next: MessageReceipt = {
           ...receipt,
           state: ReceiptState.Acked,
@@ -219,6 +235,7 @@ export class Board {
         await this.writeReceipt(next)
         acked.push(next)
       }
+      await this.addUnreadUnlocked(agent, -wasUnread)
       return acked
     })
   }
@@ -481,7 +498,8 @@ export class Board {
     })
   }
 
-  private async mailboxNames(): Promise<string[]> {
+  /** Mailbox names with a directory on disk. */
+  async mailboxNames(): Promise<string[]> {
     try {
       const entries = await readdir(this.mailboxesRoot, { withFileTypes: true })
       return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
@@ -542,6 +560,7 @@ export class Board {
 
   private async supersedeUnlocked(replacement: BoardMessage, recipient: string): Promise<void> {
     const supersededAt = new Date().toISOString()
+    let superseded = 0
     for (const { receipt, message } of await this.unreadUnlocked(recipient)) {
       if (message.from !== replacement.from || message.replaceKey !== replacement.replaceKey) continue
       await this.writeReceipt({
@@ -550,7 +569,46 @@ export class Board {
         supersededAt,
         supersededBy: replacement.messageId,
       })
+      superseded += 1
     }
+    if (superseded > 0) await this.addUnreadUnlocked(recipient, -superseded)
+  }
+
+  /**
+   * One-time counter builder used by the v5→v6 migration: recomputes the unread counter for every
+   * mailbox. Returns the mailbox count. Idempotent.
+   */
+  async rebuildUnreadIndex(): Promise<number> {
+    let mailboxes = 0
+    for (const mailbox of await this.mailboxNames()) {
+      await this.withMailboxLock(mailbox, () => this.setUnreadUnlocked(mailbox))
+      mailboxes += 1
+    }
+    return mailboxes
+  }
+
+  private unreadPath(agent: string): string {
+    return join(this.stateRoot, `${agent}.unread.json`)
+  }
+
+  /** Recomputes the unread counter from a tree walk. Runs under the mailbox lock. */
+  private async setUnreadUnlocked(agent: string): Promise<number> {
+    const count = (await this.unreadUnlocked(agent)).length
+    await atomicWriteJson(this.unreadPath(agent), { count })
+    return count
+  }
+
+  /**
+   * Adjusts the unread counter after a mutation in the same lock. A missing counter heals via a walk,
+   * which already reflects the just-applied mutation, so the delta is then a no-op.
+   */
+  private async addUnreadUnlocked(agent: string, delta: number): Promise<void> {
+    const current = await readJsonIfExists<{ count: number }>(this.unreadPath(agent))
+    if (!current) {
+      await this.setUnreadUnlocked(agent)
+      return
+    }
+    await atomicWriteJson(this.unreadPath(agent), { count: Math.max(0, current.count + delta) })
   }
 
   /** Returns a new marker when one must be scheduled; undefined when a live notifier already covers it. */

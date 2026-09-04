@@ -28,9 +28,9 @@ async function oldBoard(): Promise<string> {
   return sessionRoot
 }
 
-test("manifest holds one ordered step ending at the current version", () => {
-  assert.deepEqual(MIGRATION_STEPS.map((step) => [step.from, step.to]), [[4, 5]])
-  assert.equal(CURRENT_SCHEMA_VERSION, 5)
+test("manifest holds ordered steps ending at the current version", () => {
+  assert.deepEqual(MIGRATION_STEPS.map((step) => [step.from, step.to]), [[4, 5], [5, 6]])
+  assert.equal(CURRENT_SCHEMA_VERSION, 6)
 })
 
 test("dry-run counts without writing; migrate indexes and ledgers; reruns are no-ops", async() => {
@@ -41,19 +41,20 @@ test("dry-run counts without writing; migrate indexes and ledgers; reruns are no
   await assert.rejects(unmigrated.thread(anyId), /run ttt migrate/)
   const dry = await migrateSession(boards, { dryRun: true })
   assert.equal(dry.from, 4)
-  assert.equal(dry.to, 5)
+  assert.equal(dry.to, 6)
   assert.equal(dry.threads, 1)
+  assert.equal(dry.mailboxes, 2)
   assert.equal((await migrateSession(boards, { dryRun: true })).threads, 1, "dry-run writes nothing")
 
   const done = await migrateSession(boards, { dryRun: false })
-  assert.equal(done.threads, 1)
+  assert.deepEqual([done.threads, done.mailboxes], [1, 2])
   const again = await migrateSession(boards, { dryRun: false })
-  assert.equal(again.from, 5)
-  assert.equal(again.to, 5)
+  assert.equal(again.from, 6)
+  assert.equal(again.to, 6)
   assert.equal(again.threads, 0)
 
   const board = new Board({ sessionRoot, notifySeconds: 0, lock: LOCK })
-  assert.equal(await board.schemaVersion(), 5)
+  assert.equal(await board.schemaVersion(), 6)
   assert.equal((await board.thread((await board.read("A", { max: 10, peek: true, latest: false })).messages[0]!.messageId)).length, 2)
 })
 

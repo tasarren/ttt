@@ -54,6 +54,14 @@ test("readMessagePayload: inline words, --file, stdin, and their conflicts", asy
   await assert.rejects(readMessagePayload(parseCommandArgs(["--file", join(dir, "missing")], MESSAGE_OPTIONS).values, undefined), /cannot read/)
 })
 
+test("readMessagePayload passes --subject through and rejects empties", async() => {
+  const withSubject = await readMessagePayload(parseCommandArgs(["--subject", "launch"], MESSAGE_OPTIONS).values, ["hi"])
+  assert.equal(withSubject.subject, "launch")
+  const plain = await readMessagePayload(parseCommandArgs([], MESSAGE_OPTIONS).values, ["hi"])
+  assert.equal(plain.subject, undefined)
+  await assert.rejects(readMessagePayload(parseCommandArgs(["--subject", "  "], MESSAGE_OPTIONS).values, ["hi"]), /--subject cannot be empty/)
+})
+
 test("boundedInt validates numeric flags", () => {
   assert.equal(boundedInt(undefined, "--max", 10, 1000), 10)
   assert.equal(boundedInt("7", "--max", 10, 1000), 7)

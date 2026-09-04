@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { formatHeaders, previewBody, shortStamp } from "../src/commands/inbox.ts"
+import { formatHeaders, formatThread, formatThreadHeaders, previewBody, shortStamp } from "../src/commands/inbox.ts"
 import { BOARD_VERSION, MessageKind } from "@ttt/board"
 import type { BoardMessage } from "@ttt/board"
 
@@ -40,4 +40,16 @@ test("formatHeaders triages without bodies", () => {
   assert.match(text, /first line/)
   assert.doesNotMatch(text, /second line/)
   assert.equal(formatHeaders([], 0), "ttt: no unread messages.")
+})
+
+test("subjects surface in headers and thread views", () => {
+  const root = message({ subject: "launch" })
+  const headers = formatHeaders([root], 1)
+  assert.match(headers, /\(subj: launch\)/)
+  assert.match(formatThread([root]), /\(1 message\) subj: launch/)
+  const triage = formatThreadHeaders([root])
+  assert.match(triage, /\(headers\)/)
+  assert.match(triage, /first line/)
+  assert.doesNotMatch(triage, /second line/)
+  assert.equal(formatThreadHeaders([]), "ttt: empty thread.")
 })

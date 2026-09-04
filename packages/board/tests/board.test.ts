@@ -13,9 +13,13 @@ after(async() => {
 })
 
 async function freshBoard(): Promise<Board> {
-  const root = await mkdtemp(join(tmpdir(), "ttt-board-"))
-  roots.push(root)
-  return new Board({ sessionRoot: root, notifySeconds: 0, lock: { timeoutMs: 2_000, staleMs: 60_000 } })
+  return (await freshSession()).board
+}
+
+async function freshSession(): Promise<{ board: Board; sessionRoot: string }> {
+  const sessionRoot = await mkdtemp(join(tmpdir(), "ttt-board-"))
+  roots.push(sessionRoot)
+  return { board: new Board({ sessionRoot, notifySeconds: 0, lock: { timeoutMs: 2_000, staleMs: 60_000 } }), sessionRoot }
 }
 
 const NORMAL: SendOptions = { kind: MessageKind.Message, priority: MessagePriority.Normal, replyExpected: true }
@@ -122,6 +126,45 @@ test("rejects unsafe names and unknown ids", async() => {
   await assert.rejects(board.send("A", ["B"], "   ", NORMAL), /empty/)
   await assert.rejects(board.findMessage("ttt-20260902-000000-deadbeef"), /not found/)
   await assert.rejects(board.ack("B", "nope"), /not in B's mailbox/)
+})
+
+test("unread index tracks mutations and heals when missing", async() => {
+  const { board, sessionRoot } = await freshSession()
+  await board.send("A", ["B"], "one", NORMAL)
+  await board.send("A", ["B"], "two", NORMAL)
+  assert.equal(await board.unreadCount("B"), 2)
+  await rm(join(sessionRoot, "state", "B.unread.json"), { force: true })
+  assert.equal(await board.unreadCount("B"), 2, "a missing counter heals via a walk")
+  await board.read("B", { max: 1, peek: false, latest: false })
+  assert.equal(await board.unreadCount("B"), 1)
+  const batch = await board.read("B", { max: 10, peek: true, latest: false })
+  await board.ack("B", batch.messages[0]!.messageId, "done")
+  assert.equal(await board.unreadCount("B"), 0)
+  await board.ackAll("B")
+  assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 2, superseded: 0 })
+})
+
+test("replace decrements the unread index via supersede", async() => {
+  const board = await freshBoard()
+  await board.send("A", ["B"], "status 1", { ...NORMAL, replaceKey: "status" })
+  assert.equal(await board.unreadCount("B"), 1)
+  await board.send("A", ["B"], "status 2", { ...NORMAL, replaceKey: "status" })
+  assert.equal(await board.unreadCount("B"), 1)
+  assert.deepEqual(await board.inboxSummary("B"), { unread: 1, read: 0, acked: 0, superseded: 1 })
+})
+
+test("subjects live on the root only and reject empties and replies", async() => {
+  const board = await freshBoard()
+  const root = await board.send("A", ["B"], "q", { ...NORMAL, subject: "  launch  " })
+  assert.equal(root.message.subject, "launch")
+  await assert.rejects(board.send("A", ["B"], "q", { ...NORMAL, subject: "   " }), /--subject cannot be empty/)
+  await assert.rejects(
+    board.send("B", ["A"], "a", { ...NORMAL, kind: MessageKind.Reply, inReplyTo: root.message.messageId, subject: "x" }),
+    /root only/,
+  )
+  const reply = await board.send("B", ["A"], "a", { ...NORMAL, kind: MessageKind.Reply, inReplyTo: root.message.messageId })
+  assert.equal(reply.message.subject, undefined)
+  assert.equal((await board.thread(root.message.messageId))[0]!.subject, "launch")
 })
 
 test("cancelNotification removes only the matching marker so a failed spawn can reschedule", async() => {

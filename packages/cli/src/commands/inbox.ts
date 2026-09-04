@@ -1,3 +1,4 @@
+import { assertName } from "@ttt/board"
 import type { BoardMessage, MessageReceipt } from "@ttt/board"
 
 import { boundedInt, parseCommandArgs, splitAtTerminator } from "../args.ts"
@@ -24,12 +25,24 @@ const INBOX_OPTIONS = {
   count: { type: "boolean", default: false },
   detail: { type: "boolean", default: false },
   max: { type: "string" },
+  from: { type: "string" },
 } as const
+
+/** Sender names double as directory names; rejects typos with an exit-2 usage error. */
+function checkSender(name: string): void {
+  try {
+    assertName(name, "sender name")
+  } catch(error) {
+    throw usageError(error instanceof Error ? error.message : String(error))
+  }
+}
 
 export const inbox: Handler = async(argv, ctx) => {
   const { values, positionals } = parseCommandArgs(argv, INBOX_OPTIONS)
   if (positionals.length > 0) throw usageError("inbox takes no positional arguments")
   if (values.count && values.detail) throw usageError("--count cannot be combined with --detail")
+  if (values.from !== undefined && !values.detail) throw usageError("--from needs --detail")
+  if (values.from !== undefined) checkSender(values.from)
   if (values.count) {
     const summary = await ctx.board.inboxSummary(ctx.senderName)
     process.stdout.write(`${summary.unread}\n`)
@@ -38,7 +51,10 @@ export const inbox: Handler = async(argv, ctx) => {
   if (values.detail) {
     const max = boundedInt(values.max, "--max", ctx.settings.readMax, 1_000)
     const { messages, remaining } = await ctx.board.read(ctx.senderName, { max, peek: true, latest: false })
-    process.stdout.write(`${formatHeaders(messages, remaining)}\n`)
+    const filtered = values.from === undefined
+      ? messages
+      : messages.filter((message) => message.from === values.from)
+    process.stdout.write(`${formatHeaders(filtered, remaining)}\n`)
     return
   }
   if (values.max !== undefined) throw usageError("--max needs --detail")
@@ -79,11 +95,16 @@ export const status: Handler = async(argv, ctx) => {
   process.stdout.write(`${formatStatus(result.message, result.receipts)}\n`)
 }
 
+const THREAD_OPTIONS = {
+  "headers-only": { type: "boolean", default: false },
+} as const
+
 export const thread: Handler = async(argv, ctx) => {
-  const { positionals } = parseCommandArgs(argv, {} as const)
+  const { values, positionals } = parseCommandArgs(argv, THREAD_OPTIONS)
   const [messageId, ...extra] = positionals
-  if (messageId === undefined || extra.length > 0) throw usageError("usage: ttt thread MESSAGE_ID")
-  process.stdout.write(`${formatThread(await ctx.board.thread(messageId))}\n`)
+  if (messageId === undefined || extra.length > 0) throw usageError("usage: ttt thread MESSAGE_ID [--headers-only]")
+  const messages = await ctx.board.thread(messageId)
+  process.stdout.write(`${values["headers-only"] ? formatThreadHeaders(messages) : formatThread(messages)}\n`)
 }
 
 function plural(count: number, noun: string): string {
@@ -111,6 +132,7 @@ export function formatHeaders(messages: BoardMessage[], remaining: number): stri
   const lines = [`ttt: ${plural(messages.length, "message")} (headers; still unread)`]
   messages.forEach((message, index) => {
     const tags = [
+      ...(message.subject ? [`subj: ${message.subject}`] : []),
       ...(message.replyExpected ? [] : ["no-reply"]),
       ...(message.inReplyTo ? [`re: ${message.inReplyTo}`] : []),
       ...(message.replaceKey ? [`replace: ${message.replaceKey}`] : []),
@@ -130,6 +152,7 @@ export function formatBatch(messages: BoardMessage[], remaining: number, peek: b
   messages.forEach((message, index) => {
     const reply = message.replyExpected ? `reply: ttt reply ${message.messageId} -- MESSAGE` : "no reply needed"
     const tags = [
+      ...(message.subject ? [`subj: ${message.subject}`] : []),
       ...(message.inReplyTo ? [`re: ${message.inReplyTo}`] : []),
       ...(message.replaceKey ? [`replace: ${message.replaceKey}`] : []),
     ]
@@ -170,7 +193,8 @@ export function formatStatus(message: BoardMessage, receipts: MessageReceipt[]):
 export function formatThread(messages: BoardMessage[]): string {
   const first = messages[0]
   if (!first) return "ttt: empty thread."
-  const lines = [`thread ${first.threadId} (${plural(messages.length, "message")})`]
+  const subject = first.subject ? ` subj: ${first.subject}` : ""
+  const lines = [`thread ${first.threadId} (${plural(messages.length, "message")})${subject}`]
   for (const message of messages) {
     lines.push(
       "",
@@ -179,5 +203,20 @@ export function formatThread(messages: BoardMessage[]): string {
       "---",
     )
   }
+  return lines.join("\n")
+}
+
+/** Thread triage: headers + one-line previews, no bodies. */
+export function formatThreadHeaders(messages: BoardMessage[]): string {
+  const first = messages[0]
+  if (!first) return "ttt: empty thread."
+  const subject = first.subject ? ` subj: ${first.subject}` : ""
+  const lines = [`thread ${first.threadId} (${plural(messages.length, "message")})${subject} (headers)`]
+  messages.forEach((message, index) => {
+    lines.push(
+      `[${index + 1}/${messages.length}] ${shortStamp(message.timestamp)} ${message.from} [${message.messageId}]`,
+      `  ${previewBody(message.body)}`,
+    )
+  })
   return lines.join("\n")
 }

@@ -35,9 +35,9 @@ usage:
   ttt ack MESSAGE_ID [NOTE]                     ttt ack --all [-- NOTE]
 
   ttt read [--max COUNT] [--peek] [--latest] [--headers-only]
-  ttt inbox [--count]                           ttt inbox --detail [--max COUNT]
+  ttt inbox [--count]                           ttt inbox --detail [--max COUNT] [--from NAME]
   ttt status MESSAGE_ID
-  ttt thread MESSAGE_ID
+  ttt thread MESSAGE_ID [--headers-only]
   ttt capture TARGET [--lines COUNT] [--raw] [--grep PATTERN]
   ttt windows
   ttt prune --days N [--dry-run]
@@ -47,6 +47,7 @@ message options:
   --no-reply      the recipient does not need to reply
   --urgent        skip the batching window and paste into the target window now
   --replace KEY   supersede your older unread messages that carry the same KEY
+  --subject TEXT  thread subject, set once on the root message (not on replies)
   --file PATH     read the message body from PATH
 
 Normal messages are queued. A target gets one notification per burst and reads the batch with

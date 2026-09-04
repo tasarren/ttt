@@ -33,6 +33,7 @@ export const MESSAGE_OPTIONS = {
   urgent: { type: "boolean", default: false },
   replace: { type: "string" },
   file: { type: "string" },
+  subject: { type: "string" },
 } as const satisfies ParseArgsOptionsConfig
 
 export interface MessagePayload {
@@ -40,6 +41,7 @@ export interface MessagePayload {
   replyExpected: boolean
   priority: MessagePriority
   replaceKey?: string
+  subject?: string
 }
 
 /** Body precedence: words after `--`, else `--file PATH`, else stdin. */
@@ -64,12 +66,14 @@ export async function readMessagePayload(
   body = body.trimEnd()
   if (!body.trim()) throw usageError("message cannot be empty")
   if (values.replace !== undefined && !values.replace.trim()) throw usageError("--replace key cannot be empty")
+  if (values.subject !== undefined && !values.subject.trim()) throw usageError("--subject cannot be empty")
 
   return {
     body,
     replyExpected: !values["no-reply"],
     priority: values.urgent ? MessagePriority.Urgent : MessagePriority.Normal,
     ...(values.replace ? { replaceKey: values.replace } : {}),
+    ...(values.subject ? { subject: values.subject } : {}),
   }
 }
 

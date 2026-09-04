@@ -118,9 +118,26 @@ test("triage stays unread; bare-note ack and ack --all clear the mailbox", async
   assert.equal(await ttt("B", "ack", "--all"), "ttt: nothing to ack.")
   await assert.rejects(ttt("B", "prune"), /prune needs --days/)
   assert.match(await ttt("B", "prune", "--days", "30", "--dry-run"), /would prune 0 messages, 0 receipts older than 30 days\./)
-  assert.match(await ttt("B", "migrate", "--dry-run"), /session work: v4 -> v5, 0 threads indexed \(dry-run\)\./)
-  assert.match(await ttt("B", "migrate"), /session work: v4 -> v5, 0 threads indexed\./)
-  assert.match(await ttt("B", "migrate"), /session work: already v5, 0 threads indexed\./)
+  assert.match(await ttt("B", "migrate", "--dry-run"), /session work: v4 -> v6, 0 threads, 2 mailboxes indexed \(dry-run\)\./)
+  assert.match(await ttt("B", "migrate"), /session work: v4 -> v6, 0 threads, 2 mailboxes indexed\./)
+  assert.match(await ttt("B", "migrate"), /session work: already v6, 0 threads, 0 mailboxes indexed\./)
+})
+
+test("subjects tag threads; sender filter and thread triage stay unread", async() => {
+  const queued = await ttt("A", "send", "B", "--subject", "launch", "--", "subject probe")
+  const rootId = /^queued (ttt-\S+) -> B/.exec(queued)?.[1]
+  assert.ok(rootId, `unexpected send output: ${queued}`)
+  assert.match(await ttt("B", "inbox", "--detail"), /\(subj: launch\)/)
+  assert.match(await ttt("B", "inbox", "--detail", "--from", "A"), /subject probe/)
+  assert.equal(await ttt("B", "inbox", "--detail", "--from", "ZZZ", "--max", "10").then((out) => out.includes("subject probe") ? "leak" : "clean"), "clean")
+  await assert.rejects(ttt("B", "inbox", "--detail", "--from", "../x"), /sender name/)
+  await assert.rejects(ttt("B", "inbox", "--from", "A"), /--from needs --detail/)
+  const triage = await ttt("B", "thread", rootId, "--headers-only")
+  assert.match(triage, /subj: launch/)
+  assert.match(triage, /\(headers\)/)
+  await assert.rejects(ttt("B", "reply", rootId, "--subject", "x", "--", "nope"), /root only/)
+  assert.match(await ttt("B", "ack", "--all"), /^acked ttt-/m)
+  assert.equal(await ttt("B", "inbox", "--count"), "0")
 })
 
 test("refuses to message itself and unknown windows; capture peeks at the other pane", async() => {

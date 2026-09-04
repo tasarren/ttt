@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto"
 
-export const BOARD_VERSION = 5
+export const BOARD_VERSION = 6
 export const RECEIPT_VERSION = 1
 
 export const MessageKind = {
@@ -37,6 +37,8 @@ export interface BoardMessage {
   replyExpected: boolean
   priority: MessagePriority
   replaceKey?: string
+  /** Thread subject, set once on the root message via `send --subject`. */
+  subject?: string
   body: string
 }
 

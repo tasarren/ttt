@@ -74,8 +74,9 @@ Acking without a prior `ttt read` warns on stderr; the receipt is still marked a
 | `ttt read --headers-only` | Triage without bodies or state change: headers + one-line previews, stays unread. |
 | `ttt inbox [--count]` | Counts by state. `--count` prints only the unread number. |
 | `ttt inbox --detail [--max N]` | Same as headers-only triage for the oldest unread. |
+| `ttt inbox --detail --from NAME` | Triage only messages from NAME. |
 | `ttt status MESSAGE_ID` | Per-recipient receipt state and timestamps. |
-| `ttt thread MESSAGE_ID` | Every message in the thread, oldest first. |
+| `ttt thread MESSAGE_ID [--headers-only]` | Every message in the thread, oldest first. `--headers-only` triages without bodies. |
 | `ttt capture TARGET [--lines N] [--raw]` | Last N lines of another window's pane. `--raw` keeps tmux's line wrapping. |
 | `ttt capture TARGET [--grep PATTERN]` | Same, but only lines containing PATTERN (token-saving filter). |
 | `ttt windows` | List windows in this session with ids; `(you)` marks the caller. |
@@ -89,6 +90,7 @@ Message options (for `send`, `reply`, `broadcast`):
 | `--no-reply` | Tell the recipient no reply is needed. |
 | `--urgent` | Skip the batching window: paste the message into the target window now. |
 | `--replace KEY` | Supersede your own older *unread* messages to that recipient that carry the same KEY. Use it for status updates. |
+| `--subject TEXT` | Thread subject, set once on the root message. Replies inherit the thread; `--subject` on a reply is rejected. |
 | `--file PATH` | Read the body from PATH. |
 
 Exit codes: `0` ok, `1` runtime failure (window missing, board error), `2` bad usage or bad settings.
@@ -97,7 +99,9 @@ Exit codes: `0` ok, `1` runtime failure (window missing, board error), `2` bad u
 
 - **Board.** Every message is a JSON file under `~/.ttt/boards/<session>/messages/<day>/`. Each recipient
   gets a receipt under `mailboxes/<window>/` that moves through `unread -> read -> acked`, or `superseded`.
-  Writes are atomic and mailboxes are locked per window, so concurrent senders are safe.
+  Writes are atomic and mailboxes are locked per window, so concurrent senders are safe. Per-mailbox unread
+  counters and per-thread indexes live under `state/` and `threads/` so counts and thread views skip tree walks.
+  `state/schema.json` records applied migrations; run `ttt migrate` after upgrading.
 - **Batching.** A normal send schedules one detached notifier for the recipient if none is pending. After
   `notifySeconds` it pastes a single summary line (`ttt: 3 new from A(2), B(1); 3 unread. Run: ttt read`)
   and marks those receipts notified. Further sends during the window join the same batch.

@@ -47,6 +47,7 @@ export const reply: Handler = async(argv, ctx) => {
   if (!AUDIENCES.includes(values.to)) throw usageError("--to must be sender, receiver, or both")
 
   const original = await ctx.board.findMessage(originalId)
+  if (values.subject !== undefined) throw usageError("--subject is set on the thread root only")
   const audience = new Set<string>()
   if (values.to !== "receiver") audience.add(original.from)
   if (values.to !== "sender") for (const recipient of original.recipients) audience.add(recipient)
@@ -77,6 +78,7 @@ async function deliver(
     replyExpected: payload.replyExpected,
     ...(payload.replaceKey ? { replaceKey: payload.replaceKey } : {}),
     ...(route.inReplyTo ? { inReplyTo: route.inReplyTo } : {}),
+    ...(payload.subject ? { subject: payload.subject } : {}),
   })
   for (const marker of notifications) spawnNotifier(ctx, marker)
 
