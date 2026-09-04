@@ -1,11 +1,12 @@
 name: release
 on:
-  push: { tags: ["v*"] }
+  release: { types: [published] } # owner presses Publish on a GitHub Release; bare tag pushes ship nothing
 permissions:
   contents: read
   id-token: write # OIDC trusted publishing, no NPM_TOKEN
 jobs:
   publish:
+    if: github.event.release.prerelease == false # prereleases never reach npm
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

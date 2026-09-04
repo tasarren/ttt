@@ -102,17 +102,19 @@ inside a pane (`TMUX`, `TMUX_PANE`, plus a temp `TTT_HOME` with `notifySeconds: 
 
 ## Release
 
-Releases are tag-based: pushing `vX.Y.Z` (matching `packages/cli` version) runs
-`.github/workflows/release.yml`, which verifies the tag, dry-runs the pack, and publishes to npm
-via OIDC trusted publishing. First-ever publish is manual (the package must exist before a trusted
-publisher can be attached): `pnpm --filter @tasarren/ttt publish --access public` from a clean
-checkout, then attach the trusted publisher on the package page. Never publish from a dev machine
-after that.
+Releases are owner-gated: publishing a GitHub Release (tag `vX.Y.Z`, matching `packages/cli` version)
+runs `.github/workflows/release.yml`, which verifies the tag, dry-runs the pack, and publishes to npm
+via OIDC trusted publishing. Merging to `main` never publishes; neither does a bare tag push without
+a release. Prereleases are skipped by the workflow and never reach npm. First-ever publish is manual
+(the package must exist before a trusted publisher can be attached):
+`pnpm --filter @tasarren/ttt publish --access public` from a clean checkout, then attach the trusted
+publisher (repo `tasarren/ttt`, workflow `release.yml`, no environment) on the package page. Never
+publish from a dev machine after that.
 
 ```sh
 pnpm run check
-# bump packages/cli version, commit
-git tag vX.Y.Z && git push --tags
+# bump packages/cli version, merge via PR, then press Publish on a GitHub Release
+# (or: gh release create vX.Y.Z --generate-notes)
 ```
 
 Local tarball check (no registry involved):
