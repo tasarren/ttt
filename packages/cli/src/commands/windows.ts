@@ -11,6 +11,17 @@ export const windows: Handler = async(argv, ctx) => {
   if (positionals.length > 0) throw usageError("usage: ttt windows")
   const listed = await ctx.tmux.listWindows(ctx.session)
   listed.sort((a, b) => a.name.localeCompare(b.name) || compareWindowIds(a.id, b.id))
-  const lines = listed.map((window) => `${window.name}\t${window.id}${isSelf(ctx, window) ? "\t(you)" : ""}`)
+  const winners = new Map<string, string>()
+  for (const window of listed) {
+    const current = winners.get(window.name)
+    if (!current || compareWindowIds(window.id, current) < 0) winners.set(window.name, window.id)
+  }
+  const lines = listed.map((window) => {
+    const tags = [
+      ...(isSelf(ctx, window) ? ["(you)"] : []),
+      ...(winners.get(window.name) !== window.id ? [`(dup of ${winners.get(window.name)})`] : []),
+    ]
+    return `${window.name}\t${window.id}${tags.length > 0 ? `\t${tags.join(" ")}` : ""}`
+  })
   process.stdout.write(`${lines.join("\n")}\n`)
 }

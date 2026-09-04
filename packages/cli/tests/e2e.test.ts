@@ -152,3 +152,11 @@ test("refuses to message itself and unknown windows; capture peeks at the other 
   assert.match(listed, /^A\t@\d+\t\(you\)$/m)
   assert.match(listed, /^B\t@\d+$/m)
 })
+
+test("duplicate names flag the loser; around shows context", async() => {
+  await tmux("new-window", "-t", SESSION, "-n", "B", "sh")
+  const listed = await ttt("A", "windows")
+  assert.match(listed, /^B\t@\d+\t\(dup of @\d+\)$/m)
+  assert.match(await ttt("A", "capture", "B", "--lines", "20", "--around", "stop now", "--context", "1"), /stop now/)
+  await assert.rejects(ttt("A", "capture", "B", "--grep", "x", "--around", "y"), /cannot be combined/)
+})

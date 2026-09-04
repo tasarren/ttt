@@ -142,8 +142,20 @@ export function formatHeaders(messages: BoardMessage[], remaining: number): stri
       `  ${previewBody(message.body)}`,
     )
   })
-  lines.push(`${plural(remaining, "unread message")} remain${remaining === 1 ? "s" : ""}.`)
+  lines.push(remainingLine(messages.length, remaining, true))
   return lines.join("\n")
+}
+
+/** Honest tail line: partial reads name what is shown and what is left; full reads close out. */
+function remainingLine(shown: number, remaining: number, peek: boolean): string {
+  // Peeked output stays unread, so `remaining` includes what is shown.
+  if (peek && remaining > shown) {
+    return `${plural(shown, "message")} shown of ${plural(remaining, "unread message")} (still unread).`
+  }
+  if (!peek && shown > 0 && remaining > 0) {
+    return `${plural(shown, "message")} shown, ${plural(remaining, "unread message")} still unread.`
+  }
+  return `${plural(remaining, "unread message")} remain${remaining === 1 ? "s" : ""}.`
 }
 
 export function formatBatch(messages: BoardMessage[], remaining: number, peek: boolean): string {
@@ -164,13 +176,16 @@ export function formatBatch(messages: BoardMessage[], remaining: number, peek: b
       "---",
     )
   })
-  lines.push(`${plural(remaining, "unread message")} remain${remaining === 1 ? "s" : ""}.`)
+  lines.push(remainingLine(messages.length, remaining, peek))
   return lines.join("\n")
 }
 
 export function formatStatus(message: BoardMessage, receipts: MessageReceipt[]): string {
   const byRecipient = new Map(receipts.map((receipt) => [receipt.recipient, receipt]))
-  const lines = [`${message.messageId} from ${message.from}, ${message.priority}, thread ${message.threadId}`]
+  const lines = [
+    `${message.messageId} from ${message.from}, ${message.priority}, thread ${message.threadId}`,
+    "stamps: q queued, n notified, r read, a acked",
+  ]
   for (const recipient of message.recipients) {
     const receipt = byRecipient.get(recipient)
     if (!receipt) {

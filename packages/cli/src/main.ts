@@ -38,7 +38,7 @@ usage:
   ttt inbox [--count]                           ttt inbox --detail [--max COUNT] [--from NAME]
   ttt status MESSAGE_ID
   ttt thread MESSAGE_ID [--headers-only]
-  ttt capture TARGET [--lines COUNT] [--raw] [--grep PATTERN]
+  ttt capture TARGET [--lines COUNT] [--raw] [--grep PATTERN] [--around PATTERN] [--context COUNT]
   ttt windows
   ttt prune --days N [--dry-run]
   ttt migrate [--dry-run] [--all]

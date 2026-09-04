@@ -79,6 +79,7 @@ Acking without a prior `ttt read` warns on stderr; the receipt is still marked a
 | `ttt thread MESSAGE_ID [--headers-only]` | Every message in the thread, oldest first. `--headers-only` triages without bodies. |
 | `ttt capture TARGET [--lines N] [--raw]` | Last N lines of another window's pane. `--raw` keeps tmux's line wrapping. |
 | `ttt capture TARGET [--grep PATTERN]` | Same, but only lines containing PATTERN (token-saving filter). |
+| `ttt capture TARGET [--around PATTERN] [--context N]` | Matching lines plus N lines of context each side (default 3), gaps marked `--`. |
 | `ttt windows` | List windows in this session with ids; `(you)` marks the caller. |
 | `ttt prune --days N [--dry-run]` | Delete acked/superseded messages + receipts older than N days. Unread/read history is never touched. |
 | `ttt migrate [--dry-run] [--all]` | Run pending schema migrations for this session (or every session). Newer-than-code boards are refused. |

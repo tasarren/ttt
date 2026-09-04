@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { formatHeaders, formatThread, formatThreadHeaders, previewBody, shortStamp } from "../src/commands/inbox.ts"
+import { formatBatch, formatHeaders, formatThread, formatThreadHeaders, previewBody, shortStamp } from "../src/commands/inbox.ts"
 import { BOARD_VERSION, MessageKind } from "@ttt/board"
 import type { BoardMessage } from "@ttt/board"
 
@@ -52,4 +52,11 @@ test("subjects surface in headers and thread views", () => {
   assert.match(triage, /first line/)
   assert.doesNotMatch(triage, /second line/)
   assert.equal(formatThreadHeaders([]), "ttt: empty thread.")
+})
+
+test("partial reads name what is shown and what is left", () => {
+  assert.match(formatBatch([message()], 3, false), /1 message shown, 3 unread messages still unread\./)
+  assert.match(formatHeaders([message()], 5), /1 message shown of 5 unread messages \(still unread\)\./)
+  assert.match(formatBatch([message()], 0, false), /0 unread messages remain\./)
+  assert.match(formatHeaders([message()], 1), /1 unread message remains\./)
 })
