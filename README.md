@@ -212,5 +212,6 @@ flags are required. The detached notifier uses this. You only need it when tmux 
 
 ## Agents
 
-`docs/agent-prompt.md` is a short set of rules to paste into a teammate's system prompt. Developer
-documentation is in `docs/development.md`.
+`skills/ttt/SKILL.md` is a copyable agent skill: drop the `skills/ttt/` folder into your agent's
+skills directory so teammates learn `ttt` on their own. `docs/agent-prompt.md` is the same rules
+as a block to paste into a system prompt. Developer documentation is in `docs/development.md`.
