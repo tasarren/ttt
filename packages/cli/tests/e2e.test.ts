@@ -159,6 +159,18 @@ test("refuses to message itself and unknown windows; capture peeks at the other 
   await assert.rejects(ttt("A", "whoami", "extra"), /usage: ttt whoami/)
 })
 
+test("capture strips TUI chrome unless --raw", async() => {
+  const border = String.fromCharCode(0x2503).repeat(3)
+  const marker = "e2e-chrome-42"
+  await tmux("send-keys", "-t", `${SESSION}:B`, `printf '%s\\n' '${border}' 'e2e-chrome-42' '${border}'`, "Enter")
+  await paneShows("B", marker)
+  const near = await ttt("A", "capture", "B", "--lines", "8", "--around", marker, "--context", "1")
+  assert.match(near, new RegExp(`^${marker}$`, "m"))
+  assert.doesNotMatch(near, new RegExp(`^${border}$`, "m"))
+  const nearRaw = await ttt("A", "capture", "B", "--lines", "8", "--raw", "--around", marker, "--context", "1")
+  assert.match(nearRaw, new RegExp(`^${border}$`, "m"))
+})
+
 test("duplicate names flag the loser; around shows context", async() => {
   await tmux("new-window", "-t", SESSION, "-n", "B", "sh")
   const listed = await ttt("A", "windows")

@@ -58,7 +58,8 @@ Normal messages are queued. A target gets one notification per burst and reads t
 "ttt read". ACK is board state only; it sends nothing. Settings: ~/.ttt/settings.jsonc
 Shorthand "ttt TARGET -- MESSAGE" sends; a window named like a command (send, read, inbox,
 status, thread, capture, broadcast, reply, windows, whoami, prune, migrate) needs the explicit "ttt send" form.
-Recovery overrides need both flags: --session NAME --from WINDOW.`
+Recovery overrides need both flags: --session NAME --from WINDOW.
+Capture output is cleaned of TUI chrome (borders, spinners) unless --raw is passed.`
 
 
 export async function main(argv: string[], binPath: string): Promise<void> {
