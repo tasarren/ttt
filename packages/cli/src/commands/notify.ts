@@ -11,16 +11,28 @@ import type { Context, Handler } from "../context.ts"
 /**
  * Starts a detached copy of this CLI that waits out the batching window and then pastes one summary line
  * into the target window. If a newer marker replaces this token meanwhile, the child exits silently.
+ * A failed spawn cleans up its marker so the next send can schedule a live notifier.
  */
 export function spawnNotifier(ctx: Context, marker: NotificationMarker): void {
-  const child = spawn(process.execPath, [
-    ctx.binPath,
-    "--session", ctx.session,
-    "--from", NOTIFIER_NAME,
-    "_notify",
-    "--target", marker.target,
-    "--token", marker.token,
-  ], { detached: true, stdio: "ignore" })
+  let child
+  try {
+    child = spawn(process.execPath, [
+      ctx.binPath,
+      "--session", ctx.session,
+      "--from", NOTIFIER_NAME,
+      "_notify",
+      "--target", marker.target,
+      "--token", marker.token,
+    ], { detached: true, stdio: "ignore" })
+  } catch(error) {
+    process.stderr.write(`ttt: notifier spawn failed for ${marker.target}: ${error instanceof Error ? error.message : String(error)}\n`)
+    void ctx.board.cancelNotification(marker.target, marker.token).catch(() => undefined)
+    return
+  }
+  child.on("error", (error) => {
+    process.stderr.write(`ttt: notifier spawn failed for ${marker.target}: ${error.message}\n`)
+    void ctx.board.cancelNotification(marker.target, marker.token).catch(() => undefined)
+  })
   child.unref()
 }
 

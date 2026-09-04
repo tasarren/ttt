@@ -61,6 +61,9 @@ test("bad values, unknown keys, and syntax errors are exit-2 errors naming the f
   }
   await bad("{\"notifySeconds\": -1}", /notifySeconds must be/)
   await bad("{\"notifySeconds\": \"60\"}", /notifySeconds must be/)
+  await bad("{\"readMax\": 0}", /readMax must be an integer of at least 1/)
+  await bad("{\"capture\": {\"lines\": 0}}", /capture\.lines must be an integer of at least 1/)
+  await bad("{\"capture\": {\"maxLines\": 0}}", /capture\.maxLines must be an integer of at least 1/)
   await bad("{\"tmux\": {\"enterPreses\": 1}}", /unknown setting "tmux\.enterPreses"/)
   await bad("{\"typo\": 1}", /unknown setting "typo"/)
   await bad("{\"lock\": 5}", /lock must be an object/)

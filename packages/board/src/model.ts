@@ -45,6 +45,8 @@ export interface MessageReceipt {
   recipient: string
   enqueuedAt: string
   state: ReceiptState
+  /** Per-mailbox enqueue order; assigned under the mailbox lock. Older receipts may lack it. */
+  seq?: number
   notifiedAt?: string
   readAt?: string
   ackedAt?: string

@@ -14,8 +14,7 @@ export const read: Handler = async(argv, ctx) => {
   const { values, positionals } = parseCommandArgs(argv, READ_OPTIONS)
   if (positionals.length > 0) throw usageError("read takes no positional arguments")
   const max = boundedInt(values.max, "--max", ctx.settings.readMax, 1_000)
-  const messages = await ctx.board.read(ctx.senderName, { max, peek: values.peek, latest: values.latest })
-  const remaining = await ctx.board.unreadCount(ctx.senderName)
+  const { messages, remaining } = await ctx.board.read(ctx.senderName, { max, peek: values.peek, latest: values.latest })
   process.stdout.write(`${formatBatch(messages, remaining, values.peek)}\n`)
 }
 
@@ -31,19 +30,24 @@ export const ack: Handler = async(argv, ctx) => {
   const { head, body } = splitAtTerminator(argv)
   const [messageId, ...extra] = head
   if (messageId === undefined || extra.length > 0) throw usageError("usage: ttt ack MESSAGE_ID [-- NOTE]")
+  const prior = await ctx.board.messageStatus(messageId).catch(() => undefined)
   const receipt = await ctx.board.ack(ctx.senderName, messageId, body?.join(" "))
+  const wasUnread = prior?.receipts.find((item) => item.recipient === ctx.senderName)?.state === "unread"
+  if (wasUnread) process.stderr.write("ttt: acked without read; the body was never marked read.\n")
   process.stdout.write(`acked ${receipt.messageId}\n`)
 }
 
 export const status: Handler = async(argv, ctx) => {
-  const [messageId, ...extra] = argv
+  const { positionals } = parseCommandArgs(argv, {} as const)
+  const [messageId, ...extra] = positionals
   if (messageId === undefined || extra.length > 0) throw usageError("usage: ttt status MESSAGE_ID")
   const result = await ctx.board.messageStatus(messageId)
   process.stdout.write(`${formatStatus(result.message, result.receipts)}\n`)
 }
 
 export const thread: Handler = async(argv, ctx) => {
-  const [messageId, ...extra] = argv
+  const { positionals } = parseCommandArgs(argv, {} as const)
+  const [messageId, ...extra] = positionals
   if (messageId === undefined || extra.length > 0) throw usageError("usage: ttt thread MESSAGE_ID")
   process.stdout.write(`${formatThread(await ctx.board.thread(messageId))}\n`)
 }

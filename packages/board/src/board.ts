@@ -51,6 +51,11 @@ export interface ReadOptions {
   latest: boolean
 }
 
+export interface ReadResult {
+  messages: BoardMessage[]
+  remaining: number
+}
+
 export type InboxSummary = Record<ReceiptState, number>
 
 export interface NotificationSummary {
@@ -119,6 +124,7 @@ export class Board {
           recipient: target,
           enqueuedAt: message.timestamp,
           state: ReceiptState.Unread,
+          seq: await this.nextSeqUnlocked(target),
         })
         return options.priority === MessagePriority.Normal ? this.ensureMarkerUnlocked(target) : undefined
       })
@@ -127,10 +133,12 @@ export class Board {
     return { message, notifications }
   }
 
-  async read(agent: string, options: ReadOptions): Promise<BoardMessage[]> {
+  async read(agent: string, options: ReadOptions): Promise<ReadResult> {
     return this.withMailboxLock(agent, async() => {
       const byTime = (a: Unread, b: Unread): number =>
-        a.message.timestamp.localeCompare(b.message.timestamp) || a.message.messageId.localeCompare(b.message.messageId)
+        a.message.timestamp.localeCompare(b.message.timestamp)
+        || (a.receipt.seq ?? 0) - (b.receipt.seq ?? 0)
+        || a.message.messageId.localeCompare(b.message.messageId)
       const unread = (await this.unreadUnlocked(agent)).sort(byTime)
       const selected = options.latest ? unread.slice(-options.max) : unread.slice(0, options.max)
 
@@ -140,7 +148,8 @@ export class Board {
           await this.writeReceipt({ ...receipt, state: ReceiptState.Read, readAt })
         }
       }
-      return selected.map((item) => item.message)
+      const remaining = unread.length - (options.peek ? 0 : selected.length)
+      return { messages: selected.map((item) => item.message), remaining }
     })
   }
 
@@ -190,7 +199,7 @@ export class Board {
     const { threadId } = await this.findMessage(messageId)
     return (await readJsonTree<BoardMessage>(this.messagesRoot))
       .filter((message) => message.threadId === threadId)
-      .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+      .sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.messageId.localeCompare(b.messageId))
   }
 
   // ponytail: ids always embed their day shard, so lookups are one direct read; no tree walk fallback.
@@ -204,6 +213,16 @@ export class Board {
   /** Ensure a batched notification is pending for `target` (used as the fallback when urgent paste fails). */
   async scheduleNotification(target: string): Promise<NotificationMarker | undefined> {
     return this.withMailboxLock(target, () => this.ensureMarkerUnlocked(target))
+  }
+
+  /** Deletes a notification marker only when its token still matches; used to clean up after a failed spawn. */
+  async cancelNotification(target: string, token: string): Promise<boolean> {
+    return this.withMailboxLock(target, async() => {
+      const marker = await readJsonIfExists<NotificationMarker>(this.markerPath(target))
+      if (marker?.token !== token) return false
+      await rm(this.markerPath(target), { force: true })
+      return true
+    })
   }
 
   /**
@@ -274,6 +293,18 @@ export class Board {
     return join(this.stateRoot, `${agent}.notification.json`)
   }
 
+  private seqPath(agent: string): string {
+    return join(this.stateRoot, `${agent}.seq.json`)
+  }
+
+  /** Monotonic per-mailbox enqueue order. Runs under the mailbox lock; missing counters start at 1. */
+  private async nextSeqUnlocked(agent: string): Promise<number> {
+    const current = await readJsonIfExists<{ next: number }>(this.seqPath(agent))
+    const seq = current?.next ?? 1
+    await atomicWriteJson(this.seqPath(agent), { next: seq + 1 })
+    return seq
+  }
+
   private async withMailboxLock<T>(agent: string, callback: () => Promise<T>): Promise<T> {
     assertName(agent, "agent name")
     return withDirectoryLock(join(this.locksRoot, `${agent}.lock`), this.options.lock, callback)
@@ -320,7 +351,7 @@ export class Board {
     const existing = await readJsonIfExists<NotificationMarker>(markerPath)
     if (existing) {
       const ageMs = Date.now() - Date.parse(existing.createdAt)
-      const staleAfterMs = (existing.delaySeconds + 120) * 1_000
+      const staleAfterMs = (existing.delaySeconds + 30) * 1_000
       if (Number.isFinite(ageMs) && ageMs <= staleAfterMs) return undefined
     }
     const marker: NotificationMarker = {

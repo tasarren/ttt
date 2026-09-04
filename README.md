@@ -54,6 +54,9 @@ ttt status ttt-20260902-173355-a1b2c3d4
 Your identity is your tmux window name. Rename windows to name your agents (`tmux rename-window CODER`).
 Window names are expected to be unique; when two windows share a name, the lowest window id (`@1` beats
 `@2`) receives the paste. Duplicates share one mailbox, so either twin can `ttt read` the same messages.
+A window named like a command (`send`, `read`, `inbox`, `status`, `thread`, `capture`, `broadcast`, `reply`)
+needs the explicit `ttt send` form; the shorthand `ttt NAME -- MESSAGE` resolves the command first.
+Acking without a prior `ttt read` warns on stderr; the receipt is still marked acked.
 
 ## Commands
 
@@ -122,9 +125,9 @@ Unknown keys are rejected so typos surface immediately. `TTT_HOME` moves the who
 |---|---|---|---|
 | `boardRoot` | string | `~/.ttt/boards` | Boards live at `<boardRoot>/<session>`. `~/` is expanded. |
 | `notifySeconds` | integer | `60` | Batching window for normal messages. |
-| `readMax` | integer | `10` | Default `--max` for `ttt read`. |
-| `capture.lines` | integer | `80` | Default `--lines` for `ttt capture`. |
-| `capture.maxLines` | integer | `500` | Upper bound for `--lines`. |
+| `readMax` | integer >= 1 | `10` | Default `--max` for `ttt read`. |
+| `capture.lines` | integer >= 1 | `80` | Default `--lines` for `ttt capture`. |
+| `capture.maxLines` | integer >= 1 | `500` | Upper bound for `--lines`. |
 | `lock.timeoutMs` | integer | `10000` | How long a command waits for a busy mailbox. |
 | `lock.staleMs` | integer | `60000` | A lock older than this is treated as abandoned. |
 | `tmux.inputSettleMs` | integer | `800` | See above. |
@@ -134,8 +137,8 @@ Unknown keys are rejected so typos surface immediately. `TTT_HOME` moves the who
 
 ## Recovery overrides
 
-`ttt --session NAME --from WINDOW <command>` runs a command as if from that window, from anywhere. The
-detached notifier uses this; you only need it when tmux context detection is not possible.
+`ttt --session NAME --from WINDOW <command>` runs a command as if from that window, from anywhere. Both
+flags are required. The detached notifier uses this; you only need it when tmux context detection is not possible.
 
 ## Agents
 

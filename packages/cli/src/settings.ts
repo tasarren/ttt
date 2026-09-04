@@ -71,15 +71,20 @@ function applySettings(defaults: Settings, file: string, text: string): Settings
   const lock = section(root["lock"], file, "lock", ["timeoutMs", "staleMs"])
   const tmux = section(root["tmux"], file, "tmux", ["inputSettleMs", "postPasteMs", "enterPresses", "postSendMs"])
   const int = (value: unknown, path: string, fallback: number): number => positiveInt(value, file, path, fallback)
+  const atLeastOne = (value: unknown, path: string, fallback: number): number => {
+    const parsed = int(value, path, fallback)
+    if (parsed < 1) throw new CliError(`${file}: ${path} must be an integer of at least 1`, 2)
+    return parsed
+  }
 
   return {
     home: defaults.home,
     boardRoot: expandHome(text_(root["boardRoot"], file, "boardRoot", defaults.boardRoot)),
     notifySeconds: int(root["notifySeconds"], "notifySeconds", defaults.notifySeconds),
-    readMax: int(root["readMax"], "readMax", defaults.readMax),
+    readMax: atLeastOne(root["readMax"], "readMax", defaults.readMax),
     capture: {
-      lines: int(capture["lines"], "capture.lines", defaults.capture.lines),
-      maxLines: int(capture["maxLines"], "capture.maxLines", defaults.capture.maxLines),
+      lines: atLeastOne(capture["lines"], "capture.lines", defaults.capture.lines),
+      maxLines: atLeastOne(capture["maxLines"], "capture.maxLines", defaults.capture.maxLines),
     },
     lock: {
       timeoutMs: int(lock["timeoutMs"], "lock.timeoutMs", defaults.lock.timeoutMs),

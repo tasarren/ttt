@@ -34,12 +34,13 @@ test("send -> read -> ack round trip, with status and thread", async() => {
   assert.equal(notifications[0]!.target, "B")
 
   assert.equal(await board.unreadCount("B"), 1)
-  const peeked = await board.read("B", { max: 10, peek: true, latest: false })
+  const peeked = (await board.read("B", { max: 10, peek: true, latest: false })).messages
   assert.equal(peeked[0]!.body, "hello")
   assert.equal(await board.unreadCount("B"), 1, "peek keeps the message unread")
 
   const batch = await board.read("B", { max: 10, peek: false, latest: false })
-  assert.equal(batch.length, 1)
+  assert.equal(batch.messages.length, 1)
+  assert.equal(batch.remaining, 0)
   assert.equal(await board.unreadCount("B"), 0)
 
   const receipt = await board.ack("B", message.messageId, "  done ")
@@ -62,9 +63,10 @@ test("--replace supersedes only unread messages from the same sender with the sa
   await board.send("A", ["B"], "unrelated", NORMAL)
   const latest = await board.send("A", ["B"], "status 2", { ...NORMAL, replaceKey: "status" })
 
-  // Sends within one millisecond share a timestamp, so compare as a set.
-  const bodies = (await board.read("B", { max: 10, peek: true, latest: false })).map((m) => m.body).sort()
-  assert.deepEqual(bodies, ["status 2", "status from C", "unrelated"])
+  // Same-millisecond sends share a timestamp; per-mailbox seq keeps send order.
+  const burst = await board.read("B", { max: 10, peek: true, latest: false })
+  assert.deepEqual(burst.messages.map((m) => m.body), ["status from C", "unrelated", "status 2"])
+  assert.equal(burst.remaining, 3)
   const summary = await board.inboxSummary("B")
   assert.equal(summary.superseded, 1)
   const status = await board.messageStatus(latest.message.messageId)
@@ -120,4 +122,14 @@ test("rejects unsafe names and unknown ids", async() => {
   await assert.rejects(board.send("A", ["B"], "   ", NORMAL), /empty/)
   await assert.rejects(board.findMessage("ttt-20260902-000000-deadbeef"), /not found/)
   await assert.rejects(board.ack("B", "nope"), /not in B's mailbox/)
+})
+
+test("cancelNotification removes only the matching marker so a failed spawn can reschedule", async() => {
+  const board = await freshBoard()
+  const first = await board.send("A", ["B"], "one", NORMAL)
+  const token = first.notifications[0]!.token
+  assert.equal(await board.cancelNotification("B", "wrong-token"), false)
+  assert.equal(await board.cancelNotification("B", token), true)
+  const retry = await board.send("A", ["B"], "two", NORMAL)
+  assert.equal(retry.notifications.length, 1)
 })

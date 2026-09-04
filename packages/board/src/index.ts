@@ -4,6 +4,7 @@ export type {
   InboxSummary,
   NotificationSummary,
   ReadOptions,
+  ReadResult,
   SendOptions,
   SendResult,
 } from "./board.ts"

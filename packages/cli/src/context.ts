@@ -4,7 +4,7 @@ import { Board, assertName } from "@ttt/board"
 import { Tmux } from "@ttt/tmux"
 import type { TmuxWindow } from "@ttt/tmux"
 
-import { CliError } from "./cli-error.ts"
+import { CliError, usageError } from "./cli-error.ts"
 import { resolveSettings } from "./settings.ts"
 import type { Settings } from "./settings.ts"
 
@@ -40,8 +40,9 @@ export async function createContext(overrides: GlobalOverrides, binPath: string)
   let senderName: string
   let senderId = ""
   if (overrides.session !== undefined) {
+    if (overrides.from === undefined) throw usageError("--session needs --from NAME")
     session = overrides.session
-    senderName = overrides.from ?? "OWNER"
+    senderName = overrides.from
   } else {
     let detected
     try {

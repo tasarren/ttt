@@ -41,7 +41,11 @@ message options:
   --file PATH     read the message body from PATH
 
 Normal messages are queued. A target gets one notification per burst and reads the batch with
-"ttt read". ACK is board state only; it sends nothing. Settings: ~/.ttt/settings.jsonc`
+"ttt read". ACK is board state only; it sends nothing. Settings: ~/.ttt/settings.jsonc
+Shorthand "ttt TARGET -- MESSAGE" sends; a window named like a command (send, read, inbox,
+status, thread, capture, broadcast, reply) needs the explicit "ttt send" form.
+Recovery overrides need both flags: --session NAME --from WINDOW.`
+
 
 export async function main(argv: string[], binPath: string): Promise<void> {
   const { overrides, rest } = parseGlobals(argv)
