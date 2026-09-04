@@ -29,7 +29,11 @@ export const migrate: Handler = async(argv, ctx) => {
       const moved = result.to === result.from
         ? `already v${result.from}`
         : `v${result.from} -> v${result.to}`
-      process.stdout.write(`ttt: session ${session}: ${moved}, ${result.threads} thread${result.threads === 1 ? "" : "s"} indexed${dry}.\n`)
+      const units = [
+        `${result.threads} thread${result.threads === 1 ? "" : "s"}`,
+        `${result.mailboxes} mailbox${result.mailboxes === 1 ? "" : "es"}`,
+      ].join(", ")
+      process.stdout.write(`ttt: session ${session}: ${moved}, ${units} indexed${dry}.\n`)
     } catch(error) {
       failures += 1
       process.stderr.write(`ttt: session ${session} failed: ${error instanceof Error ? error.message : String(error)}\n`)
