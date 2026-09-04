@@ -41,10 +41,32 @@ export const notify: Handler = async(argv, ctx) => {
   const { values } = parseCommandArgs(argv, { target: { type: "string" }, token: { type: "string" } } as const)
   if (values.target === undefined || values.token === undefined) throw usageError("_notify needs --target and --token")
   const target = values.target
-  await ctx.board.deliverNotification(target, values.token, async(summary) => {
-    const window = await requireWindow(ctx, target)
-    await ctx.tmux.sendText(window.id, formatNotification(summary))
-  })
+  const token = values.token
+  // The paste runs inside the mailbox lock, so re-arming happens after deliverNotification unwinds it.
+  try {
+    await ctx.board.deliverNotification(target, token, async(summary) => {
+      try {
+        const window = await requireWindow(ctx, target)
+        await ctx.tmux.sendText(window.id, formatNotification(summary))
+      } catch(error) {
+        process.stderr.write(`ttt: notification paste to ${target} failed: ${error instanceof Error ? error.message : String(error)}\n`)
+        throw new CancelledNotification(target)
+      }
+    })
+  } catch(error) {
+    if (!(error instanceof CancelledNotification)) throw error
+    await ctx.board.cancelNotification(target, token)
+    const marker = await ctx.board.scheduleNotification(target)
+    if (marker) spawnNotifier(ctx, marker)
+  }
+}
+
+/** Thrown after a failed paste is re-armed, so the dead delivery is not retried or marked done. */
+class CancelledNotification extends Error {
+  constructor(target: string) {
+    super(`notification to ${target} re-armed after a failed paste`)
+    this.name = "CancelledNotification"
+  }
 }
 
 /** One short line: the recipient spends tokens on the batch, not on the interruption. */

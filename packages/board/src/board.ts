@@ -83,6 +83,9 @@ interface Unread {
   message: BoardMessage
 }
 
+/** Notifier heartbeat: how often a waiting notifier refreshes its marker while the batch builds. */
+const HEARTBEAT_MS = 5_000
+
 /**
  * The durable message board for one tmux session. Pure filesystem: delivering text to a window is
  * delegated to the `deliver` callbacks so this package never depends on tmux.
@@ -399,7 +402,8 @@ export class Board {
   /**
    * Runs in the detached notifier: waits out the batching window, then (if this token is still the live
    * marker and there are unnotified messages) calls `deliver` once and marks every unread receipt notified.
-   * Returns false when nothing was delivered.
+   * The wait is chunked and each chunk refreshes the marker, so the stale-marker TTL only ever fires for a
+   * dead notifier, never a slow one. Returns false when nothing was delivered.
    */
   async deliverNotification(
     target: string,
@@ -409,7 +413,19 @@ export class Board {
     const markerPath = this.markerPath(target)
     const pending = await readJsonIfExists<NotificationMarker>(markerPath)
     if (pending?.token !== token) return false
-    await sleep(pending.delaySeconds * 1_000)
+    let remainingMs = pending.delaySeconds * 1_000
+    while (remainingMs > 0) {
+      const chunk = Math.min(HEARTBEAT_MS, remainingMs)
+      await sleep(chunk)
+      remainingMs -= chunk
+      const live = await this.withMailboxLock(target, async() => {
+        const marker = await readJsonIfExists<NotificationMarker>(markerPath)
+        if (marker?.token !== token) return false
+        await atomicWriteJson(markerPath, { ...marker, createdAt: new Date().toISOString() })
+        return true
+      })
+      if (!live) return false
+    }
 
     return this.withMailboxLock(target, async() => {
       const marker = await readJsonIfExists<NotificationMarker>(markerPath)
@@ -534,7 +550,14 @@ export class Board {
 
   private async withMailboxLock<T>(agent: string, callback: () => Promise<T>): Promise<T> {
     assertName(agent, "agent name")
-    return withDirectoryLock(join(this.locksRoot, `${agent}.lock`), this.options.lock, callback)
+    try {
+      return await withDirectoryLock(join(this.locksRoot, `${agent}.lock`), this.options.lock, callback)
+    } catch(error) {
+      if (error instanceof Error && error.message.startsWith("timed out waiting for lock")) {
+        throw new Error(`mailbox ${agent} is busy; retry shortly`, { cause: error })
+      }
+      throw error
+    }
   }
 
   private async writeReceipt(receipt: MessageReceipt): Promise<void> {

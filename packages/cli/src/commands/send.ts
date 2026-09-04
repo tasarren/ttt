@@ -87,6 +87,8 @@ async function deliver(
   if (payload.priority === MessagePriority.Urgent) {
     await pushUrgent(ctx, message, windows)
     process.stdout.write(`sent URGENT ${message.messageId} -> ${to}${thread}\n`)
+  } else if (notifications.length === 0) {
+    process.stdout.write(`queued ${message.messageId} -> ${to} (joins pending batch)${thread}\n`)
   } else {
     process.stdout.write(`queued ${message.messageId} -> ${to} (notify in ~${ctx.settings.notifySeconds}s)${thread}\n`)
   }

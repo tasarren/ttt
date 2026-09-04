@@ -65,7 +65,7 @@ test("normal send: queued, one batched notification, read, ack, status, thread",
   const queued = await ttt("A", "send", "B", "--", "hello from A")
   const id = /^queued (ttt-\S+) -> B \(notify in ~1s\)$/.exec(queued)?.[1]
   assert.ok(id, `unexpected send output: ${queued}`)
-  await ttt("A", "B", "--", "second, via shorthand")
+  assert.match(await ttt("A", "B", "--", "second, via shorthand"), /joins pending batch/)
 
   await paneShows("B", "ttt: 2 new from A(2); 2 unread. Run: ttt read")
   assert.equal(await ttt("B", "inbox", "--count"), "2")

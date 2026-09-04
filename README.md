@@ -104,7 +104,9 @@ Exit codes: `0` ok, `1` runtime failure (window missing, board error), `2` bad u
   `state/schema.json` records applied migrations; run `ttt migrate` after upgrading.
 - **Batching.** A normal send schedules one detached notifier for the recipient if none is pending. After
   `notifySeconds` it pastes a single summary line (`ttt: 3 new from A(2), B(1); 3 unread. Run: ttt read`)
-  and marks those receipts notified. Further sends during the window join the same batch.
+  and marks those receipts notified. Further sends during the window join the same batch (the send receipt
+  says `joins pending batch`). The waiting notifier refreshes its marker, so a stale marker always means a
+  dead notifier, and a failed paste re-arms a live one instead of stranding the burst.
 - **Urgent.** `--urgent` pastes the full message immediately, with the reply instruction. If the paste
   fails the message falls back to a batched notification, so nothing is lost. Pasting clears the target's
   input line (`C-u`) before pasting, so it can clobber in-progress typing; urgent broadcasts paste serially,

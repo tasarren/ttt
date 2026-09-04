@@ -1,11 +1,13 @@
 import assert from "node:assert/strict"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { setTimeout as sleep } from "node:timers/promises"
 import { after, test } from "node:test"
 
 import { Board, MessageKind, MessagePriority, makeMessageId, messageDay } from "../src/index.ts"
 import type { BoardMessage, NotificationSummary, SendOptions } from "../src/index.ts"
+import { withDirectoryLock } from "../src/store.ts"
 
 const roots: string[] = []
 after(async() => {
@@ -165,6 +167,28 @@ test("subjects live on the root only and reject empties and replies", async() =>
   const reply = await board.send("B", ["A"], "a", { ...NORMAL, kind: MessageKind.Reply, inReplyTo: root.message.messageId })
   assert.equal(reply.message.subject, undefined)
   assert.equal((await board.thread(root.message.messageId))[0]!.subject, "launch")
+})
+
+test("a dead notifier's stale marker is replaced instead of blocking the burst", async() => {
+  const { board, sessionRoot } = await freshSession()
+  await mkdir(join(sessionRoot, "state"), { recursive: true })
+  await writeFile(
+    join(sessionRoot, "state", "B.notification.json"),
+    JSON.stringify({ token: "dead-token", target: "B", createdAt: new Date(Date.now() - 3_600_000).toISOString(), delaySeconds: 60 }),
+  )
+  const sent = await board.send("A", ["B"], "after crash", NORMAL)
+  assert.equal(sent.notifications.length, 1)
+  assert.notEqual(sent.notifications[0]!.token, "dead-token")
+})
+
+test("a busy mailbox reports its name with a retry hint, not a lock path", async() => {
+  const sessionRoot = await mkdtemp(join(tmpdir(), "ttt-board-"))
+  roots.push(sessionRoot)
+  const board = new Board({ sessionRoot, notifySeconds: 0, lock: { timeoutMs: 50, staleMs: 60_000 } })
+  const holder = withDirectoryLock(join(sessionRoot, "locks", "B.lock"), { timeoutMs: 50, staleMs: 60_000 }, () => sleep(300))
+  await sleep(20)
+  await assert.rejects(board.send("A", ["B"], "hi", NORMAL), /mailbox B is busy; retry shortly/)
+  await holder
 })
 
 test("cancelNotification removes only the matching marker so a failed spawn can reschedule", async() => {
