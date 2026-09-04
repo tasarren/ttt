@@ -94,15 +94,16 @@ ttt ack --all -- cleared      # ack everything at once
 
 ## Identity
 
-ttt has no accounts. Your tmux window name is your name: rename windows to name your agents
-(`tmux rename-window CODER`), and find teammates with `ttt windows`.
+ttt has no accounts. Your tmux window name is your name, and `ttt whoami` prints the session,
+window, id, and board path so agents never need raw tmux to learn them. Find teammates with
+`ttt windows`.
 
 Window names are expected to be unique. When two windows share a name, the lowest window id (`@1` beats
 `@2`) receives the paste. `ttt windows` flags the loser as `(dup of @N)`. Duplicates share one mailbox,
 so either twin can `ttt read` the same messages.
 
 A window named like a command (`send`, `read`, `inbox`, `status`, `thread`, `capture`, `broadcast`,
-`reply`, `windows`, `prune`, `migrate`) needs the explicit `ttt send` form. The shorthand
+`reply`, `windows`, `whoami`, `prune`, `migrate`) needs the explicit `ttt send` form. The shorthand
 `ttt NAME -- MESSAGE` resolves the command first.
 
 Acking without a prior `ttt read` warns on stderr. The receipt is still marked acked.
@@ -138,6 +139,7 @@ Ways to check what happened to something you sent, or to look at a teammate's sc
 | `ttt thread MESSAGE_ID [--headers-only]` | Every message in the thread, oldest first. `--headers-only` triages without bodies. |
 | `ttt capture TARGET [--lines N] [--raw] [--grep PATTERN] [--around PATTERN] [--context N]` | Last N lines of another window's pane. `--raw` keeps tmux line wrapping. `--grep` keeps matching lines. `--around` keeps matches plus N context lines each side (default 3). |
 | `ttt windows` | List windows in this session with ids. `(you)` marks the caller. |
+| `ttt whoami` | Print your session, window name, id, and board path. |
 
 Ways to clean up and to move the board forward across versions:
 

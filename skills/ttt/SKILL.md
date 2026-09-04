@@ -28,6 +28,7 @@ tmux window name. Teammates are the other window names; list them with `ttt wind
 | Check delivery | `ttt status MESSAGE_ID` (`q/n/r/a` = queued/notified/read/acked) |
 | Full thread | `ttt thread MESSAGE_ID` (`--headers-only` to triage) |
 | Peek at a teammate's screen | `ttt capture NAME --lines 40` (`--grep PATTERN`, or `--around PATTERN --context N`) |
+| Who/where am I (session, window, board) | `ttt whoami` |
 
 ## Rules
 
