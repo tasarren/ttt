@@ -1,8 +1,9 @@
 import { join } from "node:path"
 
 import { Board, assertName } from "@ttt/board"
+import type { Actor } from "@ttt/board"
 import { Tmux } from "@ttt/tmux"
-import type { TmuxWindow } from "@ttt/tmux"
+import type { DetectionSource, TmuxWindow } from "@ttt/tmux"
 
 import { CliError, usageError } from "./cli-error.ts"
 import { resolveSettings } from "./settings.ts"
@@ -16,6 +17,12 @@ export interface Context {
   senderName: string
   /** The current tmux window id, or "" when the identity was overridden with `--from`. */
   senderId: string
+  /** The exact pane this invocation runs in, or "" when overridden or undetectable. */
+  senderPane: string
+  /** Which link of the resolution chain identified us; `override` for explicit flags. */
+  via: DetectionSource | "override"
+  /** Detected performer for receipt audit; undefined when undetectable (detached). */
+  actor: Actor | undefined
   tmux: Tmux
   board: Board
   /** Path of this executable, used to spawn the detached notifier. */
@@ -39,10 +46,22 @@ export async function createContext(overrides: GlobalOverrides, binPath: string)
   let session: string
   let senderName: string
   let senderId = ""
+  let senderPane = ""
+  let via: Context["via"]
+  let actor: Actor | undefined
   if (overrides.session !== undefined) {
     if (overrides.from === undefined) throw usageError("--session needs --from NAME")
     session = overrides.session
     senderName = overrides.from
+    via = "override"
+    // The override picks the mailbox, but detection still feeds receipt audit.
+    // Detached processes (the notifier) detect nothing; fields stay absent.
+    try {
+      const actual = await tmux.detectContext(settings.currentPane)
+      actor = { window: actual.windowName, session: actual.session }
+    } catch {
+      actor = undefined
+    }
   } else {
     let detected
     try {
@@ -53,7 +72,12 @@ export async function createContext(overrides: GlobalOverrides, binPath: string)
     }
     session = detected.session
     senderName = overrides.from ?? detected.windowName
-    if (overrides.from === undefined) senderId = detected.windowId
+    if (overrides.from === undefined) {
+      senderId = detected.windowId
+      senderPane = detected.paneId
+    }
+    via = overrides.from === undefined ? detected.via : "override"
+    actor = { window: detected.windowName, session: detected.session }
   }
 
   try {
@@ -70,7 +94,7 @@ export async function createContext(overrides: GlobalOverrides, binPath: string)
     lock: settings.lock,
   })
   void board.sweepTempFiles()
-  return { settings, session, senderName, senderId, tmux, board, binPath }
+  return { settings, session, senderName, senderId, senderPane, via, actor, tmux, board, binPath }
 }
 
 export async function requireWindow(ctx: Context, name: string): Promise<TmuxWindow> {

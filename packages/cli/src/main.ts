@@ -32,7 +32,7 @@ export const USAGE = `ttt — durable, batched messaging between windows of the 
 usage:
   ttt send TARGET [options] -- MESSAGE          ttt TARGET -- MESSAGE (shorthand)
   ttt send TARGET [options] --file PATH         (or pipe the body on stdin)
-  ttt reply MESSAGE_ID [--to sender|receiver|both] [options] -- MESSAGE
+  ttt reply MESSAGE_ID [--to sender|receiver|both|thread] [options] -- MESSAGE
   ttt broadcast TARGET... [options] -- MESSAGE  ttt broadcast --all [options] -- MESSAGE
   ttt ack MESSAGE_ID [NOTE]                     ttt ack --all [-- NOTE]
 
@@ -58,7 +58,9 @@ Normal messages are queued. A target gets one notification per burst and reads t
 "ttt read". ACK is board state only; it sends nothing. Settings: ~/.ttt/settings.jsonc
 Shorthand "ttt TARGET -- MESSAGE" sends; a window named like a command (send, read, inbox,
 status, thread, capture, broadcast, reply, windows, whoami, prune, migrate) needs the explicit "ttt send" form.
-Recovery overrides need both flags: --session NAME --from WINDOW.`
+Identity is automatic (PID ancestry, then TMUX_PANE) and never uses the active window.
+Recovery overrides only come as a pair: --session NAME --from WINDOW; lone --from is rejected.
+Capture output is cleaned of TUI chrome (borders, spinners) unless --raw is passed.`
 
 
 export async function main(argv: string[], binPath: string): Promise<void> {
@@ -86,6 +88,9 @@ function parseGlobals(argv: string[]): { overrides: GlobalOverrides; rest: strin
     if (value === undefined) throw usageError(`${flag} needs a value`)
     overrides[flag === "--session" ? "session" : "from"] = value
     index += 2
+  }
+  if (overrides.from !== undefined && overrides.session === undefined) {
+    throw usageError("--from needs --session SESSION; overrides only come as a pair")
   }
   return { overrides, rest: argv.slice(index) }
 }

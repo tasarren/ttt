@@ -1,5 +1,5 @@
 import { MessageKind, MessagePriority } from "@ttt/board"
-import { compareWindowIds } from "@ttt/tmux"
+import { winnersByName } from "@ttt/tmux"
 import type { TmuxWindow } from "@ttt/tmux"
 
 import { MESSAGE_OPTIONS, parseCommandArgs, readMessagePayload, splitAtTerminator } from "../args.ts"
@@ -25,11 +25,7 @@ export const broadcast: Handler = async(argv, ctx) => {
   let targets = positionals
   if (values.all) {
     if (positionals.length > 0) throw usageError("--all cannot be combined with target names")
-    const winners = new Map<string, TmuxWindow>()
-    for (const window of await ctx.tmux.listWindows(ctx.session)) {
-      const current = winners.get(window.name)
-      if (!current || compareWindowIds(window.id, current.id) < 0) winners.set(window.name, window)
-    }
+    const winners = winnersByName(await ctx.tmux.listWindows(ctx.session))
     targets = [...winners.values()].filter((window) => !isSelf(ctx, window)).map((w) => w.name)
   }
   if (targets.length === 0) throw usageError("broadcast has no recipients")
@@ -37,20 +33,24 @@ export const broadcast: Handler = async(argv, ctx) => {
 }
 
 const REPLY_OPTIONS = { ...MESSAGE_OPTIONS, to: { type: "string", default: "sender" } } as const
-const AUDIENCES = ["sender", "receiver", "both"]
+const AUDIENCES = ["sender", "receiver", "both", "thread"]
 
 export const reply: Handler = async(argv, ctx) => {
   const { head, body } = splitAtTerminator(argv)
   const { values, positionals } = parseCommandArgs(head, REPLY_OPTIONS)
   const [originalId, ...extra] = positionals
   if (originalId === undefined || extra.length > 0) throw usageError("usage: ttt reply MESSAGE_ID [options] -- MESSAGE")
-  if (!AUDIENCES.includes(values.to)) throw usageError("--to must be sender, receiver, or both")
+  if (!AUDIENCES.includes(values.to)) throw usageError("--to must be sender, receiver, both, or thread")
 
   const original = await ctx.board.findMessage(originalId)
   if (values.subject !== undefined) throw usageError("--subject is set on the thread root only")
   const audience = new Set<string>()
-  if (values.to !== "receiver") audience.add(original.from)
-  if (values.to !== "sender") for (const recipient of original.recipients) audience.add(recipient)
+  if (values.to === "thread") {
+    for (const name of await ctx.board.threadParticipants(original.threadId)) audience.add(name)
+  } else {
+    if (values.to !== "receiver") audience.add(original.from)
+    if (values.to !== "sender") for (const recipient of original.recipients) audience.add(recipient)
+  }
   audience.delete(ctx.senderName)
   if (audience.size === 0) throw new CliError(`message ${originalId} has no reply audience other than yourself`)
 
@@ -83,6 +83,13 @@ async function deliver(
   })
   for (const marker of notifications) spawnNotifier(ctx, marker)
 
+  // Remember the exact pane agents send from, so notifications land there instead
+  // of the window's active pane. Overrides carry no pane and never register.
+  // Best-effort: the registry must never break a send.
+  if (ctx.senderId && ctx.senderPane) {
+    await ctx.board.registerPane(ctx.senderName, { paneId: ctx.senderPane, windowId: ctx.senderId }).catch(() => undefined)
+  }
+
   const to = message.recipients.join(", ")
   const thread = route.kind === MessageKind.Reply ? ` (thread ${message.threadId})` : ""
   if (payload.priority === MessagePriority.Urgent) {
@@ -97,11 +104,7 @@ async function deliver(
 }
 
 async function resolveTargets(ctx: Context, names: string[]): Promise<Map<string, TmuxWindow>> {
-  const winners = new Map<string, TmuxWindow>()
-  for (const window of await ctx.tmux.listWindows(ctx.session)) {
-    const current = winners.get(window.name)
-    if (!current || compareWindowIds(window.id, current.id) < 0) winners.set(window.name, window)
-  }
+  const winners = winnersByName(await ctx.tmux.listWindows(ctx.session))
   const targets = new Map<string, TmuxWindow>()
   for (const name of names) {
     const window = winners.get(name)

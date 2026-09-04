@@ -18,10 +18,18 @@ async function freshBoard(): Promise<Board> {
   return (await freshSession()).board
 }
 
-async function freshSession(): Promise<{ board: Board; sessionRoot: string }> {
+async function freshSession(overrides: { notifySeconds?: number; notifyOverrides?: Record<string, number>; lock?: { timeoutMs: number; staleMs: number } } = {}): Promise<{ board: Board; sessionRoot: string }> {
   const sessionRoot = await mkdtemp(join(tmpdir(), "ttt-board-"))
   roots.push(sessionRoot)
-  return { board: new Board({ sessionRoot, notifySeconds: 0, lock: { timeoutMs: 2_000, staleMs: 60_000 } }), sessionRoot }
+  return {
+    board: new Board({
+      sessionRoot,
+      notifySeconds: overrides.notifySeconds ?? 0,
+      ...(overrides.notifyOverrides ? { notifyOverrides: overrides.notifyOverrides } : {}),
+      lock: overrides.lock ?? { timeoutMs: 2_000, staleMs: 60_000 },
+    }),
+    sessionRoot,
+  }
 }
 
 const NORMAL: SendOptions = { kind: MessageKind.Message, priority: MessagePriority.Normal, replyExpected: true }
@@ -60,6 +68,64 @@ test("send -> read -> ack round trip, with status and thread", async() => {
   const status = await board.messageStatus(message.messageId)
   assert.equal(status.receipts[0]!.state, "acked")
   assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 1, superseded: 0 })
+})
+
+test("reads and acks record the detected actor, whatever the mailbox claims", async() => {
+  const board = await freshBoard()
+  const sent = await board.send("A", ["B"], "hello", NORMAL)
+  const actor = { window: "C", session: "work" }
+  const batch = await board.read("B", { max: 10, peek: false, latest: false, actor })
+  assert.equal(batch.messages.length, 1)
+  const status = await board.messageStatus(sent.message.messageId)
+  assert.deepEqual(status.receipts[0]!.readBy, actor)
+  const receipt = await board.ack("B", sent.message.messageId, "done", actor)
+  assert.deepEqual(receipt.ackedBy, actor)
+})
+
+test("peeks and system transitions record no actor; old receipts stay silent", async() => {
+  const board = await freshBoard()
+  const sent = await board.send("A", ["B"], "hello", NORMAL)
+  await board.read("B", { max: 10, peek: true, latest: false, actor: { window: "C", session: "work" } })
+  const peeked = await board.messageStatus(sent.message.messageId)
+  assert.equal(peeked.receipts[0]!.readBy, undefined)
+  assert.equal(peeked.receipts[0]!.state, "unread")
+  await board.read("B", { max: 10, peek: false, latest: false })
+  const plain = await board.messageStatus(sent.message.messageId)
+  assert.deepEqual(plain.receipts[0]!.readBy, undefined, "actor is optional")
+})
+
+test("pane registry registers, resolves, prunes, and never breaks delivery", async() => {
+  const { board, sessionRoot } = await freshSession()
+  assert.equal(await board.resolvePane("A"), undefined)
+  await board.registerPane("A", { paneId: "%7", windowId: "@3" })
+  const binding = await board.resolvePane("A")
+  assert.ok(binding)
+  assert.equal(binding.paneId, "%7")
+  assert.equal(binding.windowId, "@3")
+  assert.equal(typeof binding.updatedAt, "string")
+  assert.equal(binding.session, undefined, "same-session entries omit the session")
+  await board.registerPane("A", { paneId: "%8", windowId: "@3" })
+  assert.equal((await board.resolvePane("A"))?.paneId, "%8", "last writer wins")
+  await board.registerPane("B", { paneId: "%9", windowId: "@4", session: "other" })
+  assert.equal((await board.resolvePane("B"))?.session, "other")
+  await board.prunePane("A")
+  assert.equal(await board.resolvePane("A"), undefined)
+  await board.prunePane("A")
+  await writeFile(join(sessionRoot, "state", "panes.json"), "not json")
+  assert.equal(await board.resolvePane("B"), undefined, "corrupt registry falls back")
+  await board.registerPane("B", { paneId: "%9", windowId: "@4" })
+  assert.equal((await board.resolvePane("B"))?.paneId, "%9", "registry heals on next register")
+  await assert.rejects(board.registerPane("C", { paneId: "", windowId: "@5" }), /pane binding needs/)
+})
+
+test("threadParticipants unions senders and recipients across nested replies", async() => {
+  const board = await freshBoard()
+  const root = await board.send("A", ["B", "C"], "group root", { ...NORMAL, subject: "launch" })
+  assert.deepEqual(await board.threadParticipants(root.message.threadId), ["A", "B", "C"])
+  const nested = await board.send("B", ["A"], "b nested", { ...NORMAL, kind: MessageKind.Reply, inReplyTo: root.message.messageId })
+  assert.deepEqual(await board.threadParticipants(nested.message.threadId), ["A", "B", "C"])
+  const widener = await board.send("C", ["A", "B"], "c widens", { ...NORMAL, kind: MessageKind.Reply, inReplyTo: nested.message.messageId })
+  assert.deepEqual(await board.threadParticipants(widener.message.threadId), ["A", "B", "C"])
 })
 
 test("--replace supersedes only unread messages from the same sender with the same key", async() => {
@@ -166,7 +232,8 @@ test("subjects live on the root only and reject empties and replies", async() =>
   )
   const reply = await board.send("B", ["A"], "a", { ...NORMAL, kind: MessageKind.Reply, inReplyTo: root.message.messageId })
   assert.equal(reply.message.subject, undefined)
-  assert.equal((await board.thread(root.message.messageId))[0]!.subject, "launch")
+  const rooted = (await board.thread(root.message.messageId)).find((m) => m.messageId === root.message.messageId)!
+  assert.equal(rooted.subject, "launch")
 })
 
 test("a dead notifier's stale marker is replaced instead of blocking the burst", async() => {
@@ -182,9 +249,7 @@ test("a dead notifier's stale marker is replaced instead of blocking the burst",
 })
 
 test("a busy mailbox reports its name with a retry hint, not a lock path", async() => {
-  const sessionRoot = await mkdtemp(join(tmpdir(), "ttt-board-"))
-  roots.push(sessionRoot)
-  const board = new Board({ sessionRoot, notifySeconds: 0, lock: { timeoutMs: 50, staleMs: 60_000 } })
+  const { board, sessionRoot } = await freshSession({ lock: { timeoutMs: 50, staleMs: 60_000 } })
   const holder = withDirectoryLock(join(sessionRoot, "locks", "B.lock"), { timeoutMs: 50, staleMs: 60_000 }, () => sleep(300))
   await sleep(20)
   await assert.rejects(board.send("A", ["B"], "hi", NORMAL), /mailbox B is busy; retry shortly/)
@@ -237,9 +302,7 @@ test("thread resolves via the index and prune GCs only terminal history", async(
 test("per-window notify overrides resolve per target", async() => {
   const { board } = await freshSession()
   assert.equal(board.notifyDelay("B"), 0)
-  const sessionRoot2 = await mkdtemp(join(tmpdir(), "ttt-board-"))
-  roots.push(sessionRoot2)
-  const custom = new Board({ sessionRoot: sessionRoot2, notifySeconds: 60, notifyOverrides: { B: 5 }, lock: { timeoutMs: 2_000, staleMs: 60_000 } })
+  const { board: custom } = await freshSession({ notifySeconds: 60, notifyOverrides: { B: 5 } })
   assert.equal(custom.notifyDelay("B"), 5)
   assert.equal(custom.notifyDelay("C"), 60)
   const sent = await custom.send("A", ["B"], "hi", NORMAL)

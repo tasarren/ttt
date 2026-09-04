@@ -13,10 +13,12 @@ import {
   messageDay,
 } from "./model.ts"
 import type {
+  Actor,
   BoardMessage,
   MessageKind,
   MessageReceipt,
   NotificationMarker,
+  PaneBinding,
 } from "./model.ts"
 import { atomicWriteJson, isErrno, readJsonIfExists, readJsonTree, sweepTempFiles, withDirectoryLock } from "./store.ts"
 import type { LockOptions } from "./store.ts"
@@ -55,6 +57,8 @@ export interface ReadOptions {
   peek: boolean
   /** Pick the newest `max` instead of the oldest. */
   latest: boolean
+  /** Detected performer, recorded as `readBy` on flipped receipts. */
+  actor?: Actor
 }
 
 export interface ReadResult {
@@ -174,7 +178,7 @@ export class Board {
       if (!options.peek) {
         const readAt = new Date().toISOString()
         for (const { receipt } of selected) {
-          await this.writeReceipt({ ...receipt, state: ReceiptState.Read, readAt })
+          await this.writeReceipt({ ...receipt, state: ReceiptState.Read, readAt, ...(options.actor ? { readBy: options.actor } : {}) })
         }
         await this.addUnreadUnlocked(agent, -selected.length)
       }
@@ -199,7 +203,7 @@ export class Board {
     })
   }
 
-  async ack(agent: string, messageId: string, note?: string): Promise<MessageReceipt> {
+  async ack(agent: string, messageId: string, note?: string, actor?: Actor): Promise<MessageReceipt> {
     return this.withMailboxLock(agent, async() => {
       const receipt = await readJsonIfExists<MessageReceipt>(this.receiptPath(agent, messageId))
       if (!receipt) throw new Error(`message ${messageId} is not in ${agent}'s mailbox`)
@@ -222,6 +226,7 @@ export class Board {
         ackedAt,
         readAt: receipt.readAt ?? ackedAt,
         ...(note?.trim() ? { ackNote: note.trim() } : {}),
+        ...(actor ? { ackedBy: actor } : {}),
       }
       await this.writeReceipt(acked)
       await this.addUnreadUnlocked(agent, wasUnread ? -1 : 0)
@@ -230,7 +235,7 @@ export class Board {
   }
 
   /** Marks every unacked, non-superseded receipt in `agent`'s mailbox acked. One lock, one timestamp. */
-  async ackAll(agent: string, note?: string): Promise<MessageReceipt[]> {
+  async ackAll(agent: string, note?: string, actor?: Actor): Promise<MessageReceipt[]> {
     return this.withMailboxLock(agent, async() => {
       await this.expireUnlocked(agent)
       const ackedAt = new Date().toISOString()
@@ -248,6 +253,7 @@ export class Board {
           ackedAt,
           readAt: receipt.readAt ?? ackedAt,
           ...(clean ? { ackNote: clean } : {}),
+          ...(actor ? { ackedBy: actor } : {}),
         }
         await this.writeReceipt(next)
         acked.push(next)
@@ -280,6 +286,16 @@ export class Board {
       }
     }
     return messages.sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.messageId.localeCompare(b.messageId))
+  }
+
+  /** Union of every sender and recipient across a thread, sorted. Computed on read; no new index. */
+  async threadParticipants(threadId: string): Promise<string[]> {
+    const names = new Set<string>()
+    for (const message of await this.thread(threadId)) {
+      names.add(message.from)
+      for (const recipient of message.recipients) names.add(recipient)
+    }
+    return [...names].sort((a, b) => a.localeCompare(b))
   }
 
   /**
@@ -351,6 +367,57 @@ export class Board {
       await rm(this.markerPath(target), { force: true })
       return true
     })
+  }
+
+  /**
+   * Records the exact pane `window` sends from. Refresh on every send; overrides
+   * carry no pane and never call this. Last-writer-wins is benign, so no lock.
+   */
+  async registerPane(window: string, binding: { paneId: string; windowId: string; session?: string }): Promise<void> {
+    if (!binding.paneId || !binding.windowId) throw new Error("pane binding needs a pane id and a window id")
+    const all = await this.readPaneRegistry()
+    all[window] = { ...binding, updatedAt: new Date().toISOString() }
+    await atomicWriteJson(this.paneRegistryPath(), all)
+  }
+
+  /**
+   * The registered pane for `window`, or undefined when unknown, malformed, or
+   * unreadable. Never throws: delivery must fall back to the window, not fail.
+   */
+  async resolvePane(window: string): Promise<PaneBinding | undefined> {
+    const entry = (await this.readPaneRegistry())[window]
+    if (!entry || typeof entry.paneId !== "string" || !entry.paneId || typeof entry.windowId !== "string" || !entry.windowId) {
+      return undefined
+    }
+    return entry
+  }
+
+  /** Drops a dead binding; best-effort, never throws. */
+  async prunePane(window: string): Promise<void> {
+    try {
+      const all = await this.readPaneRegistry()
+      if (!(window in all)) return
+      const kept: Record<string, PaneBinding> = {}
+      for (const [name, binding] of Object.entries(all)) {
+        if (name !== window) kept[name] = binding
+      }
+      await atomicWriteJson(this.paneRegistryPath(), kept)
+    } catch {
+      // A broken registry heals on the next registerPane; delivery already fell back.
+    }
+  }
+
+  private paneRegistryPath(): string {
+    return join(this.stateRoot, "panes.json")
+  }
+
+  /** Missing or corrupt registry reads as empty; registerPane heals over corruption. */
+  private async readPaneRegistry(): Promise<Record<string, PaneBinding>> {
+    try {
+      return await readJsonIfExists<Record<string, PaneBinding>>(this.paneRegistryPath()) ?? {}
+    } catch {
+      return {}
+    }
   }
 
   /**
