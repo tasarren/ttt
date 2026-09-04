@@ -18,4 +18,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: node -e "const t=process.env.GITHUB_REF_NAME.slice(1),v=require('./packages/cli/package.json').version;if(t!==v){console.error(`tag v${t} != package ${v}`);process.exit(1)}"
       - run: pnpm --filter @tasarren/ttt pack --dry-run # asserts dist + README + LICENSE land in the tarball
-      - run: pnpm --filter @tasarren/ttt publish --access public --provenance
+      - run: pnpm --filter @tasarren/ttt publish --access public --provenance --no-git-checks
+        # --no-git-checks: release checkouts are detached-HEAD by design; the tag==version guard above
+        # is the real safety check, pnpm's branch check only misfires here
