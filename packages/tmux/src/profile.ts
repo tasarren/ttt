@@ -24,10 +24,11 @@ export interface SetupProfile {
 }
 
 /**
- * How a pane border names its owner: the stamped agent (plus harness), a helper's title, or for
- * anything unstamped `pane N · command`, so exactly one pane per window carries the agent's name.
+ * How a pane border names its owner: the stamped agent, a helper's title, or for anything
+ * unstamped `pane N · command`, so exactly one pane per window carries the agent's name; then the
+ * harness when ttt started one there, the cwd, and a dead marker.
  */
-export const PANE_BORDER_FORMAT = `#{?${UserOption.Agent},#{${UserOption.Agent}}#{?${UserOption.Harness}, #{${UserOption.Harness}},},#{?${UserOption.Title},#{${UserOption.Title}},pane #{pane_index} · #{pane_current_command}}} #{s|$HOME|~|:pane_current_path}#{?pane_dead, [dead],}`
+export const PANE_BORDER_FORMAT = `#{?${UserOption.Agent},#{${UserOption.Agent}},#{?${UserOption.Title},#{${UserOption.Title}},pane #{pane_index} · #{pane_current_command}}}#{?${UserOption.Harness}, #{${UserOption.Harness}},} #{s|$HOME|~|:pane_current_path}#{?pane_dead, [dead],}`
 
 /**
  * Window tabs: a trailing `·` when no pane in the window is stamped (furniture: nobody reads a

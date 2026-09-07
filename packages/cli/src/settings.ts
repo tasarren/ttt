@@ -10,6 +10,8 @@ import { assertName, isErrno } from "@ttt/board"
 import type { LockOptions } from "@ttt/board"
 
 import { CliError } from "./cli-error.ts"
+import { parseHarnesses, shippedHarnesses } from "./harnesses.ts"
+import type { HarnessSettings } from "./harnesses.ts"
 
 export interface Settings {
   /** `$TTT_HOME`, default `~/.ttt`. Holds the settings file and, by default, the boards. */
@@ -28,8 +30,12 @@ export interface Settings {
     /** Mirror unread counts into `@ttt_unread` window options after each command. */
     badges: boolean
   }
+  /** Harnesses `ttt tmux open --harness` may start, and which one a bare `--harness` means. */
+  harnesses: HarnessSettings
   /** `$TMUX_PANE`: the pane this process was started in, needed to identify the caller's window. */
   currentPane: string | undefined
+  /** `$PATH`, for doctor's harness binary lookup. */
+  path: string | undefined
 }
 
 export const SETTINGS_FILES = ["settings.jsonc", "settings.json"] as const
@@ -45,7 +51,9 @@ export function defaultSettings(home: string): Settings {
     capture: { lines: 40, maxLines: 500 },
     lock: { timeoutMs: 10_000, staleMs: 60_000 },
     tmux: { ...DEFAULT_TMUX_OPTIONS, badges: true },
+    harnesses: shippedHarnesses(),
     currentPane: undefined,
+    path: undefined,
   }
 }
 
@@ -55,7 +63,7 @@ export async function resolveSettings(env: NodeJS.ProcessEnv = process.env): Pro
   const defaults = defaultSettings(home)
   const found = await readSettingsFile(home)
   const settings = found ? applySettings(defaults, found.file, found.text) : defaults
-  return { ...settings, currentPane: env["TMUX_PANE"] }
+  return { ...settings, currentPane: env["TMUX_PANE"], path: env["PATH"] }
 }
 
 async function readSettingsFile(home: string): Promise<{ file: string; text: string } | undefined> {
@@ -76,7 +84,7 @@ function applySettings(defaults: Settings, file: string, text: string): Settings
   if (errors[0]) {
     throw new CliError(`${file}: ${printParseErrorCode(errors[0].error)} at offset ${errors[0].offset}`, 2)
   }
-  const root = section(raw, file, "settings", ["boardRoot", "notifySeconds", "notifyOverrides", "readMax", "wait", "capture", "lock", "tmux"])
+  const root = section(raw, file, "settings", ["boardRoot", "notifySeconds", "notifyOverrides", "readMax", "wait", "capture", "lock", "tmux", "harnesses"])
   const wait = section(root["wait"], file, "wait", ["seconds", "maxSeconds"])
   const capture = section(root["capture"], file, "capture", ["lines", "maxLines"])
   const lock = section(root["lock"], file, "lock", ["timeoutMs", "staleMs"])
@@ -113,7 +121,9 @@ function applySettings(defaults: Settings, file: string, text: string): Settings
       postSendMs: int(tmux["postSendMs"], "tmux.postSendMs", defaults.tmux.postSendMs),
       badges: bool(tmux["badges"], file, "tmux.badges", defaults.tmux.badges),
     },
+    harnesses: parseHarnesses(root["harnesses"], file),
     currentPane: defaults.currentPane,
+    path: defaults.path,
   }
 }
 

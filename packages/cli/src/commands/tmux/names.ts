@@ -18,13 +18,13 @@ export function checkWindowName(name: string): void {
 }
 
 /**
- * `HARNESS-N` with the lowest free N. "Free" means no live window has the name and no mailbox
+ * `STEM-N` with the lowest free N. "Free" means no live window has the name and no mailbox
  * directory exists for it: a reused name would silently inherit an old inbox.
  */
-export function generateWindowName(harness: string | undefined, taken: ReadonlySet<string>): string {
-  const stem = (harness ?? "agent").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, MAX_WINDOW_NAME - 3) || "AGENT"
+export function generateWindowName(stem: string, taken: ReadonlySet<string>): string {
+  const cleaned = stem.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, MAX_WINDOW_NAME - 3) || "W"
   for (let n = 1; ; n += 1) {
-    const candidate = `${stem}-${n}`
+    const candidate = `${cleaned}-${n}`
     if (!taken.has(candidate)) return candidate
   }
 }

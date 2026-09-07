@@ -1,10 +1,12 @@
 import { access } from "node:fs/promises"
+import { delimiter, isAbsolute, join } from "node:path"
 
 import { CheckState, MIN_TMUX_VERSION, OptionScope, PROFILES, UserOption } from "@ttt/tmux"
 import type { OptionCheck, SetupProfile, TreeSession, TreeWindow } from "@ttt/tmux"
 
 import { parseCommandArgs } from "../../args.ts"
 import { CliError, usageError } from "../../cli-error.ts"
+import type { HarnessSettings } from "../../harnesses.ts"
 import { readSessionRecord } from "../../session-record.ts"
 import { SkillState, skillInstalls } from "../../skill-status.ts"
 import type { TmuxVerb, TmuxVerbContext } from "../../tmux-context.ts"
@@ -42,8 +44,40 @@ async function diagnose(ctx: TmuxVerbContext, session: string): Promise<Finding[
     ...clientFindings(tree, session),
     ...profile.findings,
     ...(profile.profile ? await profileFindings(ctx, session, profile.profile, tree) : []),
+    ...(await harnessFindings(ctx.settings.harnesses, ctx.settings.path)),
     ...(await skillFindings(ctx.version)),
   ]
+}
+
+/** One row per harness `open --harness` may start: is its binary reachable from here. */
+async function harnessFindings(harnesses: HarnessSettings, searchPath: string | undefined): Promise<Finding[]> {
+  const findings: Finding[] = []
+  const where = harnesses.source === "shipped" ? "shipped presets (no harnesses section in settings)" : `declared in ${harnesses.source}`
+  findings.push({ severity: Severity.Ok, subject: "harnesses", detail: `${Object.keys(harnesses.declared).join(", ")}; ${where}; default ${harnesses.defaultName ?? "none (a bare --harness is refused)"}` })
+  for (const harness of Object.values(harnesses.declared)) {
+    const found = await findBinary(harness.bin, searchPath)
+    if (found === undefined) {
+      findings.push({ severity: Severity.Warn, subject: `harness ${harness.name}`, detail: `bin ${JSON.stringify(harness.bin)} not found${isAbsolute(harness.bin) ? "" : " on PATH"}`, fix: `install it, or set harnesses.${harness.name}.bin in settings` })
+    } else {
+      findings.push({ severity: Severity.Ok, subject: `harness ${harness.name}`, detail: found })
+    }
+  }
+  return findings
+}
+
+/** The first word of `bin` resolved like a shell would: absolute as is, else each PATH entry. */
+async function findBinary(bin: string, searchPath: string | undefined): Promise<string | undefined> {
+  const program = bin.split(" ")[0]!
+  const candidates = isAbsolute(program) || program.includes("/") ? [program] : (searchPath ?? "").split(delimiter).filter(Boolean).map((dir) => join(dir, program))
+  for (const candidate of candidates) {
+    try {
+      await access(candidate)
+      return candidate
+    } catch {
+      // not here; try the next PATH entry
+    }
+  }
+  return undefined
 }
 
 async function serverFinding(ctx: TmuxVerbContext): Promise<Finding> {

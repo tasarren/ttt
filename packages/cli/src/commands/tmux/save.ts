@@ -34,8 +34,7 @@ export const save: TmuxVerb = async(argv, ctx) => {
       if (saved.source === "process") guessed += 1
       return saved
     })
-    const harness = window.panes.find((pane) => pane.agent === window.name)?.harness
-    windows.push({ name: window.name, ...(harness !== undefined ? { harness } : {}), ...(panes.length > 1 ? { layout: geometry } : {}), panes })
+    windows.push({ name: window.name, ...(panes.length > 1 ? { layout: geometry } : {}), panes })
   }
   const path = await writeLayout(ctx.settings.home, name, { ...layout, windows }, { force: values.force })
   process.stdout.write(`saved ${windows.length} window${windows.length === 1 ? "" : "s"} to ${path}\n`)
@@ -46,8 +45,9 @@ export const save: TmuxVerb = async(argv, ctx) => {
 function savePane(pane: TreePane, window: TreeWindow): LayoutPane {
   const agent = pane.agent === window.name ? { agent: true } : {}
   const title = pane.paneTitle !== undefined ? { title: pane.paneTitle } : {}
+  const harness = pane.harness !== undefined ? { harness: pane.harness } : {}
   const cwd = pane.cwd !== "" ? { cwd: pane.cwd } : {}
-  if (pane.startCommand !== undefined) return { command: pane.startCommand, ...agent, ...title, ...cwd }
-  if (SHELLS.has(pane.command) || pane.command === "") return { command: null, ...agent, ...title, ...cwd }
-  return { command: pane.command, source: "process", ...agent, ...title, ...cwd }
+  if (pane.startCommand !== undefined) return { command: pane.startCommand, ...agent, ...title, ...harness, ...cwd }
+  if (SHELLS.has(pane.command) || pane.command === "") return { command: null, ...agent, ...title, ...harness, ...cwd }
+  return { command: pane.command, source: "process", ...agent, ...title, ...harness, ...cwd }
 }

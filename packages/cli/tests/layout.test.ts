@@ -19,8 +19,8 @@ test("parseLayout accepts comments, trailing commas, defaults, and ~ expansion",
     "version": 1,
     "cwd": "~/proj",
     "windows": [
-      { "name": "CODER", "harness": "claude", "layout": "b046,160x40,0,0{111x40,0,0,1,48x40,112,0,5}",
-        "panes": [ { "command": "claude", "agent": true }, { "command": "pnpm test", "cwd": "app" }, ] },
+      { "name": "CODER", "layout": "b046,160x40,0,0{111x40,0,0,1,48x40,112,0,5}",
+        "panes": [ { "command": "claude", "agent": true, "harness": "claude" }, { "command": "pnpm test", "cwd": "app" }, ] },
       { "name": "LEAD" },
     ],
   }`, FILE)
@@ -29,6 +29,7 @@ test("parseLayout accepts comments, trailing commas, defaults, and ~ expansion",
   assert.equal(layout.windows.length, 2)
   assert.deepEqual(layout.windows[1], { name: "LEAD", panes: [{ command: null, agent: true }] }, "no panes list = one agent pane")
   assert.equal(layout.windows[0]!.panes[0]!.agent, true)
+  assert.equal(layout.windows[0]!.panes[0]!.harness, "claude")
 })
 
 test("parseLayout rejects every malformed shape with the path in the message", () => {
@@ -52,6 +53,7 @@ test("parseLayout rejects every malformed shape with the path in the message", (
   bad("{\"version\": 1, \"windows\": [{\"name\": \"A\", \"panes\": [{\"command\": \"\"}]}]}", /panes\[0\]\.command must be a non-empty string or null/)
   bad("{\"version\": 1, \"windows\": [{\"name\": \"A\", \"panes\": [{\"command\": null, \"agent\": 1}]}]}", /panes\[0\]\.agent must be true or false/)
   bad("{\"version\": 1, \"windows\": [{\"name\": \"A\", \"panes\": [{\"command\": null, \"agent\": true, \"title\": \"x\"}]}]}", /panes\[0\] is the agent pane and cannot carry a title/)
+  bad("{\"version\": 1, \"windows\": [{\"name\": \"A\", \"harness\": \"claude\"}]}", /windows\[0\]\.harness moved to windows\[0\]\.panes\[j\]\.harness/)
   bad("{\"version\": 1, \"windows\": [{\"name\": \"A\", \"panes\": [{\"command\": null, \"source\": \"guess\"}]}]}", /source may only be "process"/)
   bad("{\"version\": 1, \"windows\": [{\"name\": \"A\", \"panes\": [{\"agent\": true}, {\"agent\": true}], \"layout\": \"b046,160x40,0,0{111x40,0,0,1,48x40,112,0,5}\"}]}", /marks 2 panes as agent/)
   bad("{\"version\": 1, \"windows\": [{\"name\": \"A\", \"panes\": [{}, {}]}]}", /has 2 panes but no layout string/)

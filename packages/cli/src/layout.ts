@@ -19,7 +19,6 @@ export interface Layout {
 
 export interface LayoutWindow {
   name: string
-  harness?: string
   /** A tmux `#{window_layout}` string; `panes.length` must equal its cell count. Absent means one pane. */
   layout?: string
   /** In `pane_index` order. */
@@ -33,6 +32,8 @@ export interface LayoutPane {
   agent?: boolean
   /** Helper-pane title (`@ttt_title`); never together with `agent`. */
   title?: string
+  /** The harness ttt started here (`@ttt_harness`); validated against the declared harnesses. */
+  harness?: string
   cwd?: string
   /** `process` when `save` could only read the foreground process name, so a human should check it. */
   source?: "process"
@@ -123,7 +124,8 @@ export function parseLayout(text: string, file: string): Layout {
 }
 
 function parseWindow(raw: unknown, file: string, path: string): LayoutWindow {
-  const window = record(raw, file, path, ["name", "harness", "layout", "panes"])
+  if (typeof raw === "object" && raw !== null && "harness" in raw) throw new CliError(`${file}: ${path}.harness moved to ${path}.panes[j].harness (the pane that runs it)`, 2)
+  const window = record(raw, file, path, ["name", "layout", "panes"])
   const name = optionalText(window["name"], file, `${path}.name`)
   if (name === undefined) throw new CliError(`${file}: ${path}.name is required`, 2)
   try {
@@ -147,12 +149,11 @@ function parseWindow(raw: unknown, file: string, path: string): LayoutWindow {
   } else if (panes.length > 1) {
     throw new CliError(`${file}: ${path} has ${panes.length} panes but no layout string (save one with ttt tmux save)`, 2)
   }
-  const harness = optionalText(window["harness"], file, `${path}.harness`)
-  return { name, ...(harness !== undefined ? { harness } : {}), ...(layout !== undefined ? { layout } : {}), panes }
+  return { name, ...(layout !== undefined ? { layout } : {}), panes }
 }
 
 function parsePane(raw: unknown, file: string, path: string): LayoutPane {
-  const pane = record(raw, file, path, ["command", "agent", "title", "cwd", "source"])
+  const pane = record(raw, file, path, ["command", "agent", "title", "harness", "cwd", "source"])
   const command = pane["command"]
   if (command !== null && command !== undefined && (typeof command !== "string" || command === "")) {
     throw new CliError(`${file}: ${path}.command must be a non-empty string or null`, 2)
@@ -164,10 +165,12 @@ function parsePane(raw: unknown, file: string, path: string): LayoutPane {
   const cwd = optionalText(pane["cwd"], file, `${path}.cwd`)
   const title = optionalText(pane["title"], file, `${path}.title`)
   if (title !== undefined && agent === true) throw new CliError(`${file}: ${path} is the agent pane and cannot carry a title`, 2)
+  const harness = optionalText(pane["harness"], file, `${path}.harness`)
   return {
     command: command ?? null,
     ...(agent !== undefined ? { agent } : {}),
     ...(title !== undefined ? { title } : {}),
+    ...(harness !== undefined ? { harness } : {}),
     ...(cwd !== undefined ? { cwd } : {}),
     ...(source !== undefined ? { source } : {}),
   }

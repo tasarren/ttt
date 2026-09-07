@@ -87,6 +87,15 @@ export async function createSession(ctx: TmuxVerbContext, input: CreateSessionIn
     throw usageError(error instanceof Error ? error.message : String(error))
   }
   const layout = input.layout !== undefined ? await readLayout(ctx.settings.home, input.layout) : undefined
+  if (layout) {
+    for (const window of layout.windows) {
+      for (const [index, pane] of window.panes.entries()) {
+        if (pane.harness !== undefined && !Object.hasOwn(ctx.settings.harnesses.declared, pane.harness)) {
+          throw usageError(`layout ${input.layout}: windows[${window.name}].panes[${index}].harness ${JSON.stringify(pane.harness)} is not a declared harness (${Object.keys(ctx.settings.harnesses.declared).join(", ")})`)
+        }
+      }
+    }
+  }
   const profileName = input.profile ?? layout?.profile ?? "agents"
   const profile = PROFILES[profileName]
   if (!profile) throw usageError(`unknown profile ${JSON.stringify(profileName)}; available: ${Object.keys(PROFILES).join(", ")}`)

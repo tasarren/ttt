@@ -54,6 +54,8 @@ before(async() => {
     // fast timings for the test
     "notifySeconds": 1,
     "tmux": { "inputSettleMs": 50, "postPasteMs": 50, "enterPresses": 1, "postSendMs": 50 },
+    // a deterministic "harness" for the suite: a POSIX shell whose prompt is the ready line
+    "harnesses": { "shell": { "bin": "sh", "ready": "^[^ ]*[$#] *$", "default": true }, "codex": {} },
   }`)
   await tmux("new-session", "-d", "-s", SESSION, "-n", "A", "-x", "160", "-y", "40", "sh")
   await tmux("new-window", "-t", SESSION, "-n", "B", "sh")
@@ -291,10 +293,11 @@ test("duplicate names flag the loser; around shows context", async() => {
 
 test("per-window notify overrides change the send receipt", async() => {
   const settings = join(home, "settings.jsonc")
+  const original = await readFile(settings, "utf8")
   await writeFile(settings, "{\"notifySeconds\": 1, \"notifyOverrides\": {\"B\": 7}}")
   const queued = await ttt("A", "send", "B", "--", "override probe")
   assert.match(queued, /\(notify in ~7s\)/)
-  await writeFile(settings, "{\"notifySeconds\": 1}")
+  await writeFile(settings, original)
   assert.match(await ttt("A", "send", "B", "--", "backoff probe"), /joins pending batch|notify in ~1s/)
 })
 
@@ -416,8 +419,8 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
     assert.match(await outside("--session", "team", "tmux", "rename", "W-1", "SCRATCH"), /^renamed W-1 to SCRATCH @\d+$/)
     await assert.rejects(outside("--session", "team", "tmux", "rename", "SCRATCH", "THIRTEEN-CHAR"), /longer than 12 characters/)
     // Adopting furniture: open --window on a stampless window restarts its pane with the harness and stamps it.
-    assert.match(await outside("--session", "team", "tmux", "open", "--window", "SCRATCH", "--harness", "sh"), /^adopted SCRATCH @\d+ pane %\d+ \(ready after \d+\.\ds\)$/)
-    assert.equal((await server("display-message", "-p", "-t", unnamed, "#{@ttt_agent} #{@ttt_harness}")).trim(), "SCRATCH sh")
+    assert.match(await outside("--session", "team", "tmux", "open", "--window", "SCRATCH", "--harness", "shell"), /^adopted SCRATCH @\d+ pane %\d+ \(shell, ready after \d+\.\ds\)$/)
+    assert.equal((await server("display-message", "-p", "-t", unnamed, "#{@ttt_agent} #{@ttt_harness}")).trim(), "SCRATCH shell")
     assert.match(await server("display-message", "-p", "-t", unnamed, "#{T:window-status-format}"), /^\d+:SCRATCH[^·]/, "the mark goes once a pane is stamped")
     // A stamped window renames fine while it has no mailbox; the stamp follows. A mailbox pins the name.
     assert.match(await outside("--session", "team", "tmux", "rename", "SCRATCH", "SCRATCH2"), /^renamed SCRATCH to SCRATCH2 @\d+ \(agent pane %\d+ follows\)$/)
@@ -427,7 +430,7 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
     await mkdir(join(home, "boards", "team", "mailboxes", "STALE"), { recursive: true })
     await assert.rejects(outside("--session", "team", "tmux", "rename", "SCRATCH", "OTHER"), /SCRATCH has a mailbox; renaming would orphan it\. Close SCRATCH and open OTHER instead/)
     await assert.rejects(outside("--session", "team", "tmux", "rename", "HUMAN", "STALE"), /STALE has an old mailbox that HUMAN would inherit/)
-    await assert.rejects(outside("--session", "team", "tmux", "open", "--window", "SCRATCH", "--harness", "sh"), /window already exists: team:SCRATCH \(a teammate lives there/)
+    await assert.rejects(outside("--session", "team", "tmux", "open", "--window", "SCRATCH", "--harness", "shell"), /window already exists: team:SCRATCH \(a teammate lives there/)
     await outside("--session", "team", "tmux", "close", "SCRATCH")
 
     const shown = await outside("--session", "team", "tmux", "tree")
@@ -441,6 +444,8 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
     assert.match(report, /^ok {3}setup: profile agents, recorded /m)
     assert.match(report, /^(ok {3}|warn) skill /m, "doctor reports skill installs, read-only")
     assert.match(report, /^warn clients: no client attached/m)
+    assert.match(report, /^ok {3}harnesses: shell, codex; declared in .*settings\.jsonc; default shell$/m)
+    assert.match(report, /^ok {3}harness shell: \/.*\/sh$/m, "the declared bin is resolved on PATH")
     assert.doesNotMatch(report, /^FAIL/m)
     await assert.rejects(outside("--session", "team", "tmux", "doctor", "--strict"), /doctor found problems in team/)
     // Someone breaks a pinned option by hand: doctor fails and names the fix.
@@ -458,8 +463,8 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
       "version": 1,
       "cwd": "${tmpDir}",
       "windows": [
-        { "name": "CODER", "harness": "sh", "layout": "b046,160x40,0,0{111x40,0,0,1,48x40,112,0,5}",
-          "panes": [ { "command": "sh", "agent": true }, { "command": "sleep 300", "cwd": "/", "title": "tests" } ] },
+        { "name": "CODER", "layout": "b046,160x40,0,0{111x40,0,0,1,48x40,112,0,5}",
+          "panes": [ { "command": "sh", "agent": true, "harness": "shell" }, { "command": "sleep 300", "cwd": "/", "title": "tests" } ] },
         { "name": "LEAD" },
         { "name": "W-1", "panes": [ { "command": null } ] },
       ],
@@ -475,7 +480,7 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
     assert.equal((await server("display-message", "-p", "-t", duo.windows[0]!.panes[1]!.pane, "#{@ttt_title}")).trim(), "tests", "helper titles are built")
     const [coderAgent, helper] = duo.windows[0]!.panes
     assert.equal(coderAgent!.agent, "CODER")
-    assert.equal(coderAgent!.harness, "sh")
+    assert.equal(coderAgent!.harness, "shell")
     assert.equal(coderAgent!.startCommand, "sh")
     assert.equal(helper!.agent, undefined, "the helper pane is not the agent pane")
     assert.equal(helper!.startCommand, "sleep 300")
@@ -488,8 +493,9 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
 
     const saved = await outside("--session", "duo", "tmux", "save", "duo-copy")
     assert.match(saved, /^saved 3 windows to .*\/layouts\/duo-copy\.jsonc$/m)
-    const copy = JSON.parse(await readFile(join(home, "layouts", "duo-copy.jsonc"), "utf8")) as { windows: Array<{ name: string; harness?: string; layout?: string; panes: Array<{ command: string | null; agent?: boolean; title?: string; cwd?: string; source?: string }> }> }
-    assert.equal(copy.windows[0]!.harness, "sh")
+    const copy = JSON.parse(await readFile(join(home, "layouts", "duo-copy.jsonc"), "utf8")) as { windows: Array<{ name: string; harness?: string; layout?: string; panes: Array<{ command: string | null; agent?: boolean; title?: string; harness?: string; cwd?: string; source?: string }> }> }
+    assert.equal(copy.windows[0]!.panes[0]!.harness, "shell", "harness is saved on the pane that runs it")
+    assert.equal(copy.windows[0]!.panes[1]!.harness, undefined)
     assert.equal(copy.windows[0]!.layout, geometry)
     assert.deepEqual(copy.windows[0]!.panes.map((pane) => [pane.command, pane.agent ?? false, pane.title]), [["sh", true, undefined], ["sleep 300", false, "tests"]], "save keeps the title")
     assert.equal(copy.windows[2]!.panes[0]!.agent, undefined, "save keeps furniture unstamped")
@@ -502,22 +508,31 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
     assert.deepEqual(JSON.parse(await outside("tmux", "layouts", "--json")), ["duo", "duo-copy"])
 
     // Lifecycle and typing verbs, all against the agent pane, never the active one.
-    // `open --window` with a harness preset waits for the prompt; `--window auto` names itself.
-    assert.match(await outside("--session", "team", "tmux", "open", "--window", "CODER", "--harness", "sh"), /^opened CODER @\d+ pane %\d+ \(ready after \d+\.\ds\)$/)
+    // `open --window` with a declared harness waits for its ready line; a bare `--harness` is the default one.
+    assert.match(await outside("--session", "team", "tmux", "open", "--window", "CODER", "--harness", "shell"), /^opened CODER @\d+ pane %\d+ \(shell, ready after \d+\.\ds\)$/)
     await assert.rejects(outside("--session", "team", "tmux", "open", "--window", "CODER", "--", "sh"), /window already exists: team:CODER/)
     await assert.rejects(outside("--session", "team", "tmux", "open", "--window", "THIRTEEN-CHAR"), /longer than 12 characters/)
-    await assert.rejects(outside("--session", "team", "tmux", "open", "--window", "X", "--harness", "nope"), /no readiness preset for harness "nope" \(known: claude, opencode, codex, sh\); pass --ready REGEX or --ready none/)
+    await assert.rejects(outside("--session", "team", "tmux", "open", "--window", "X", "--harness", "nope"), /unknown harness "nope"; declared in .*settings\.jsonc: shell, codex/)
+    await assert.rejects(outside("--session", "team", "tmux", "open", "--window", "X", "--ready", "x"), /--ready needs something to wait for: pass --harness or -- COMMAND/)
     await assert.rejects(outside("--session", "team", "tmux", "open"), /open needs exactly one of --window or --pane/)
     await assert.rejects(outside("--session", "team", "tmux", "open", "--window", "X", "--pane", "t"), /exactly one of/)
-    await assert.rejects(outside("--session", "team", "tmux", "open", "--pane", "t", "--harness", "sh"), /--harness applies to --window only/)
-    assert.match(await outside("--session", "team", "tmux", "open", "--window", "auto", "--harness", "sh"), /^opened SH-1 @\d+/)
-    await mkdir(join(home, "boards", "team", "mailboxes", "SH-2"), { recursive: true })
-    assert.match(await outside("--session", "team", "tmux", "open", "--window", "auto", "--harness", "sh"), /^opened SH-3 @\d+/, "a name with an old mailbox is skipped")
+    assert.match(await outside("--session", "team", "tmux", "open", "--window", "auto", "--harness"), /^opened SHELL-1 @\d+ pane %\d+ \(shell, ready after/, "bare --harness is the default harness")
+    await mkdir(join(home, "boards", "team", "mailboxes", "SHELL-2"), { recursive: true })
+    assert.match(await outside("--session", "team", "tmux", "open", "--window", "auto", "--harness", "shell"), /^opened SHELL-3 @\d+/, "a name with an old mailbox is skipped")
+    const shellWindow = await outside("--session", "team", "tmux", "open", "--window", "auto")
+    assert.match(shellWindow, /^opened W-\d+ @\d+ pane %\d+$/, "a shell window is furniture: W-N, no wait")
+    assert.equal((await server("display-message", "-p", "-t", /pane (%\d+)/.exec(shellWindow)![1]!, "#{@ttt_agent}")).trim(), "", "a bare shell is not stamped: nobody lives there yet")
+    // A helper pane may run a harness too: stamped with it, waited for, never an agent.
+    const helperHarness = await outside("--session", "team", "tmux", "open", "--pane", "aux", "--in", "CODER", "--harness")
+    const helperHarnessPane = /^opened pane (%\d+) in CODER \(aux, shell, ready after \d+\.\ds\)$/.exec(helperHarness)?.[1]
+    assert.ok(helperHarnessPane, helperHarness)
+    assert.equal((await server("display-message", "-p", "-t", helperHarnessPane, "#{@ttt_agent}|#{@ttt_harness}|#{@ttt_title}")).trim(), "|shell|aux")
+    await server("kill-pane", "-t", helperHarnessPane)
     const slow = await outside("--session", "team", "tmux", "open", "--window", "SLOW", "--ready", "never", "--ready-timeout", "1", "--", "sh").catch((error: unknown) => (error as { stderr: string }).stderr)
     assert.match(slow, /SLOW did not become ready \(\/never\/\) within 1s; the window @\d+ stays open/)
     assert.match(await server("list-windows", "-t", "team", "-F", "#{window_name}"), /^SLOW$/m, "timeout keeps the window")
     const coderPane = (await server("display-message", "-p", "-t", "team:CODER", "#{pane_id}")).trim()
-    assert.equal((await server("display-message", "-p", "-t", coderPane, "#{@ttt_agent} #{@ttt_harness} #{@ttt_command}")).trim(), "CODER sh sh")
+    assert.equal((await server("display-message", "-p", "-t", coderPane, "#{@ttt_agent} #{@ttt_harness} #{@ttt_command}")).trim(), "CODER shell sh")
     const paneOut = await outside("--session", "team", "tmux", "open", "--pane", "tests", "--in", "CODER", "--horizontal", "--size", "30", "--", "sleep 300")
     const helperPane = /^opened pane (%\d+) in CODER \(tests\)$/.exec(paneOut)?.[1]
     assert.ok(helperPane, paneOut)
@@ -543,7 +558,7 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
     await sleep(400)
     await assert.rejects(outside("--session", "team", "tmux", "type", "CODER", "--", "x"), /pane %\d+ of CODER is dead; run: ttt tmux respawn CODER/)
     assert.match(await outside("--session", "team", "tmux", "respawn", "CODER"), /^respawned CODER pane %\d+ with: sh$/)
-    assert.equal((await server("display-message", "-p", "-t", coderPane, "#{pane_dead} #{@ttt_agent} #{@ttt_harness}")).trim(), "0 CODER sh")
+    assert.equal((await server("display-message", "-p", "-t", coderPane, "#{pane_dead} #{@ttt_agent} #{@ttt_harness}")).trim(), "0 CODER shell")
     await server("set-option", "-w", "-t", "team:CODER", "synchronize-panes", "on")
     await assert.rejects(outside("--session", "team", "tmux", "press", "CODER", "Enter"), /synchronize-panes on/)
     await server("set-option", "-w", "-t", "team:CODER", "synchronize-panes", "off")

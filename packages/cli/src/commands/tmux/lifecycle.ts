@@ -1,11 +1,12 @@
-import { HARNESS_PRESETS, SplitDirection, WaitOutcome, harnessPreset, resolveAgentPane } from "@ttt/tmux"
-import type { HarnessPreset } from "@ttt/tmux"
+import { SplitDirection, WaitOutcome, resolveAgentPane } from "@ttt/tmux"
 
 import { boundedInt, parseCommandArgs, splitAtTerminator } from "../../args.ts"
 import type { Parsed } from "../../args.ts"
 import { CliError, usageError } from "../../cli-error.ts"
+import type { HarnessSettings, ResolvedHarness } from "../../harnesses.ts"
 import type { TmuxVerb, TmuxVerbContext } from "../../tmux-context.ts"
 import { checkWindowName, generateWindowName, mailboxNames } from "./names.ts"
+import { FURNITURE_STEM } from "./normalize-window.ts"
 import { requireSession, resolveAgentTarget, resolvePaneTarget } from "./target.ts"
 
 const OPEN_OPTIONS = {
@@ -21,91 +22,132 @@ const OPEN_OPTIONS = {
 } as const
 
 const OPEN_USAGE = [
-  "usage: ttt tmux open --window NAME|auto [--harness NAME] [--ready REGEX|none] [--ready-timeout SECONDS] [--cwd DIR] [-- COMMAND]",
-  "       ttt tmux open --pane [TITLE] [--in WINDOW] [--horizontal] [--size PERCENT] [--cwd DIR] [-- COMMAND]",
+  "usage: ttt tmux open --window NAME|auto [--harness [NAME]] [--ready REGEX|none] [--ready-timeout SECONDS] [--cwd DIR] [-- COMMAND]",
+  "       ttt tmux open --pane [TITLE] [--harness [NAME]] [--ready REGEX|none] [--ready-timeout SECONDS] [--in WINDOW] [--horizontal] [--size PERCENT] [--cwd DIR] [-- COMMAND]",
 ].join("\n")
 
 /**
- * `ttt tmux open`: a teammate (`--window`: named, stamped, with a mailbox) or a helper pane next
- * to one (`--pane`: no identity). The flag is required so the caller chooses on purpose.
+ * `ttt tmux open`: a window (`--window`: named; a teammate once it runs a harness or command,
+ * furniture while it is a bare shell) or a helper pane (`--pane`: never an identity). The flag
+ * is required so the caller chooses on purpose. Either container may run a harness
+ * (`--harness [NAME]`; bare means the settings' default), a command, or a shell.
  */
 export const open: TmuxVerb = async(argv, ctx) => {
   const { head, body } = splitAtTerminator(argv)
-  const { values, positionals } = parseCommandArgs(head, OPEN_OPTIONS)
+  const { values, positionals } = parseCommandArgs(withBareHarness(head), OPEN_OPTIONS)
   if (positionals.length > 0) throw usageError(OPEN_USAGE)
   const wantsWindow = values.window !== undefined
   const wantsPane = values.pane !== undefined
   if (wantsWindow === wantsPane) throw usageError(`open needs exactly one of --window or --pane\n${OPEN_USAGE}`)
-  const command = body?.join(" ") || undefined
+  const program = resolveProgram(ctx, values, body?.join(" ") || undefined)
   if (wantsWindow) {
     for (const flag of ["in", "horizontal", "size"] as const) {
       if (values[flag] !== undefined && values[flag] !== false) throw usageError(`--${flag} applies to --pane only`)
     }
-    await openWindow(ctx, values, command)
+    await openWindow(ctx, values, program)
     return
   }
-  for (const flag of ["harness", "ready", "ready-timeout"] as const) {
-    if (values[flag] !== undefined) throw usageError(`--${flag} applies to --window only`)
-  }
-  await openPane(ctx, values, command)
+  await openPane(ctx, values, program)
+}
+
+/**
+ * `parseArgs` has no optional-valued string option, so a bare `--harness` (followed by another
+ * flag or nothing) is spelled `--harness=` before parsing; the empty value means "the default".
+ */
+export function withBareHarness(argv: string[]): string[] {
+  return argv.map((arg, index) => {
+    if (arg !== "--harness") return arg
+    const next = argv[index + 1]
+    return next === undefined || next.startsWith("-") ? "--harness=" : arg
+  })
 }
 
 type OpenValues = Parsed<typeof OPEN_OPTIONS>["values"]
 
-async function openWindow(ctx: TmuxVerbContext, values: OpenValues, commandArg: string | undefined): Promise<void> {
-  const session = requireSession(ctx)
-  const preset = values.harness !== undefined ? harnessPreset(values.harness) : undefined
-  const ready = readinessOf(values, preset)
-  const command = commandArg ?? preset?.command
-  const picked = await pickWindow(ctx, session, values.window!, values.harness)
-  let windowId: string
-  let paneId: string
-  if (picked.adopt) {
-    // Furniture becomes a teammate: its first pane is restarted with the command, then stamped.
-    windowId = picked.adopt.windowId
-    paneId = picked.adopt.paneId
-    await ctx.tmux.panes.respawn(paneId, command, values.cwd)
-  } else {
-    const opened = await ctx.tmux.windows.open({ session, name: picked.name, ...(values.cwd !== undefined ? { cwd: values.cwd } : {}), ...(command ? { command } : {}) })
-    windowId = opened.windowId
-    paneId = opened.paneId
-  }
-  const name = picked.name
-  await ctx.tmux.panes.stamp(paneId, await ctx.tmux.inventory.listAllPanes(), {
-    agent: name,
-    ...(values.harness !== undefined ? { harness: values.harness } : {}),
-    ...(command ? { command } : {}),
-  })
-  const verb = picked.adopt ? "adopted" : "opened"
-  if (ready === undefined) {
-    process.stdout.write(`${verb} ${name} ${windowId} pane ${paneId}\n`)
-    return
-  }
-  const seconds = boundedInt(values["ready-timeout"], "--ready-timeout", ctx.settings.wait.seconds, ctx.settings.wait.maxSeconds)
-  const started = Date.now()
-  // Only the visible screen counts: history may hold the previous process's prompt.
-  const result = await ctx.tmux.screen.waitFor({ target: paneId, pattern: ready, timeoutMs: seconds * 1_000, lines: 0 })
-  if (result.outcome !== WaitOutcome.Matched) {
-    throw new CliError(`${name} did not become ready (/${ready.source}/) within ${seconds}s; the window ${windowId} stays open${preset?.note ? ` (${preset.note})` : ""}`)
-  }
-  process.stdout.write(`${verb} ${name} ${windowId} pane ${paneId} (ready after ${((Date.now() - started) / 1_000).toFixed(1)}s)\n`)
+/** What a new pane runs and what "ready" means for it: a declared harness, or a shell/command. */
+interface Program {
+  command: string | undefined
+  harness: ResolvedHarness | undefined
+  ready: RegExp | undefined
 }
 
-/** `--ready REGEX` wins, `--ready none` opts out, else the harness preset, else nothing to wait for. */
-function readinessOf(values: OpenValues, preset: HarnessPreset | undefined): RegExp | undefined {
+function resolveProgram(ctx: TmuxVerbContext, values: OpenValues, commandArg: string | undefined): Program {
+  const harness = values.harness === undefined ? undefined : pickHarness(ctx.settings.harnesses, values.harness)
+  const command = commandArg ?? harness?.bin
+  return { command, harness, ready: readinessOf(values, harness, command) }
+}
+
+/** Empty name = the settings' default; any other name must be declared (or shipped, without a section). */
+function pickHarness(settings: HarnessSettings, requested: string): ResolvedHarness {
+  const declared = Object.keys(settings.declared).join(", ")
+  const where = settings.source === "shipped" ? `shipped: ${declared}` : `declared in ${settings.source}: ${declared}`
+  if (requested === "") {
+    if (settings.defaultName === undefined) throw usageError(`no default harness; set harnesses.NAME.default to true in ${settings.source === "shipped" ? "~/.ttt/settings.jsonc" : settings.source} (${where})`)
+    return settings.declared[settings.defaultName]!
+  }
+  const found = Object.hasOwn(settings.declared, requested) ? settings.declared[requested] : undefined
+  if (!found) throw usageError(`unknown harness ${JSON.stringify(requested)}; ${where}`)
+  return found
+}
+
+/** `--ready REGEX` wins, `--ready none` opts out, else the harness's regex, else nothing to wait for. */
+function readinessOf(values: OpenValues, harness: ResolvedHarness | undefined, command: string | undefined): RegExp | undefined {
   if (values.ready === "none") return undefined
   if (values.ready !== undefined) {
+    if (command === undefined) throw usageError("--ready needs something to wait for: pass --harness or -- COMMAND")
     try {
       return new RegExp(values.ready)
     } catch(error) {
       throw usageError(`--ready is not a valid regular expression: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
-  if (preset) return preset.ready
-  if (values.harness !== undefined) {
-    throw usageError(`no readiness preset for harness ${JSON.stringify(values.harness)} (known: ${Object.keys(HARNESS_PRESETS).join(", ")}); pass --ready REGEX or --ready none`)
+  return harness?.ready
+}
+
+async function openWindow(ctx: TmuxVerbContext, values: OpenValues, program: Program): Promise<void> {
+  const session = requireSession(ctx)
+  const picked = await pickWindow(ctx, session, values.window!, program.harness?.name)
+  let windowId: string
+  let paneId: string
+  if (picked.adopt) {
+    // Furniture becomes a teammate: its first pane is restarted with the command, then stamped.
+    windowId = picked.adopt.windowId
+    paneId = picked.adopt.paneId
+    await ctx.tmux.panes.respawn(paneId, program.command, values.cwd)
+  } else {
+    const opened = await ctx.tmux.windows.open({ session, name: picked.name, ...(values.cwd !== undefined ? { cwd: values.cwd } : {}), ...(program.command ? { command: program.command } : {}) })
+    windowId = opened.windowId
+    paneId = opened.paneId
   }
-  return undefined
+  const name = picked.name
+  // A window running a harness or a command is a teammate from the start. A plain shell is
+  // furniture until something runs ttt in it; stamping it would fake an agent nobody started.
+  if (program.command !== undefined) {
+    await ctx.tmux.panes.stamp(paneId, await ctx.tmux.inventory.listAllPanes(), {
+      agent: name,
+      ...(program.harness ? { harness: program.harness.name } : {}),
+      command: program.command,
+    })
+  }
+  const verb = picked.adopt ? "adopted" : "opened"
+  const head = `${verb} ${name} ${windowId} pane ${paneId}`
+  const waited = await awaitReady(ctx, values, program, paneId, `${name} did not become ready`, `the window ${windowId} stays open`)
+  process.stdout.write(`${head}${waited === undefined ? "" : ` (${[program.harness?.name, waited].filter(Boolean).join(", ")})`}\n`)
+}
+
+/**
+ * Blocks until the harness's ready line shows (visible screen only: history may hold the previous
+ * process's prompt). Returns the `ready after N.Ns` note, or undefined when there was nothing to wait for.
+ */
+async function awaitReady(ctx: TmuxVerbContext, values: OpenValues, program: Program, paneId: string, failure: string, kept: string): Promise<string | undefined> {
+  if (program.ready === undefined) return undefined
+  const seconds = boundedInt(values["ready-timeout"], "--ready-timeout", ctx.settings.wait.seconds, ctx.settings.wait.maxSeconds)
+  const started = Date.now()
+  const result = await ctx.tmux.screen.waitFor({ target: paneId, pattern: program.ready, timeoutMs: seconds * 1_000, lines: 0 })
+  if (result.outcome !== WaitOutcome.Matched) {
+    throw new CliError(`${failure} (/${program.ready.source}/) within ${seconds}s; ${kept}${program.harness?.note ? ` (${program.harness.note})` : ""}`)
+  }
+  return `ready after ${((Date.now() - started) / 1_000).toFixed(1)}s`
 }
 
 interface PickedWindow {
@@ -115,15 +157,16 @@ interface PickedWindow {
 }
 
 /**
- * `auto` generates `HARNESS-N`. A given name must be valid; if a window already carries it, it is
- * adopted when it is furniture (no stamped pane, one pane) and refused when a teammate lives there.
+ * `auto` generates `HARNESS-N`, or `W-N` for a shell (furniture until something runs ttt in it).
+ * A given name must be valid; if a window already carries it, it is adopted when it is furniture
+ * (no stamped pane, one pane) and refused when a teammate lives there.
  */
 async function pickWindow(ctx: TmuxVerbContext, session: string, requested: string, harness: string | undefined): Promise<PickedWindow> {
   const windows = await ctx.tmux.inventory.listWindows(session)
   const live = windows.map((window) => window.name)
   if (requested === "auto") {
     const taken = new Set([...live, ...await mailboxNames(ctx.settings.boardRoot, session)])
-    return { name: generateWindowName(harness, taken) }
+    return { name: generateWindowName(harness ?? FURNITURE_STEM, taken) }
   }
   checkWindowName(requested)
   const existing = await ctx.tmux.windows.find(session, requested)
@@ -134,7 +177,7 @@ async function pickWindow(ctx: TmuxVerbContext, session: string, requested: stri
   return { name: requested, adopt: { windowId: existing.id, paneId: panes[0]!.pane } }
 }
 
-async function openPane(ctx: TmuxVerbContext, values: OpenValues, command: string | undefined): Promise<void> {
+async function openPane(ctx: TmuxVerbContext, values: OpenValues, program: Program): Promise<void> {
   const title = values.pane === "" ? undefined : values.pane
   const windowName = values.in ?? ctx.self?.windowName
   if (windowName === undefined) throw usageError("--pane needs --in WINDOW when not run from inside an agent window")
@@ -144,12 +187,18 @@ async function openPane(ctx: TmuxVerbContext, values: OpenValues, command: strin
     direction: values.horizontal ? SplitDirection.Horizontal : SplitDirection.Vertical,
     ...(values.size !== undefined ? { sizePercent: boundedInt(values.size, "--size", 50, 99) } : {}),
     ...(values.cwd !== undefined ? { cwd: values.cwd } : {}),
-    ...(command ? { command } : {}),
+    ...(program.command ? { command: program.command } : {}),
   })
-  if (command || title !== undefined) {
-    await ctx.tmux.panes.stamp(paneId, await ctx.tmux.inventory.listAllPanes(), { ...(command ? { command } : {}), ...(title !== undefined ? { title } : {}) })
+  if (program.command || title !== undefined) {
+    await ctx.tmux.panes.stamp(paneId, await ctx.tmux.inventory.listAllPanes(), {
+      ...(program.command ? { command: program.command } : {}),
+      ...(program.harness ? { harness: program.harness.name } : {}),
+      ...(title !== undefined ? { title } : {}),
+    })
   }
-  process.stdout.write(`opened pane ${paneId} in ${windowName}${title !== undefined ? ` (${title})` : ""}\n`)
+  const waited = await awaitReady(ctx, values, program, paneId, `pane ${paneId} in ${windowName} did not become ready`, "the pane stays open")
+  const notes = [title, program.harness?.name, waited].filter((note) => note !== undefined)
+  process.stdout.write(`opened pane ${paneId} in ${windowName}${notes.length > 0 ? ` (${notes.join(", ")})` : ""}\n`)
 }
 
 /** `ttt tmux split NAME ...`: the pre-`--pane` spelling, kept one release. */

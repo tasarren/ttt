@@ -1,7 +1,8 @@
 /**
- * What `ttt tmux open --harness H` knows about a harness: how to start it and which screen line
- * means it accepts input. Only entries observed on a real start ship here; each carries the
- * version and date it was verified against, on tmux 3.7c at 160x40.
+ * What ttt knows about a harness (an agent program that runs in a pane): how to start it and
+ * which screen line means it accepts input. A shell is not a harness. Only entries observed on a
+ * real start ship here; each carries the version and date it was verified against, on tmux 3.7c
+ * at 160x40. The operator's settings file may override `bin`/`ready` and declare more.
  */
 export interface HarnessPreset {
   command: string
@@ -15,7 +16,6 @@ export const Harness = {
   Claude: "claude",
   OpenCode: "opencode",
   Codex: "codex",
-  Shell: "sh",
 } as const
 export type Harness = (typeof Harness)[keyof typeof Harness]
 
@@ -34,8 +34,6 @@ export const HARNESS_PRESETS: Readonly<Record<Harness, HarnessPreset>> = {
     ready: /Ask Codex to do anything/,
     note: "a directory Codex has not seen asks 'Do you trust the contents' first; answer with `ttt tmux press NAME Enter` or start it in a trusted --cwd",
   },
-  // A POSIX shell prompt (`$`, `sh-5.3$`, `#`), used by ttt's own tests. Verified with bash-as-sh 5.3.
-  [Harness.Shell]: { command: "sh", ready: /^[^ ]*[$#] *$/ },
 }
 
 export function harnessPreset(name: string): HarnessPreset | undefined {

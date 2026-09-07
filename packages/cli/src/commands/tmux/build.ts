@@ -50,10 +50,9 @@ async function buildWindow(tmux: Tmux, session: string, window: LayoutWindow, ro
 
   const live: LivePane[] = await tmux.inventory.listAllPanes()
   for (const [index, pane] of window.panes.entries()) {
-    const isAgent = pane.agent === true
     await tmux.panes.stamp(paneIds[index]!, live, {
-      ...(isAgent ? { agent: window.name } : {}),
-      ...(isAgent && window.harness !== undefined ? { harness: window.harness } : {}),
+      ...(pane.agent === true ? { agent: window.name } : {}),
+      ...(pane.harness !== undefined ? { harness: pane.harness } : {}),
       ...(pane.command !== null ? { command: pane.command } : {}),
       ...(pane.title !== undefined ? { title: pane.title } : {}),
     })

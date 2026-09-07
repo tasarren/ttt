@@ -16,10 +16,10 @@ ttt tmux type W-1.1 -- "echo driven"; ttt tmux press W-1.1 Enter; ttt tmux wait 
 step "rename: the stamp follows; a window with a mailbox refuses"
 ttt tmux rename W-1 V-SCRATCH; ttt tmux rename FABLE X; echo "exit=$?"
 step "adopt: open --window on furniture restarts pane 1 with the harness and stamps it"
-ttt tmux open --window V-SCRATCH --harness sh; ttt tmux tree | grep -A1 'V-SCRATCH'
+ttt tmux open --window V-SCRATCH --harness; ttt tmux tree | grep -A1 'V-SCRATCH'
 step "now it can be messaged; adopting again is refused"
 ttt send V-SCRATCH --no-reply -- hello; ttt tmux wait V-SCRATCH --for 'ttt: 1 new from' --timeout 40
-ttt tmux open --window V-SCRATCH --harness sh; echo "exit=$?"
+ttt tmux open --window V-SCRATCH --harness; echo "exit=$?"
 step "borders: agent / titled helper / unstamped pane"
 ttt tmux open --pane tests --in V-SCRATCH -- sleep 60 >/dev/null; ttt tmux open --pane "" --in V-SCRATCH >/dev/null
 F="$(tmux show -wv -t "$(ttt whoami | sed -n 's/^session: //p')":V-SCRATCH pane-border-format)"
