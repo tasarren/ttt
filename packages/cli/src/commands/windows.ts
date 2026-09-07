@@ -9,7 +9,7 @@ import type { Handler } from "../context.ts"
 export const windows: Handler = async(argv, ctx) => {
   const { positionals } = parseCommandArgs(argv, {} as const)
   if (positionals.length > 0) throw usageError("usage: ttt windows")
-  const listed = await ctx.tmux.listWindows(ctx.session)
+  const listed = await ctx.tmux.inventory.listWindows(ctx.session)
   listed.sort((a, b) => a.name.localeCompare(b.name) || compareWindowIds(a.id, b.id))
   const winners = new Map<string, string>()
   for (const window of listed) {

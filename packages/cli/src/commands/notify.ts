@@ -81,11 +81,11 @@ export function formatNotification(summary: NotificationSummary): string {
  * back, as before.
  */
 async function pasteToTeammate(ctx: Context, target: string, window: TmuxWindow, text: string): Promise<void> {
-  const live = await ctx.tmux.listAllPanes().catch(() => [])
+  const live = await ctx.tmux.inventory.listAllPanes().catch(() => [])
   const binding = await ctx.board.resolvePane(target)
   const hit = binding && live.some((pane) => pane.pane === binding.paneId && pane.windowId === binding.windowId)
   if (binding && !hit) await ctx.board.prunePane(target)
-  await ctx.tmux.sendText(resolveAgentPane(live, window.id, hit ? binding : undefined), text)
+  await ctx.tmux.input.sendText(resolveAgentPane(live, window.id, hit ? binding : undefined), text)
 }
 
 export function formatUrgent(message: BoardMessage): string {

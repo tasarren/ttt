@@ -17,7 +17,7 @@ function fakeTmux(replies: Record<string, string> = {}, ancestors: number[] = []
 
 test("detectContext trusts PID ancestry over a stale TMUX_PANE", async() => {
   const { tmux, calls } = fakeTmux({ "list-panes": "work\tCODER\t@3\t%7\t0\t4242\n" }, [4242, 100])
-  assert.deepEqual(await tmux.detectContext("%9"), {
+  assert.deepEqual(await tmux.identity.detect("%9"), {
     session: "work", windowName: "CODER", windowId: "@3", paneId: "%7", via: "pid-walk",
   })
   assert.deepEqual(calls.map((args) => args[0]), ["list-panes"])
@@ -25,7 +25,7 @@ test("detectContext trusts PID ancestry over a stale TMUX_PANE", async() => {
 
 test("detectContext falls back to the TMUX_PANE hint when ancestry misses", async() => {
   const { tmux, calls } = fakeTmux({ "display-message": "work\tCODER\t@3\t%7\n" })
-  assert.deepEqual(await tmux.detectContext("%7"), {
+  assert.deepEqual(await tmux.identity.detect("%7"), {
     session: "work", windowName: "CODER", windowId: "@3", paneId: "%7", via: "pane-env",
   })
   assert.deepEqual(calls[0]!.slice(0, 4), ["display-message", "-p", "-t", "%7"])
@@ -33,12 +33,12 @@ test("detectContext falls back to the TMUX_PANE hint when ancestry misses", asyn
 
 test("detectContext refuses to guess without ancestry or pane", async() => {
   const { tmux } = fakeTmux({ "list-panes": "work\tCODER\t@3\t%7\t0\t4242\n" })
-  await assert.rejects(tmux.detectContext(undefined), /cannot tell which tmux pane/)
+  await assert.rejects(tmux.identity.detect(undefined), /cannot tell which tmux pane/)
 })
 
 test("listAllPanes parses live panes and skips malformed rows", async() => {
   const { tmux } = fakeTmux({ "list-panes": "work\tCODER\t@3\t%7\t0\t4242\nbroken\nwork\tX\t@4\t%8\t1\tnan\n" })
-  assert.deepEqual(await tmux.listAllPanes(), [
+  assert.deepEqual(await tmux.inventory.listAllPanes(), [
     { session: "work", window: "CODER", windowId: "@3", pane: "%7", index: 0, pid: 4242 },
   ])
 })
@@ -58,19 +58,19 @@ test("resolveAgentPane trusts a live binding, else the lowest-index pane, else t
 
 test("detectContext rejects an incomplete line", async() => {
   const { tmux } = fakeTmux({ "display-message": "work\tCODER\n" })
-  await assert.rejects(tmux.detectContext("%1"), /unexpected tmux context/)
+  await assert.rejects(tmux.identity.detect("%1"), /unexpected tmux context/)
 })
 
 test("listWindows parses names and ids, skipping malformed lines", async() => {
   const { tmux } = fakeTmux({ "list-windows": "A\t@1\nB\t@2\nbroken\n\n" })
-  assert.deepEqual(await tmux.listWindows("work"), [{ name: "A", id: "@1" }, { name: "B", id: "@2" }])
-  assert.deepEqual(await tmux.findWindow("work", "B"), { name: "B", id: "@2" })
-  assert.equal(await tmux.findWindow("work", "Z"), undefined)
+  assert.deepEqual(await tmux.inventory.listWindows("work"), [{ name: "A", id: "@1" }, { name: "B", id: "@2" }])
+  assert.deepEqual(await tmux.windows.find("work", "B"), { name: "B", id: "@2" })
+  assert.equal(await tmux.windows.find("work", "Z"), undefined)
 })
 
 test("findWindow picks the lowest window id when names collide", async() => {
   const { tmux } = fakeTmux({ "list-windows": "B\t@10\nB\t@2\nB\t@3\nA\t@1\n" })
-  assert.deepEqual(await tmux.findWindow("work", "B"), { name: "B", id: "@2" })
+  assert.deepEqual(await tmux.windows.find("work", "B"), { name: "B", id: "@2" })
 })
 
 test("winnersByName keeps the lowest id per window name", async() => {
@@ -98,7 +98,7 @@ test("compareWindowIds orders numerically, not lexicographically", async() => {
 
 test("sendText clears, pastes through a private buffer, presses Enter N times, and cleans up", async() => {
   const { tmux, calls } = fakeTmux()
-  await tmux.sendText("@2", "hello")
+  await tmux.input.sendText("@2", "hello")
   const verbs = calls.map((args) => args[0])
   assert.deepEqual(verbs, [
     "send-keys", "set-buffer", "paste-buffer", "send-keys", "send-keys", "delete-buffer",
@@ -111,8 +111,8 @@ test("sendText clears, pastes through a private buffer, presses Enter N times, a
 
 test("capture asks for the last N lines and joins wrapped lines on request", async() => {
   const { tmux, calls } = fakeTmux({ "capture-pane": "line\n" })
-  assert.equal(await tmux.capture("@2", 40, true), "line\n")
+  assert.equal(await tmux.screen.capture("@2", 40, true), "line\n")
   assert.deepEqual(calls[0], ["capture-pane", "-p", "-t", "@2", "-S", "-40", "-J"])
-  await tmux.capture("@2", 5, false)
+  await tmux.screen.capture("@2", 5, false)
   assert.deepEqual(calls[1], ["capture-pane", "-p", "-t", "@2", "-S", "-5"])
 })

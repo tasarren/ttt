@@ -25,7 +25,7 @@ export const broadcast: Handler = async(argv, ctx) => {
   let targets = positionals
   if (values.all) {
     if (positionals.length > 0) throw usageError("--all cannot be combined with target names")
-    const winners = winnersByName(await ctx.tmux.listWindows(ctx.session))
+    const winners = winnersByName(await ctx.tmux.inventory.listWindows(ctx.session))
     targets = [...winners.values()].filter((window) => !isSelf(ctx, window)).map((w) => w.name)
   }
   if (targets.length === 0) throw usageError("broadcast has no recipients")
@@ -104,7 +104,7 @@ async function deliver(
 }
 
 async function resolveTargets(ctx: Context, names: string[]): Promise<Map<string, TmuxWindow>> {
-  const winners = winnersByName(await ctx.tmux.listWindows(ctx.session))
+  const winners = winnersByName(await ctx.tmux.inventory.listWindows(ctx.session))
   const targets = new Map<string, TmuxWindow>()
   for (const name of names) {
     const window = winners.get(name)

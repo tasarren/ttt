@@ -57,7 +57,7 @@ export async function createContext(overrides: GlobalOverrides, binPath: string)
     // The override picks the mailbox, but detection still feeds receipt audit.
     // Detached processes (the notifier) detect nothing; fields stay absent.
     try {
-      const actual = await tmux.detectContext(settings.currentPane)
+      const actual = await tmux.identity.detect(settings.currentPane)
       actor = { window: actual.windowName, session: actual.session }
     } catch {
       actor = undefined
@@ -65,7 +65,7 @@ export async function createContext(overrides: GlobalOverrides, binPath: string)
   } else {
     let detected
     try {
-      detected = await tmux.detectContext(settings.currentPane)
+      detected = await tmux.identity.detect(settings.currentPane)
     } catch(error) {
       const reason = error instanceof Error ? error.message : String(error)
       throw new CliError(`ttt must run inside tmux, or pass --session SESSION --from NAME (${reason})`)
@@ -98,7 +98,7 @@ export async function createContext(overrides: GlobalOverrides, binPath: string)
 }
 
 export async function requireWindow(ctx: Context, name: string): Promise<TmuxWindow> {
-  const window = await ctx.tmux.findWindow(ctx.session, name)
+  const window = await ctx.tmux.windows.find(ctx.session, name)
   if (!window) throw new CliError(`tmux window does not exist: ${ctx.session}:${name}`)
   return window
 }
