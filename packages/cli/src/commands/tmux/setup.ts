@@ -115,6 +115,7 @@ export async function createSession(ctx: TmuxVerbContext, input: CreateSessionIn
       createdAt: new Date().toISOString(),
     })
   } catch(error) {
+    // Best-effort cleanup; the original failure is the one worth reporting.
     await ctx.tmux.sessions.kill(input.name).catch(() => undefined)
     throw new CliError(`setup of ${input.name} failed and the session was removed: ${error instanceof Error ? error.message : String(error)}`)
   }

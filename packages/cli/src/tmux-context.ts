@@ -30,6 +30,7 @@ export async function createTmuxContext(sessionOverride: string | undefined, bin
   const settings = await resolveSettings()
   const tmux = new Tmux(settings.tmux)
   await tmux.requireVersion()
+  // Outside tmux there is nothing to detect; `setup` is expected to run from there.
   const self = await tmux.identity.detect(settings.currentPane).catch(() => undefined)
   return { settings, tmux, session: sessionOverride ?? self?.session, self, binPath, version: TTT_VERSION }
 }

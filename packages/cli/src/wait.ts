@@ -55,6 +55,7 @@ export async function waitForMail(ctx: Context, input: WaitInput): Promise<WaitR
       if (left <= 0) return { outcome: WaitOutcome.TimedOut, messages: [] }
       await Promise.race([
         new Promise<void>((resolve) => { poke = resolve }),
+        // An abort just ends the nap early; the loop head reports it.
         sleep(Math.min(POLL_MS, left), undefined, { signal: controller.signal }).catch(() => undefined),
       ])
       poke = undefined

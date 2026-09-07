@@ -48,6 +48,7 @@ async function inspect(harness: string, path: string): Promise<SkillInstall> {
     const info = await lstat(path)
     if (info.isSymbolicLink()) link = await readlink(path)
   } catch {
+    // Not installed for this harness; the common case, not an error.
     return { harness, path, state: SkillState.Missing, version: undefined }
   }
   const version = await readVersion(join(path, "SKILL.md"))
@@ -55,6 +56,7 @@ async function inspect(harness: string, path: string): Promise<SkillInstall> {
   try {
     await stat(path)
   } catch {
+    // lstat saw the link, stat cannot follow it: the target is gone.
     return { harness, path, state: SkillState.Broken, version: undefined, target: link }
   }
   return { harness, path, state: SkillState.Symlink, version, target: link }
@@ -65,6 +67,7 @@ async function readVersion(file: string): Promise<string | undefined> {
     const text = await readFile(file, "utf8")
     return /^version:\s*(\S+)\s*$/m.exec(text.split("\n---")[0] ?? "")?.[1]
   } catch {
+    // A skill directory without a readable SKILL.md reports as unversioned; doctor says so.
     return undefined
   }
 }

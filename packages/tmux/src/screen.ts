@@ -65,6 +65,7 @@ export class Screen {
       const line = text.split("\n").find((candidate) => input.pattern.test(candidate))
       if (line !== undefined) return { outcome: WaitOutcome.Matched, line }
       if (Date.now() >= deadline) return { outcome: WaitOutcome.TimedOut }
+      // An abort just ends the nap early; the loop head reports it.
       await sleep(Math.min(pollMs, Math.max(0, deadline - Date.now())), undefined, { signal: input.signal }).catch(() => undefined)
     }
   }
