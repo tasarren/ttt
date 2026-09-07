@@ -187,6 +187,14 @@ Exit codes: `0` ok, `1` runtime failure (window missing, board error), `2` bad u
 - **Replace and expiry.** `--replace KEY` marks your earlier unread messages with the same KEY as
   superseded, so a busy recipient reads only the latest status. `--ttl SECONDS` lapses unread receipts
   to `superseded` after the deadline instead. Both keep history; both count as terminal for `prune`.
+- **Badges.** After every command that changes receipts (send, reply, broadcast, read, ack, and the
+  detached notifier), ttt mirrors each mailbox's unread counter into the window option `@ttt_unread`
+  of the window with that name (lowest id wins on duplicates; a count of zero unsets the option).
+  Attached clients' status bars redraw immediately. Read-only commands (inbox, status, thread,
+  capture, windows, whoami, prune, migrate) leave badges alone. The mirror is best-effort: a failure
+  prints one line (`ttt: badge sync skipped: ...`) and the command still succeeds, and a stale badge
+  self-heals on anyone's next command. The default status line starts rendering the badge with
+  `ttt tmux setup`; until then, `tmux display -p -t <window> '#{@ttt_unread}'` shows the value.
 - **Reads are cheap.** `ttt read` prints a compact batch: one header line per message, then the body.
   When the mailbox is busy, triage first (`--headers-only`, `inbox --detail`): headers and previews only.
 
@@ -208,7 +216,8 @@ Unknown keys are rejected so typos surface immediately. `TTT_HOME` moves the who
     "inputSettleMs": 800,   // after clearing the target's input line
     "postPasteMs": 500,     // after the paste and between Enter presses
     "enterPresses": 3,      // slow TUIs swallow the first Enter
-    "postSendMs": 300
+    "postSendMs": 300,
+    "badges": true          // mirror unread counts into the @ttt_unread window option
   }
 }
 ```
@@ -227,6 +236,7 @@ Unknown keys are rejected so typos surface immediately. `TTT_HOME` moves the who
 | `tmux.postPasteMs` | integer | `500` | See above. |
 | `tmux.enterPresses` | integer | `3` | See above. |
 | `tmux.postSendMs` | integer | `300` | See above. |
+| `tmux.badges` | boolean | `true` | Mirror unread counts into the `@ttt_unread` window option after each command. |
 
 <!-- DRAFT (plan 7/8/9): Tmux setup, Layouts, Waiting for messages — pending FABLE's step confirmations; do not merge until unmarked. -->
 

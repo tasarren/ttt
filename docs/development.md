@@ -16,6 +16,9 @@ Ownership rules:
 
 - `@ttt/board` never imports tmux. Delivering text is a callback the CLI passes in
   (`board.deliverNotification(target, token, deliver)`, `board.deliverUrgent(message, recipient, deliver)`).
+  Its `unreadCounts()` is a lock-free read of the `state/<name>.unread.json` counters, feeding the
+  CLI's badge mirror.
+- Badges live in the CLI (`packages/cli/src/badges.ts`), the only place holding both board and tmux.
 - `@ttt/migrations` orchestrates `@ttt/board` over a session root and owns the version ledger
   (`state/schema.json`). Steps are idempotent; unknown newer versions are a hard error, never a fallback.
 - `@ttt/tmux` never reads settings or the board. It takes `TmuxOptions` and an injectable command
@@ -72,6 +75,7 @@ that runs the current source. Edit, save, run: no build. `publishConfig.bin` swa
    lowest-index pane, else the window id -- and marks the receipts notified. A newer marker means a
    newer child owns the burst; the old one exits silently. A failed paste cancels the dead token and re-arms
    a live notifier.
+5. `main.ts` runs `syncBadges(ctx)` for every non-read-only command (`packages/cli/src/badges.ts`).
 
 Context creation stamps `@ttt_agent` with the caller's window name onto the caller's pane whenever
 identity came from the PID walk, and clears sibling stamps in that window (at most one agent pane

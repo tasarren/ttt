@@ -76,6 +76,7 @@ Data:
 | `listSessions` | `() => Promise<TmuxSession[]>` | Every session on the server. |
 | `hasSession` | `(name: string) => Promise<boolean>` | Membership check. |
 | `listWindows` | `(session: string) => Promise<TmuxWindow[]>` | Windows of one session, with ids. |
+| `listBadges` | `(session: string) => Promise<Array<TmuxWindow & { unread: number }>>` | Windows with the unread badge each currently shows (`@ttt_unread`, 0 when unset), in one round trip. |
 | `listAllPanes` | `() => Promise<LivePane[]>` | Every live pane on the server (used by identity detection). |
 | `tree` | `(session: string) => Promise<TreeSession>` | Session > Window > Pane in tmux order; panes sorted by index. |
 
@@ -84,7 +85,7 @@ Data:
 | Export | Kind | Purpose |
 |---|---|---|
 | `compareWindowIds` | function | `(a, b) => number` — numeric order of `@n`; non-numeric ids fall back to string order. |
-| `winnersByName` | function | `(windows: TmuxWindow[]) => Map<string, TmuxWindow>` — lowest id wins per name; duplicate names share one mailbox. |
+| `winnersByName` | function | `<W extends TmuxWindow>(windows: W[]) => Map<string, W>` — lowest id wins per name; duplicate names share one mailbox. |
 | `OpenWindowInput` | type | `{ session, name, cwd?, command? }`. |
 | `Windows` | class | `(run, inventory)`. Window lifecycle and lookup; names are resolved here and nowhere else. |
 
