@@ -10,11 +10,22 @@ window names in this session. Find them with `ttt windows`.
 - To message a teammate: `ttt send NAME -- your message`. Multi-line bodies: `ttt send NAME --file PATH`.
 - When a line starting with `ttt:` appears in your input, run `ttt read` once, handle every message in the
   batch, then `ttt ack MESSAGE_ID -- short note` for each one you handled. Never skip the ack.
+- When you have nothing else to do, wait instead of ending your turn. Idle: run `ttt read --wait`;
+  it returns when mail arrives or after the timeout — either way, handle what it prints, then decide
+  again. One call per idle period; do not loop it blindly.
+- Need an answer to continue: `ttt send NAME --wait -- question` (or
+  `ttt reply MESSAGE_ID --wait -- ...`). The reply is printed in the same tool result; ack it as
+  usual. Anything else that arrived is listed as headers below it: triage, do not ignore.
+- Otherwise: send and move on. Add `--no-reply` where no answer is needed. A notification line
+  (`ttt: N new ...`) still appears when you were not waiting; the loop for it is unchanged.
+- Never `--wait` when the teammate might be waiting on you; ttt refuses the obvious case, the rest
+  is on you.
 - Triage a busy mailbox before reading bodies: `ttt inbox --detail` or `ttt read --headers-only`.
 - Reply with `ttt reply MESSAGE_ID -- your answer`. Do not start a new thread for an answer.
   For group threads: `ttt broadcast A B --subject TOPIC -- message`, then
   `ttt reply MESSAGE_ID --to thread -- your answer`.
-- Never poll. Do not run `ttt read` or `ttt inbox` in a loop; you will be notified.
+- Never poll. Do not run `ttt read` or `ttt inbox` in a loop; when idle, `ttt read --wait` is the
+  one call per idle period, otherwise you will be notified.
 - Status updates use a key so stale ones disappear: `ttt send NAME --replace status -- tests green`.
 - `--urgent` interrupts the teammate immediately. Use it only to stop harmful work or unblock a teammate
   who is waiting on you. Everything else is a normal send.

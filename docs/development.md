@@ -82,6 +82,25 @@ identity came from the PID walk, and clears sibling stamps in that window (at mo
 per window). Best-effort: a failed stamp never fails the command. Commands identified via
 `pane-env` or `--session`/`--from` never stamp.
 
+## Blocking reads (`--wait`)
+
+`--wait` on `send`/`reply`/`broadcast` blocks until something lands in that thread; `read --wait`
+blocks until anything unread arrives. The loop lives in `packages/cli/src/wait.ts`, the send-side
+plumbing (`awaitReply`, `refuseMutualWait`) in `commands/send.ts`, presence in `board.ts`
+(`announcePresence`, `presence`, `presenceUnlocked`).
+
+- The waiter arms `fs.watch` on `mailboxes/<name>/` first, then writes its presence file
+  `state/<name>.waiting.json` (`{ pid, since, expect: "any" | { threadId } }`), then scans the
+  mailbox once — no lost-wake-up window. A 2 s poll is the inotify safety net; the file is
+  withdrawn in `finally`, and SIGINT/SIGTERM share the timeout's abort path.
+- `board.send` checks presence under the recipient's mailbox lock: a live pid (`kill(0)`) younger
+  than 10 minutes means direct delivery — no notification marker, no paste, and the receipt notes
+  `(NAME waiting: delivered directly)`. Otherwise the stale presence file is removed and the normal
+  path runs, so a crashed waiter's mail is still delivered by the notifier; nothing is lost.
+- `board.send` returns `waiting: string[]` for the queued-line suffix; `refuseMutualWait` turns a
+  mutual wait (target waiting on a thread you participate in) into exit 1. `ReadOptions.only`
+  restricts a read to given ids, so only the awaited reply is marked read.
+
 `--urgent` skips the marker: the CLI pastes the formatted message right away through
 `board.deliverUrgent`, which marks the receipt notified but leaves it unread.
 

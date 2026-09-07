@@ -157,6 +157,8 @@ Message options (for `send`, `reply`, `broadcast`):
 | `--replace KEY` | Supersede your own older *unread* messages to that recipient that carry the same KEY. Use it for status updates. |
 | `--subject TEXT` | Thread subject, set once on the root message. `--subject` on a reply is rejected. |
 | `--ttl SECONDS` | Self-expiring message: unread receipts lapse to `superseded` after SECONDS (max 30 days). History is kept. Expiry settles on next mailbox access. |
+| `--wait` | Block until a reply lands in the thread, then print it in full (and mark it read). See [Waiting for messages](#waiting-for-messages). |
+| `--timeout SECONDS` | With `--wait`: give up after SECONDS (1..`wait.maxSeconds`, default `wait.seconds`). Timeout is exit 0. |
 | `--file PATH` | Read the body from PATH. |
 
 Exit codes: `0` ok, `1` runtime failure (window missing, board error), `2` bad usage or bad settings.
@@ -212,6 +214,10 @@ Unknown keys are rejected so typos surface immediately. `TTT_HOME` moves the who
   "boardRoot": "~/.ttt/boards",
   "capture": { "lines": 40, "maxLines": 500 },
   "lock": { "timeoutMs": 10000, "staleMs": 60000 },
+  "wait": {
+    "seconds": 120,         // default --timeout for --wait
+    "maxSeconds": 300       // upper bound for --timeout
+  },
   "tmux": {
     "inputSettleMs": 800,   // after clearing the target's input line
     "postPasteMs": 500,     // after the paste and between Enter presses
@@ -232,13 +238,15 @@ Unknown keys are rejected so typos surface immediately. `TTT_HOME` moves the who
 | `capture.maxLines` | integer >= 1 | `500` | Upper bound for `--lines`. |
 | `lock.timeoutMs` | integer | `10000` | How long a command waits for a busy mailbox. |
 | `lock.staleMs` | integer | `60000` | A lock older than this is treated as abandoned. |
+| `wait.seconds` | integer >= 1 | `120` | Default `--timeout` for `--wait`. |
+| `wait.maxSeconds` | integer >= 1 | `300` | Upper bound for `--timeout`; keeps an agent from freezing indefinitely. |
 | `tmux.inputSettleMs` | integer | `800` | See above. |
 | `tmux.postPasteMs` | integer | `500` | See above. |
 | `tmux.enterPresses` | integer | `3` | See above. |
 | `tmux.postSendMs` | integer | `300` | See above. |
 | `tmux.badges` | boolean | `true` | Mirror unread counts into the `@ttt_unread` window option after each command. |
 
-<!-- DRAFT (plan 7/8/9): Tmux setup, Layouts, Waiting for messages — pending FABLE's step confirmations; do not merge until unmarked. -->
+<!-- DRAFT (plan 7/9): Tmux setup, Layouts, Tmux commands — pending FABLE's step confirmations; do not merge until unmarked. -->
 
 ## Tmux setup
 
@@ -334,14 +342,28 @@ restore only.
 
 | Command | Effect |
 |---|---|
-| `ttt send B --wait [--timeout S] -- question` | Queue the message, then block until B replies or acks. Prints the awaited reply first, then `also unread: N` headers. |
-| `ttt reply MESSAGE_ID --wait [--timeout S] -- answer` | Same, in-thread. |
-| `ttt read --wait [--timeout S]` | Block until a message arrives, then print the batch. This is the recommended idle state. |
+| `ttt send B --wait [--timeout SECONDS] -- question` | Print the usual `queued ...` line, then block until a message lands in this thread. That message prints in full (same format as `ttt read`) and only it is marked read, followed by `1 message shown, N unread messages still unread.` and a headers block for the rest, which stay unread. |
+| `ttt reply MESSAGE_ID --wait [--timeout SECONDS] -- answer` | Same, in-thread. |
+| `ttt broadcast ... --wait` | Same; wakes on the first reply in the thread. |
+| `ttt read --wait [--timeout SECONDS]` | Block until anything is unread, then print the batch exactly like `ttt read` (marks read). The recommended idle state. Cannot combine with `--peek`, `--latest`, or `--headers-only`. |
 
-The wait ends after `--timeout` seconds (default 120, hard-capped by the `waitMaxSeconds` setting
-at 300) with `no reply within S; N unread` and exit 0, so an agent surfaces periodically and
-re-decides. Sending `--wait` to a teammate who is already waiting on you is refused with exit 1 —
-one of you must go first.
+`--timeout` is an integer between 1 and `wait.maxSeconds` (default `wait.seconds`, 120; cap 300); out
+of range exits 2. A timeout is not an error: exit 0 with `ttt: no reply within Ns; M unread.`
+(send/reply) or `ttt: nothing arrived within Ns; M unread.` (read). An interrupted wait (SIGINT/
+SIGTERM) is also exit 0. `--wait` with `--no-reply` is a usage error, and so is `--timeout` without
+`--wait`.
+
+While a recipient is blocked in `--wait`, its message is delivered directly: no batching window, no
+paste into the window. The queued line shows it: `queued ttt-2026... -> B (B waiting: delivered
+directly)`. With several recipients only the waiting ones are listed; the others get the normal
+batch or paste.
+
+One of you must go first: `send --wait`/`reply --wait` to a teammate who is already waiting on a
+thread you participate in fails with exit 1, `B is already waiting on a reply from you (thread
+ttt-...); answer first`. A plain `read --wait` never blocks anyone.
+
+For harnesses: a `--wait` call stays open for the whole wait. If your harness caps tool-call time
+below 300 seconds, pass a smaller `--timeout`.
 
 ## Identity
 

@@ -17,12 +17,21 @@ tmux window name. Teammates are the other window names; list them with `ttt wind
 4. Reply in-thread when an answer is owed: `ttt reply MESSAGE_ID -- your answer`. Triage tags it: `(needs reply)` means open the batch and answer, `(no-reply)` means ack and move on.
    Never start a new thread for an answer.
 
+When you have nothing else to do, wait instead of ending your turn:
+
+- Idle: run `ttt read --wait`. It returns when mail arrives or after the timeout; either way handle what it prints, then decide again. Do not loop it blindly; one call per idle period.
+- Need an answer to continue: `ttt send NAME --wait -- question` (or `ttt reply ID --wait -- ...`). The reply is printed in the same tool result; ack it as usual. Anything else that arrived is listed as headers below it: triage, do not ignore.
+- Otherwise: send and move on. `--no-reply` where no answer is needed.
+- A notification line `ttt: N new ...` still appears when you were not waiting; the loop for it is unchanged.
+- Never `--wait` when the teammate might be waiting on you (ttt refuses the obvious case; the rest is on you).
+
 ## Commands
 
 | Need | Run |
 |---|---|
-| Message a teammate | `ttt send NAME -- your message` (`--file PATH` for multi-line) |
-| Reply | `ttt reply MESSAGE_ID -- your answer` (`--to receiver` to widen, `--to thread` for group threads) |
+| Message a teammate | `ttt send NAME -- your message` (`--file PATH` for multi-line; add `--wait` to block until the reply) |
+| Idle: wait for mail to come to you | `ttt read --wait` (returns on arrival or at the timeout) |
+| Reply | `ttt reply MESSAGE_ID -- your answer` (`--to receiver` to widen, `--to thread` for group threads; add `--wait` to block until the reply lands) |
 | Group thread | `ttt broadcast A B --subject TOPIC -- message`, then `ttt reply ID --to thread -- answer` |
 | Several recipients | `ttt broadcast A B -- message`, or `--all` for every other window |
 | Triage a busy mailbox (stays unread) | `ttt inbox --detail`, `ttt read --headers-only`, `ttt inbox --detail --from NAME` |
@@ -32,7 +41,7 @@ tmux window name. Teammates are the other window names; list them with `ttt wind
 | Peek at a teammate's screen | `ttt capture NAME --lines 40` (their agent pane, never the focused one; `--grep PATTERN`, or `--around PATTERN --context N`; TUI chrome is cleaned unless `--raw`) |
 | Who/where am I (session, window, board) | `ttt whoami` (check `via:`; wrong window = broken runner env) |
 
-<!-- DRAFT (plan 8/9): ttt tmux table, wait rule, raw-tmux rule — pending FABLE's step confirmations. -->
+<!-- DRAFT (plan 9): ttt tmux table and the raw-tmux rule — pending FABLE's step confirmations. -->
 
 | Need | Run |
 |---|---|
@@ -45,9 +54,7 @@ tmux window name. Teammates are the other window names; list them with `ttt wind
 
 ## Rules
 
-- Never poll. Do not run `ttt read` or `ttt inbox` in a loop; you will be notified.
-- Need the answer to continue → `ttt send NAME --wait -- question`. Idle → `ttt read --wait`.
-  Otherwise send and move on. Never loop `read --wait` blindly; one call per idle period.
+- Never poll. Do not run `ttt read` or `ttt inbox` in a loop; when idle, `ttt read --wait` is the one call per idle period, otherwise you will be notified.
 - Use `ttt tmux` verbs, never raw `tmux`, so identity and setup stay consistent.
 - `--urgent` interrupts the teammate now. Use it only to stop harmful work or unblock a
   teammate waiting on you. Everything else is a normal send.
