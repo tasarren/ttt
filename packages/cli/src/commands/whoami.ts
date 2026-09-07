@@ -11,6 +11,7 @@ export const whoami: Handler = async(argv, ctx) => {
   const lines = [`session: ${ctx.session}`, `window: ${ctx.senderName}`]
   if (ctx.senderId) lines.push(`id: ${ctx.senderId}`)
   lines.push(`via: ${ctx.via}`)
+  if (ctx.senderPane) lines.push(`pane: ${ctx.senderPane}${ctx.claimed ? " (claimed now: this pane is where the window's messages land)" : ""}`)
   lines.push(`board: ${join(ctx.settings.boardRoot, ctx.session)}`)
   process.stdout.write(`${lines.join("\n")}\n`)
 }

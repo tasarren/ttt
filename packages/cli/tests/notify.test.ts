@@ -44,6 +44,7 @@ test("a failed paste re-arms a live marker instead of stranding the burst", asyn
     senderName: "ttt",
     senderId: "",
     senderPane: "",
+    claimed: false,
     actor: undefined,
     via: "override",
     tmux: failingTmux(),

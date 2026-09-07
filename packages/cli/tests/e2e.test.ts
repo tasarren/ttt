@@ -220,7 +220,8 @@ test("delivery targets the stamped pane; a window without one is furniture and c
   await ttt("B", "tmux", "press", "A.1", "Enter")
   await paneShows("A", "echo furniture")
   // Running ttt from the pane claims it again; a focused foreign pane must not steal the delivery.
-  await ttt("A", "whoami")
+  assert.match(await ttt("A", "whoami"), /^pane: %\d+ \(claimed now: this pane is where the window's messages land\)$/m)
+  assert.match(await ttt("A", "whoami"), /^pane: %\d+$/m, "a second run has nothing to claim")
   assert.equal((await tmux("display-message", "-p", "-t", panes["A"]!, "#{@ttt_agent}")).trim(), "A", "pane-env identity stamps too")
   const focusPane = (await tmux("split-window", "-t", `${SESSION}:A`, "-P", "-F", "#{pane_id}", "sh")).trim()
   await tmux("select-pane", "-t", focusPane)
@@ -411,11 +412,13 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
       await sleep(100)
     }
     assert.equal((await server("display-message", "-p", "-t", unnamed, "#{@ttt_agent}")).trim(), "", "furniture is not stamped")
+    assert.match(await server("display-message", "-p", "-t", unnamed, "#{T:window-status-format}"), /^\d+:W-1·/, "the tab marks a window without an agent")
     assert.match(await outside("--session", "team", "tmux", "rename", "W-1", "SCRATCH"), /^renamed W-1 to SCRATCH @\d+$/)
     await assert.rejects(outside("--session", "team", "tmux", "rename", "SCRATCH", "THIRTEEN-CHAR"), /longer than 12 characters/)
     // Adopting furniture: open --window on a stampless window restarts its pane with the harness and stamps it.
     assert.match(await outside("--session", "team", "tmux", "open", "--window", "SCRATCH", "--harness", "sh"), /^adopted SCRATCH @\d+ pane %\d+ \(ready after \d+\.\ds\)$/)
     assert.equal((await server("display-message", "-p", "-t", unnamed, "#{@ttt_agent} #{@ttt_harness}")).trim(), "SCRATCH sh")
+    assert.match(await server("display-message", "-p", "-t", unnamed, "#{T:window-status-format}"), /^\d+:SCRATCH[^·]/, "the mark goes once a pane is stamped")
     await assert.rejects(outside("--session", "team", "tmux", "rename", "SCRATCH", "OTHER"), /SCRATCH is a teammate; its name is its identity and mailbox/)
     await assert.rejects(outside("--session", "team", "tmux", "open", "--window", "SCRATCH", "--harness", "sh"), /window already exists: team:SCRATCH \(a teammate lives there/)
     await outside("--session", "team", "tmux", "close", "SCRATCH")

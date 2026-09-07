@@ -14,7 +14,7 @@ export { Panes, SplitDirection, parsePaneAddress, resolveAgentPane } from "./pan
 export type { PaneAddress, PaneStamp, SplitPaneInput } from "./panes.ts"
 export { DEFAULT_COMMAND_TIMEOUT_MS, TmuxError, TmuxFailure, classifyFailure, createRunner, parseVersion, runTmux, versionAtLeast } from "./runner.ts"
 export type { TmuxRunner, TmuxServer } from "./runner.ts"
-export { AGENTS_PROFILE, PANE_BORDER_FORMAT, PROFILES, SetupMode, WINDOW_STATUS_CURRENT_FORMAT, WINDOW_STATUS_FORMAT } from "./profile.ts"
+export { AGENTS_PROFILE, FURNITURE_MARK, PANE_BORDER_FORMAT, PROFILES, SetupMode, WINDOW_STATUS_CURRENT_FORMAT, WINDOW_STATUS_FORMAT } from "./profile.ts"
 export type { ProfileOption, SetupProfile } from "./profile.ts"
 export { Screen, WaitOutcome } from "./screen.ts"
 export { Sessions } from "./sessions.ts"

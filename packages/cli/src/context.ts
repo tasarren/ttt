@@ -23,6 +23,8 @@ export interface Context {
   via: DetectionSource | "override"
   /** Detected performer for receipt audit; undefined when undetectable (detached). */
   actor: Actor | undefined
+  /** True when this invocation moved the window's agent stamp onto its own pane. */
+  claimed: boolean
   tmux: Tmux
   board: Board
   /** Path of this executable, used to spawn the detached notifier. */
@@ -49,6 +51,7 @@ export async function createContext(overrides: GlobalOverrides, binPath: string)
   let senderPane = ""
   let via: Context["via"]
   let actor: Actor | undefined
+  let claimed = false
   if (overrides.session !== undefined) {
     if (overrides.from === undefined) throw usageError("--session needs --from NAME")
     session = overrides.session
@@ -83,8 +86,13 @@ export async function createContext(overrides: GlobalOverrides, binPath: string)
     // shell, never the active pane). Awaited so a short command cannot exit before the
     // stamp lands; best-effort so a failed stamp never fails the command.
     await tmux.inventory.listAllPanes()
-      .then((live) => tmux.panes.stamp(detected.paneId, live, { agent: detected.windowName }))
-      .catch(() => undefined)
+      .then(async(live) => {
+        claimed = live.find((pane) => pane.pane === detected.paneId)?.agent !== detected.windowName
+        await tmux.panes.stamp(detected.paneId, live, { agent: detected.windowName })
+      })
+      .catch(() => {
+        claimed = false
+      })
   }
 
   try {
@@ -101,7 +109,7 @@ export async function createContext(overrides: GlobalOverrides, binPath: string)
     lock: settings.lock,
   })
   void board.sweepTempFiles()
-  return { settings, session, senderName, senderId, senderPane, via, actor, tmux, board, binPath }
+  return { settings, session, senderName, senderId, senderPane, via, actor, claimed, tmux, board, binPath }
 }
 
 export async function requireWindow(ctx: Context, name: string): Promise<TmuxWindow> {

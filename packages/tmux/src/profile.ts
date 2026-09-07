@@ -29,9 +29,15 @@ export interface SetupProfile {
  */
 export const PANE_BORDER_FORMAT = `#{?${UserOption.Agent},#{${UserOption.Agent}}#{?${UserOption.Harness}, #{${UserOption.Harness}},},#{?${UserOption.Title},#{${UserOption.Title}},pane #{pane_index} · #{pane_current_command}}} #{s|$HOME|~|:pane_current_path}#{?pane_dead, [dead],}`
 
-/** Window tabs render the unread badge from `@ttt_unread` (unset when zero). */
-export const WINDOW_STATUS_FORMAT = `#I:#W#{?${UserOption.Unread},[#{${UserOption.Unread}}],}#{?window_flags,#{window_flags}, }`
-export const WINDOW_STATUS_CURRENT_FORMAT = `#[bold]#I:#W#{?${UserOption.Unread},[#{${UserOption.Unread}}],}#{?window_flags,#{window_flags}, }#[default]`
+/**
+ * Window tabs: a trailing `·` when no pane in the window is stamped (furniture: nobody reads a
+ * mailbox there; `#{P:...}` joins every pane's stamp, empty means none), then the unread badge
+ * from `@ttt_unread` (unset when zero).
+ */
+export const FURNITURE_MARK = "·"
+const TAB = `#I:#W#{?#{P:#{${UserOption.Agent}}},,${FURNITURE_MARK}}#{?${UserOption.Unread},[#{${UserOption.Unread}}],}#{?window_flags,#{window_flags}, }`
+export const WINDOW_STATUS_FORMAT = TAB
+export const WINDOW_STATUS_CURRENT_FORMAT = `#[bold]${TAB}#[default]`
 
 function session(key: string, value: string, why: string, mode: SetupMode = SetupMode.Pin): ProfileOption {
   return { scope: OptionScope.Session, key, value, mode, why }
@@ -70,8 +76,8 @@ export const AGENTS_PROFILE: SetupProfile = {
     session("bell-action", "none", "bells from panes are ignored"),
     session("status", "on", "badges need a status line"),
     // Window options on tmux >= 3.0 even though they shape the session's status line.
-    window("window-status-format", WINDOW_STATUS_FORMAT, "tabs show the unread badge"),
-    window("window-status-current-format", WINDOW_STATUS_CURRENT_FORMAT, "the current tab shows the badge too"),
+    window("window-status-format", WINDOW_STATUS_FORMAT, "tabs show the unread badge and mark windows without an agent"),
+    window("window-status-current-format", WINDOW_STATUS_CURRENT_FORMAT, "the current tab shows the badge and the mark too"),
     session("aggressive-resize", "on", "captures wrap at the attached client's width, not the smallest client ever seen", SetupMode.Assert),
     server("escape-time", "10", "TUIs in panes see Escape promptly", SetupMode.PinLowerOnly),
     server("focus-events", "on", "TUI harnesses expect focus in/out events"),
