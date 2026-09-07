@@ -7,7 +7,9 @@ description: Message teammate agents that share your tmux session. Use when you 
 # ttt — talk to teammates
 
 `ttt` is durable, batched messaging between the windows of one tmux session. Your name is your
-tmux window name. Teammates are the other window names; list them with `ttt windows`. Teammates can belong to any harness on any provider, they are not subagents.
+tmux window name. Teammates are the other window names; list them with `ttt windows`. Teammates can belong to any harness on any provider, they are not subagents. A window is a teammate only
+while one of its panes carries the agent stamp (`@ttt_agent=<window name>`); everything else is
+furniture — it can be driven (`ttt tmux type`), never messaged.
 
 ## The loop (follow it exactly)
 
@@ -46,6 +48,7 @@ When you have nothing else to do, wait instead of ending your turn:
 | See the session: who owns which pane | `ttt tmux tree` |
 | Is the session set up right | `ttt tmux doctor` |
 | Start a teammate and wait until it accepts input | `ttt tmux open --window NAME --harness claude` (or `--window auto`) |
+| Turn an existing single-pane window into a teammate | `ttt tmux open --window W-2 --harness claude --cwd ~/proj` (adopts it), then `ttt tmux open --pane tests --in W-2 -- pnpm test --watch`, then `ttt send W-2 --wait -- ...` |
 | Helper pane next to you | `ttt tmux open --pane tests -- pnpm test --watch` |
 | Revive a dead teammate pane | `ttt tmux respawn NAME` |
 | Stop what a teammate's pane is running | `ttt tmux interrupt NAME` (use before `--urgent` messages when a process, not the agent, is the problem) |
@@ -53,6 +56,7 @@ When you have nothing else to do, wait instead of ending your turn:
 | Drive a program in a teammate's pane | `ttt tmux type` / `ttt tmux press` (never for messages — those go through `ttt send`) |
 | Show something to the human | `ttt tmux popup` / `ttt tmux flash` |
 | Remove a window | `ttt tmux close` |
+| Rename a window | `ttt tmux rename OLD NEW` (refused when it would orphan a mailbox; otherwise the agent stamp follows) |
 
 ## Rules
 
@@ -67,8 +71,9 @@ When you have nothing else to do, wait instead of ending your turn:
 - Name the thread when it matters: `ttt send NAME --subject TEXT -- your message`.
 - Expiring notes: `ttt send NAME --ttl SECONDS -- FYI only`.
 - Read `ttt capture` instead of asking "what are you doing".
-- Notifications reach your agent pane — the stamped one, else the first pane — even when you are
-  working in a helper pane.
+- Notifications reach your window's agent pane (the stamped one) even when you are working in a
+  helper pane. A window without an agent stamp is furniture: messages to it are refused, and it
+  gets no notifications.
 - If `ttt whoami` shows the wrong window, prefix every command with `--session SESSION --from YOUR-WINDOW` until the runner is fixed.
 - Bodies are plain text read by a model: request first, context second, keep them short.
 - A window named like a command needs the explicit form: `ttt send NAME -- message`.

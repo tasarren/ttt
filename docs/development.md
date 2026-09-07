@@ -70,8 +70,9 @@ that runs the current source. Edit, save, run: no build. `publishConfig.bin` swa
 (`packages/cli/tsdown.config.ts`, `deps.alwaysBundle`).
 
 Verify inside your own session with `ttt`, not with ad-hoc tmux servers: `.orchestrator/scripts/`
-holds `verify-open.sh` and `verify-teammate-flow.sh`, run from inside the live ttt session
-(`sh .orchestrator/scripts/verify-open.sh`). They exercise the real verbs end to end, prefix their
+holds `verify-open.sh`, `verify-teammate-flow.sh`, and `verify-furniture.sh`, run from inside the
+live ttt session (`sh .orchestrator/scripts/verify-furniture.sh`). They exercise the real verbs end
+to end, prefix their
 windows with `V-`, and clean up after themselves via a trap.
 
 ## How a normal send flows
@@ -86,8 +87,8 @@ windows with `V-`, and clean up after themselves via a trap.
    `ttt --session S --from ttt _notify --target T --token K`.
 4. The child heartbeats the marker through the batching window, then (if the token still matches) pastes
    the one-line summary into the target's agent pane -- resolved by `resolveAgentPane` in
-   `packages/tmux/src/panes.ts`: the pane stamped `@ttt_agent` with the window name, else the
-   lowest-index pane, else the window id -- and marks the receipts notified. A newer marker means a
+   `packages/tmux/src/panes.ts`: the pane stamped `@ttt_agent` with the window name, `undefined` on
+   furniture, which refuses the paste (exit 1) -- and marks the receipts notified. A newer marker means a
    newer child owns the burst; the old one exits silently. A failed paste cancels the dead token and re-arms
    a live notifier.
 5. `main.ts` runs `syncBadges(ctx)` for every non-read-only command (`packages/cli/src/badges.ts`).
@@ -163,11 +164,20 @@ inside a pane (`TMUX`, `TMUX_PANE`, plus a temp `TTT_HOME` with `notifySeconds: 
 
 ## tmux verb files
 
+- `packages/cli/src/context.ts` builds the `Context`; `Context.claimed` says whether identity
+  resolution moved the agent stamp to the caller's pane (the run that prints `(claimed now)` in
+  `whoami`). `requireTeammate(ctx, name)` resolves a messaging target to `{ window, paneId }` via
+  `resolveAgentPane` and throws the furniture refusal on `undefined`.
 - `commands/tmux/target.ts` holds the shared pane truth: `requireSession`, `resolveAgentTarget`
-  (the stamped agent pane, else the lowest-index pane, never the active pane), and `requireTypable`
-  (the two refusals: dead pane, `synchronize-panes` on).
-- `lifecycle.ts` is open/close/split/respawn; `typing.ts` is type/press/interrupt; `screen.ts` is
-  wait/popup/flash. The interactive setup wizard lives in `setup.ts`.
+  (the stamped agent pane only — furniture is refused with `furnitureMessage`), `resolvePaneTarget`
+  (`parsePaneAddress`: NAME -> agent pane, NAME.N -> `pane_index`, %id; bare NAME falls back to the
+  single pane of an unstamped window), and `requireTypable` (the two refusals: dead pane,
+  `synchronize-panes` on).
+- `lifecycle.ts` is open/close/rename/split/respawn; `typing.ts` is type/press/interrupt; `screen.ts`
+  is wait/popup/flash. The interactive setup wizard lives in `setup.ts`.
+- `normalize-window.ts` (the hook verb) pins the profile on a new window and, when tmux named the
+  window itself, renames it `W-N` — `FURNITURE_STEM` in `names.ts`, lowest free N against live
+  windows and mailbox directories. It never stamps.
 - `names.ts` owns window names: `MAX_WINDOW_NAME` (12, fits the bar), `checkWindowName` (charset
   plus the length error), `generateWindowName` (`HARNESS-N`/`AGENT-N`, lowest N free of live windows
   *and* mailbox directories — a reused name would silently inherit an old inbox), and

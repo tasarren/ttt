@@ -151,7 +151,7 @@ Ways to check what happened to something you sent, or to look at a teammate's sc
 | `ttt thread MESSAGE_ID [--headers-only]` | Every message in the thread, oldest first, with `topic:` and `members:` header. `--headers-only` triages without bodies. |
 | `ttt capture TARGET [--lines N] [--raw] [--grep PATTERN] [--around PATTERN] [--context N]` | Last N lines of the teammate's agent pane (their stamped pane, never the focused one). TUI chrome (borders, spinners, padding) is cleaned; `--raw` skips the cleanup and keeps tmux line wrapping. `--grep` keeps matching lines. `--around` keeps matches plus N context lines each side (default 3). |
 | `ttt windows` | List windows in this session with ids. `(you)` marks the caller. |
-| `ttt whoami` | Print your session, window name, id, and board path. |
+| `ttt whoami` | Print your session, window name, id, pane, and board path. On the run that claimed a new pane, the pane line reads `pane: %id (claimed now: this pane is where the window's messages land)`. |
 
 Ways to clean up and to move the board forward across versions:
 
@@ -192,14 +192,13 @@ errors.
   says `joins pending batch`). The waiting notifier refreshes its marker, so a stale marker always means a
   dead notifier. A failed paste re-arms a live notifier instead of stranding the burst.
   The paste lands in the recipient's agent pane -- the pane stamped `@ttt_agent` with the window's
-  name by the last command that identified itself through the PID walk -- else the window's first
-  pane (pane index 0, the agent's original pane) -- never the active pane, which is whoever touched
-  it last.
+  name by the last command that identified itself through the PID walk -- never the active pane,
+  which is whoever touched it last, and never a furniture window, where the paste is refused.
 - **Urgent.** `--urgent` pastes the full message immediately, with the reply instruction. If the paste
   fails, the message falls back to a batched notification, so nothing is lost. Pasting clears the target
   input line (`C-u`) before pasting, so it can clobber in-progress typing. Urgent broadcasts paste
   serially, one recipient at a time. Like batched notifications, the paste targets the
-  recipient's stamped agent pane when known, else the window's first pane.
+  recipient's stamped agent pane; a window without one is furniture and the paste is refused.
 - **Replace and expiry.** `--replace KEY` marks your earlier unread messages with the same KEY as
   superseded, so a busy recipient reads only the latest status. `--ttl SECONDS` lapses unread receipts
   to `superseded` after the deadline instead. Both keep history; both count as terminal for `prune`.
@@ -281,7 +280,7 @@ allowed before the command; `--from` is rejected; running outside tmux is fine.
 `doctor` checks: tmux version, socket, config files; attached clients; session group; the
 `@ttt_setup` marker and session record; every profile option (assert-only ones warn, pinned ones
 FAIL with a `tmux set-option ...` fix); the hook; the hook binary path; run-shell failures from
-`tmux show-messages`; per window: unstamped panes (informational), dead panes (warn), history
+`tmux show-messages`; per window: furniture (`ok window W-1: furniture: no agent pane, messages to W-1 are refused until something there runs ttt`, fix `ttt tmux open --window W-1 --harness NAME`), dead panes (warn), history
 below the profile (warn); and skill installs, read-only: `ok   skill <harness>: symlink -> <target>, vX`
 (or `copy, vX`), `warn skill <harness>: ... vX but ttt is vY` (fix: `npx skills update ttt` for
 copies, update the checkout for symlinks), `warn skill <harness>: symlink -> ... (target missing)`,
@@ -385,16 +384,36 @@ and hand-editable jsonc.
 ## Tmux commands
 
 `capture`, `windows`, and `whoami` stay top-level. Everything else tmux-shaped lives behind
-`ttt tmux` (`ttt --help` lists them all). `tmux` itself is a reserved window name. Every verb acts
-on the window's *agent pane* — the pane stamped `@ttt_agent` with the window's name, else the
-lowest-index pane, never the active pane — and none touch the message board. Run outside tmux,
-they need `--session S` before the command.
+`ttt tmux` (`ttt --help` lists them all). `tmux` itself is a reserved window name. Run outside tmux,
+the verbs need `--session S` before the command, and none touch the message board.
+
+A window is a teammate only while one of its panes carries `@ttt_agent=<window name>`. Everything
+else is furniture: it can be driven, not messaged. Running any `ttt` command from inside a pane
+claims that pane for its window — the stamp moves there, and that run's `ttt whoami` prints
+`pane: %id (claimed now: this pane is where the window's messages land)` (plain `pane: %id`
+otherwise). Identity is still the window name.
+
+The bar and borders follow the stamp. Tabs: `3:W-1·` is furniture (trailing `·`, no agent pane),
+`2:DOCUMENTER` is a teammate; the unread badge `[2]` is unchanged. Pane borders: `NAME harness cwd`
+for the agent pane, `TITLE cwd` for a titled helper (`open --pane TITLE`), `pane N · command cwd`
+for any unstamped pane (a human `prefix "` split, `--pane ""`).
+
+Hand-made windows (`prefix c`) get the profile pinned by the `after-new-window` hook and, when tmux
+named the window itself (no window-local `automatic-rename`), a `W-N` name — lowest free N against
+live windows and mailbox directories. A window named by its creator (`new-window -n`, `prefix ,`)
+keeps the name. The hook never stamps.
+
+Messaging furniture is refused, exit 1: `ttt send W-1 -- hi` ->
+`W-1 has no agent pane (nothing there runs ttt); start one with: ttt tmux open --window W-1 --harness NAME, or drive it with ttt tmux type W-1.1`.
+The same refusal applies to reply and ack audiences, `capture`, and the notifier.
+`broadcast --all` skips furniture and prints `ttt: skipping W-1: no agent pane` on stderr.
 
 | Command | What it does |
 |---|---|
-| `ttt tmux open --window NAME\|auto [--harness NAME] [--ready REGEX\|none] [--ready-timeout SECONDS] [--cwd DIR] [-- COMMAND]` | A teammate: a new detached window, its pane stamped `@ttt_agent`, `@ttt_harness`, `@ttt_command`. Exactly one of `--window`/`--pane` is required. NAME: same charset as window names, at most 12 characters (fits the bar); `auto` generates `HARNESS-N` (uppercase; `AGENT-N` without a harness) with the lowest N that is neither a live window nor an existing mailbox directory, and prints it. `--harness H` implies COMMAND = the preset's command (when no COMMAND is given) and `--ready` = the preset's regex; presets shipped: `claude`, `opencode`, `codex`, `sh`. Unknown harness without `--ready`: exit 2, `no readiness preset for harness "x" (known: claude, opencode, codex, sh); pass --ready REGEX or --ready none`. `--ready REGEX` blocks until a screen line matches; `--ready none` returns immediately; `--ready-timeout` defaults to `wait.seconds`, capped by `wait.maxSeconds`. Prints `opened NAME @id pane %id` or, when it waited, `opened NAME @id pane %id (ready after 2.1s)`. Timeout: exit 1, `NAME did not become ready (/REGEX/) within Ns; the window @id stays open` (plus the preset's note, e.g. codex's trust prompt: answer with `ttt tmux press NAME Enter` or start it in a trusted `--cwd`). Errors: exists (exit 1), too long (exit 2, `window name "X" is longer than 12 characters; it must fit the status bar`), `--in`/`--horizontal`/`--size` with `--window` (exit 2, `--in applies to --pane only`). |
+| `ttt tmux open --window NAME\|auto [--harness NAME] [--ready REGEX\|none] [--ready-timeout SECONDS] [--cwd DIR] [-- COMMAND]` | A teammate: a new detached window, its pane stamped `@ttt_agent`, `@ttt_harness`, `@ttt_command`. Exactly one of `--window`/`--pane` is required. NAME: same charset as window names, at most 12 characters (fits the bar); `auto` generates `HARNESS-N` (uppercase; `AGENT-N` without a harness) with the lowest N that is neither a live window nor an existing mailbox directory, and prints it. `--harness H` implies COMMAND = the preset's command (when no COMMAND is given) and `--ready` = the preset's regex; presets shipped: `claude`, `opencode`, `codex`, `sh`. Unknown harness without `--ready`: exit 2, `no readiness preset for harness "x" (known: claude, opencode, codex, sh); pass --ready REGEX or --ready none`. `--ready REGEX` blocks until a screen line matches; `--ready none` returns immediately; `--ready-timeout` defaults to `wait.seconds`, capped by `wait.maxSeconds`. Prints `opened NAME @id pane %id` or, when it waited, `opened NAME @id pane %id (ready after 2.1s)`. Timeout: exit 1, `NAME did not become ready (/REGEX/) within Ns; the window @id stays open` (plus the preset's note — codex's trust prompt, claude's trust-configuration prompt; the note also ends the timeout message). Readiness polls only the pane's visible screen. Adoption: when NAME already exists, is unstamped, and has exactly one pane, ttt kills it, restarts it under the harness command (with `--cwd`), stamps it, and waits for readiness — prints `adopted NAME @id pane %id (ready after 1.2s)`. Adoption refusals: a stamped pane -> `tmux window already exists: S:NAME (a teammate lives there; pick another name or --window auto)`; several panes -> `window NAME has N panes and no agent; adopting needs exactly one pane (close the others, or pick another name)`. Errors: exists (exit 1), too long (exit 2, `window name "X" is longer than 12 characters; it must fit the status bar`), `--in`/`--horizontal`/`--size` with `--window` (exit 2, `--in applies to --pane only`). |
 | `ttt tmux open --pane [TITLE] [--in WINDOW] [--horizontal] [--size PERCENT] [--cwd DIR] [-- COMMAND]` | A helper pane next to an agent: no identity, no mailbox. TITLE (may be empty: `--pane ""`) lands in `@ttt_title` and the border shows it instead of the window name. `--in` defaults to the caller's own window; outside an agent window it is required (exit 2). `--horizontal` puts it to the right (below by default), `--size` takes 1..99. Prints `opened pane %id in WINDOW[ (TITLE)]`. `--harness`/`--ready` with `--pane`: exit 2. |
-| `ttt tmux close NAME` | Kills the window; refuses to close the window the command itself runs in (exit 1). Prints `closed NAME @id`. The board on disk is untouched. |
+| `ttt tmux close NAME` | Kills the window; refuses to close the window the command itself runs in (exit 1). Prints `closed NAME @id`. The board on disk is untouched. Takes any window, teammate or furniture. |
+| `ttt tmux rename OLD NEW` | Renames a window: prints `renamed OLD to NEW @id`, plus `(agent pane %id follows)` when the window is a teammate — the stamp moves with the name. Refused, exit 1, when a mailbox would be affected: OLD has one (`OLD has a mailbox; renaming would orphan it. Close OLD and open NEW instead`) or NEW has an old one (`NEW has an old mailbox that OLD would inherit; pick another name`). NEW obeys the 12-char rule. |
 | `ttt tmux split NAME ...` | Deprecated alias of `ttt tmux open --pane --in NAME`; prints a one-line notice on stderr; removed next release. |
 | `ttt tmux respawn NAME [-- COMMAND]` | Restarts the agent pane's command: `COMMAND`, else the recorded `@ttt_command`, else the default shell. Re-stamps agent and harness. Prints `respawned NAME pane %id[ with: COMMAND]`. The fix for a `[dead]` pane. |
 | `ttt tmux type NAME -- TEXT` | Bracketed paste into the agent pane, no Enter. Not for messages — those go through `ttt send`. Prints `typed into NAME pane %id`. |
@@ -407,6 +426,21 @@ they need `--session S` before the command.
 `type`, `press`, and `interrupt` refuse two things, both exit 1: a dead pane (`pane %id of NAME is
 dead; run: ttt tmux respawn NAME` — tmux's `send-keys` into a dead pane silently succeeds, so the
 refusal is the point) and a window with `synchronize-panes` on (keys would reach every pane).
+
+Driving verbs (`type`, `press`, `interrupt`, `wait`, `open --pane --in`) take a pane target:
+NAME (the window's agent pane), NAME.N (`pane_index` N — base-index 1 under the agents profile), or
+%id. Bare NAME on furniture works while the window has exactly one pane; with several:
+`window W-1 has no agent pane (...); to drive one of its 2 panes use W-1.N or %id`.
+`respawn` stays NAME-only (it re-stamps); `close` takes any window.
+
+`open --window NAME` on an existing, unstamped, single-pane window is the adoption path. "Use W-2
+for the verification run":
+
+```sh
+ttt tmux open --window W-2 --harness claude --cwd ~/proj   # adopts W-2: adopted W-2 @9 pane %17 (ready after 1.2s)
+ttt tmux open --pane tests --in W-2 -- pnpm test --watch
+ttt send W-2 --wait -- Run the suite and reply with findings.
+```
 
 `ttt tmux setup` without `--name`, on a terminal, is a wizard: `Session name:`, then
 `Layout (none, a, b) [none]:` when layouts exist, then `Working directory [cwd]:`. `--layout`/`--cwd`
@@ -449,7 +483,10 @@ tmux panes, then the `TMUX_PANE` environment hint. It never trusts the tmux acti
 human switching panes cannot reassign your identity. `ttt whoami` prints the resolved session,
 window, id, board path, and which link identified you (`via: pid-walk | pane-env | override`).
 The PID walk also stamps `@ttt_agent` with your window name on the pane it found -- that stamp,
-not send history, is where delivery and `ttt capture` look first.
+not send history, is where delivery and `ttt capture` look first. Any `ttt` command run from a pane
+without the stamp claims it instead: the stamp moves, and that run's `ttt whoami` says
+`(claimed now)`. A window with no stamped pane is furniture -- messaging it is refused, and the
+notifier has nowhere to paste.
 
 `ttt --session NAME --from WINDOW <command>` runs a command as if from that window, from anywhere.
 The flags only come as a pair; a lone `--from` is rejected. The detached notifier uses them, and
