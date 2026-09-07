@@ -7,3 +7,5 @@ dist/
 # prepack copies for the published tarball (removed by postpack); the sources live at the root
 packages/cli/README.md
 packages/cli/LICENSE
+packages/tmux/README.md
+packages/tmux/LICENSE

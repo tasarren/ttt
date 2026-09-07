@@ -11,7 +11,7 @@
   "scripts": {
     "runtime:check": "node scripts/check-runtime.mjs",
     "ttt": "node packages/cli/src/ttt.ts",
-    "build": "pnpm --filter @tasarren/ttt build",
+    "build": "pnpm --filter @ttt/tmux build && pnpm --filter @tasarren/ttt build",
     "typecheck": "tsc -p tsconfig.json",
     "lint": "eslint .",
     "test": "node --test packages/*/tests/*.test.ts",
