@@ -21,7 +21,8 @@ Ownership rules:
 - `@ttt/tmux` never reads settings or the board. It takes `TmuxOptions` and an injectable command
   runner — the only injection point. Every failure surfaces as a typed `TmuxError` over the closed
   `TmuxFailure` vocabulary (`no_server`, `no_session`, `no_target`, `pane_dead`, `bad_option`,
-  `no_client`, `timeout`, `unknown`); options are written with explicit targets, never `-g`.
+  `no_client`, `timeout`, `unknown`); options are written with explicit targets, never `-g`. It owns
+  the `@ttt_*` option names (`UserOption` in `options.ts`); nothing else spells them.
 - `process.env` is read in exactly one file, `packages/cli/src/settings.ts` (`TTT_HOME`, `TMUX_PANE`).
   Everything else receives the resolved `Settings` object.
 - `packages/cli/src/context.ts` is the composition root: it resolves settings, detects the tmux context,
@@ -66,9 +67,16 @@ that runs the current source. Edit, save, run: no build. `publishConfig.bin` swa
 3. For each marker the CLI spawns a detached copy of itself:
    `ttt --session S --from ttt _notify --target T --token K`.
 4. The child heartbeats the marker through the batching window, then (if the token still matches) pastes
-   the one-line summary into the window and marks the receipts notified. A newer marker means a newer
-   child owns the burst; the old one exits silently. A failed paste cancels the dead token and re-arms
+   the one-line summary into the target's agent pane -- resolved by `resolveAgentPane` in
+   `packages/tmux/src/panes.ts`: the pane stamped `@ttt_agent` with the window name, else the
+   lowest-index pane, else the window id -- and marks the receipts notified. A newer marker means a
+   newer child owns the burst; the old one exits silently. A failed paste cancels the dead token and re-arms
    a live notifier.
+
+Context creation stamps `@ttt_agent` with the caller's window name onto the caller's pane whenever
+identity came from the PID walk, and clears sibling stamps in that window (at most one agent pane
+per window). Best-effort: a failed stamp never fails the command. Commands identified via
+`pane-env` or `--session`/`--from` never stamp.
 
 `--urgent` skips the marker: the CLI pastes the formatted message right away through
 `board.deliverUrgent`, which marks the receipt notified but leaves it unread.
@@ -99,8 +107,10 @@ inside a pane (`TMUX`, `TMUX_PANE`, plus a temp `TTT_HOME` with `notifySeconds: 
 
 ## Adding a schema version
 
-1. Append one step in `packages/migrations/src/steps/` and register it in `manifest.ts`. Bump
-   `CURRENT_SCHEMA_VERSION` and `BOARD_VERSION` together.
+1. Append one step in `packages/migrations/src/steps/` and register it in `manifest.ts`. The steps so
+   far: `rebuild-thread-index` v4→5, `build-unread-index` v5→6, `drop-pane-registry` v6→7 (deletes
+   `state/panes.json`, the pre-tagging pane registry). Bump `CURRENT_SCHEMA_VERSION` (7) and
+   `BOARD_VERSION` together.
 2. Steps are idempotent and rerunnable. They count first for `--dry-run` and write only on a real run.
 3. Readers stay strict: unknown newer versions are a hard error pointing at `ttt migrate`. No fallbacks.
 4. Record the ledger in `state/schema.json` and cover the step in `migrations.test.ts` (dry-run counts,
@@ -113,7 +123,7 @@ reports only small shared guards (winner-pick, readdir guard, inbox tags), each 
 one shared helper.
 
 - `packages/board/src/board.ts` (764 lines) is intentionally large: one cohesive board
-  owner covering send/read/ack/notify/pane-registry/schema/prune/thread-index. Split
+  owner covering send/read/ack/notify/schema/prune/thread-index. Split
   only on unrelated reasons to change, never on length alone.
 - `packages/tmux/src/` (902 lines, 11 files) is one class per file composed by the
   `Tmux` root; largest is `inventory.ts` (129 lines), which also owns the tree parsers.

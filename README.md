@@ -137,7 +137,7 @@ Ways to check what happened to something you sent, or to look at a teammate's sc
 |---|---|
 | `ttt status MESSAGE_ID` | Per-recipient receipt state and short stamps (`q/n/r/a` = queued/notified/read/acked), with `by WINDOW` when someone else read or acked. |
 | `ttt thread MESSAGE_ID [--headers-only]` | Every message in the thread, oldest first, with `topic:` and `members:` header. `--headers-only` triages without bodies. |
-| `ttt capture TARGET [--lines N] [--raw] [--grep PATTERN] [--around PATTERN] [--context N]` | Last N lines of the teammate's agent pane (their first pane, never the focused one). TUI chrome (borders, spinners, padding) is cleaned; `--raw` skips the cleanup and keeps tmux line wrapping. `--grep` keeps matching lines. `--around` keeps matches plus N context lines each side (default 3). |
+| `ttt capture TARGET [--lines N] [--raw] [--grep PATTERN] [--around PATTERN] [--context N]` | Last N lines of the teammate's agent pane (their stamped pane, never the focused one). TUI chrome (borders, spinners, padding) is cleaned; `--raw` skips the cleanup and keeps tmux line wrapping. `--grep` keeps matching lines. `--around` keeps matches plus N context lines each side (default 3). |
 | `ttt windows` | List windows in this session with ids. `(you)` marks the caller. |
 | `ttt whoami` | Print your session, window name, id, and board path. |
 
@@ -175,14 +175,15 @@ Exit codes: `0` ok, `1` runtime failure (window missing, board error), `2` bad u
   and marks those receipts notified. Further sends during the window join the same batch (the send receipt
   says `joins pending batch`). The waiting notifier refreshes its marker, so a stale marker always means a
   dead notifier. A failed paste re-arms a live notifier instead of stranding the burst.
-  The paste lands in the exact pane the recipient last sent from (remembered per window
-  in `state/panes.json`), else the window's first pane (pane index 0, the agent's
-  original pane) -- never the active pane, which is whoever touched it last.
+  The paste lands in the recipient's agent pane -- the pane stamped `@ttt_agent` with the window's
+  name by the last command that identified itself through the PID walk -- else the window's first
+  pane (pane index 0, the agent's original pane) -- never the active pane, which is whoever touched
+  it last.
 - **Urgent.** `--urgent` pastes the full message immediately, with the reply instruction. If the paste
   fails, the message falls back to a batched notification, so nothing is lost. Pasting clears the target
   input line (`C-u`) before pasting, so it can clobber in-progress typing. Urgent broadcasts paste
   serially, one recipient at a time. Like batched notifications, the paste targets the
-  recipient's last-sending pane when known, else the window's first pane.
+  recipient's stamped agent pane when known, else the window's first pane.
 - **Replace and expiry.** `--replace KEY` marks your earlier unread messages with the same KEY as
   superseded, so a busy recipient reads only the latest status. `--ttl SECONDS` lapses unread receipts
   to `superseded` after the deadline instead. Both keep history; both count as terminal for `prune`.
@@ -338,6 +339,8 @@ ttt figures out who you are on its own: first your own process ancestry matched 
 tmux panes, then the `TMUX_PANE` environment hint. It never trusts the tmux active window, so a
 human switching panes cannot reassign your identity. `ttt whoami` prints the resolved session,
 window, id, board path, and which link identified you (`via: pid-walk | pane-env | override`).
+The PID walk also stamps `@ttt_agent` with your window name on the pane it found -- that stamp,
+not send history, is where delivery and `ttt capture` look first.
 
 `ttt --session NAME --from WINDOW <command>` runs a command as if from that window, from anywhere.
 The flags only come as a pair; a lone `--from` is rejected. The detached notifier uses them, and
