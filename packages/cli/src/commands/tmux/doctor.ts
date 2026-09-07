@@ -1,7 +1,7 @@
 import { access } from "node:fs/promises"
 
 import { CheckState, MIN_TMUX_VERSION, OptionScope, PROFILES, UserOption } from "@ttt/tmux"
-import type { OptionCheck } from "@ttt/tmux"
+import type { OptionCheck, SetupProfile, TreeSession, TreeWindow } from "@ttt/tmux"
 
 import { parseCommandArgs } from "../../args.ts"
 import { CliError, usageError } from "../../cli-error.ts"
@@ -35,47 +35,73 @@ export const doctor: TmuxVerb = async(argv, ctx) => {
 }
 
 async function diagnose(ctx: TmuxVerbContext, session: string): Promise<Finding[]> {
-  const findings: Finding[] = []
-  const info = (await ctx.tmux.inventory.serverInfo())
-  findings.push({ severity: Severity.Ok, subject: "tmux", detail: `${info.version} on ${info.socketPath}${info.configFiles ? `, config ${info.configFiles}` : ""} (minimum ${MIN_TMUX_VERSION.join(".")})` })
-
   const tree = await ctx.tmux.inventory.tree(session)
+  const profile = await profileOf(ctx, session)
+  return [
+    await serverFinding(ctx),
+    ...clientFindings(tree, session),
+    ...profile.findings,
+    ...(profile.profile ? await profileFindings(ctx, session, profile.profile, tree) : []),
+    ...(await skillFindings(ctx.version)),
+  ]
+}
+
+async function serverFinding(ctx: TmuxVerbContext): Promise<Finding> {
+  const info = await ctx.tmux.inventory.serverInfo()
+  const config = info.configFiles ? `, config ${info.configFiles}` : ""
+  return { severity: Severity.Ok, subject: "tmux", detail: `${info.version} on ${info.socketPath}${config} (minimum ${MIN_TMUX_VERSION.join(".")})` }
+}
+
+function clientFindings(tree: TreeSession, session: string): Finding[] {
+  const findings: Finding[] = []
   if (!tree.attached) findings.push({ severity: Severity.Warn, subject: "clients", detail: "no client attached; popups and status redraws wait for an attach", fix: `tmux attach -t ${session}` })
   if (tree.group !== undefined) findings.push({ severity: Severity.Warn, subject: "session group", detail: `session belongs to group ${tree.group}; grouped panes list under the original session only, which confuses identity` })
+  if (tree.windows.length === 0) findings.push({ severity: Severity.Warn, subject: "windows", detail: "session has no windows" })
+  return findings
+}
 
-  const profileName = await ctx.tmux.options.get({ scope: OptionScope.Session, target: session, key: UserOption.Setup })
+/** The `@ttt_setup` marker resolved to a profile, or the finding that explains why not. */
+async function profileOf(ctx: TmuxVerbContext, session: string): Promise<{ profile: SetupProfile | undefined; findings: Finding[] }> {
+  const name = await ctx.tmux.options.get({ scope: OptionScope.Session, target: session, key: UserOption.Setup })
+  if (name === undefined) {
+    return { profile: undefined, findings: [{ severity: Severity.Warn, subject: "setup", detail: "session was not set up by ttt", fix: `ttt tmux setup --name ${session} (new session) or run inside one created by setup` }] }
+  }
+  const profile = PROFILES[name]
+  if (!profile) return { profile: undefined, findings: [{ severity: Severity.Fail, subject: "setup", detail: `session claims profile ${name}, which this ttt does not know` }] }
   const record = await readSessionRecord(ctx.settings.home, session)
-  if (profileName === undefined) {
-    findings.push({ severity: Severity.Warn, subject: "setup", detail: "session was not set up by ttt", fix: `ttt tmux setup --name ${session} (new session) or run inside one created by setup` })
-    return findings
-  }
-  const profile = PROFILES[profileName]
-  if (!profile) {
-    findings.push({ severity: Severity.Fail, subject: "setup", detail: `session claims profile ${profileName}, which this ttt does not know` })
-    return findings
-  }
-  findings.push({ severity: Severity.Ok, subject: "setup", detail: `profile ${profile.name}${record ? `, recorded ${record.createdAt}` : " (no session record on disk)"}` })
-
-  const report = await ctx.tmux.setup.check(session, profile)
-  for (const check of report.checks.filter((row) => row.state === CheckState.Off)) findings.push(offProfile(check))
-  if (!report.hookInstalled) findings.push({ severity: Severity.Warn, subject: "hook", detail: "after-new-window hook missing; windows opened by hand are not normalized" })
+  const findings: Finding[] = [{ severity: Severity.Ok, subject: "setup", detail: `profile ${profile.name}${record ? `, recorded ${record.createdAt}` : " (no session record on disk)"}` }]
   if (record) {
     await access(record.hookBin).catch(() => {
       findings.push({ severity: Severity.Fail, subject: "hook", detail: `hook binary ${record.hookBin} no longer exists; new windows silently stay unnormalized`, fix: "recreate the session with ttt tmux setup, or reinstall ttt at that path" })
     })
   }
-  for (const line of await ctx.tmux.hooks.failures("_normalize-window")) findings.push({ severity: Severity.Warn, subject: "hook", detail: line.trim() })
+  return { profile, findings }
+}
 
-  for (const window of tree.windows) {
-    const stamped = window.panes.filter((pane) => pane.agent === window.name)
-    if (stamped.length === 0) findings.push({ severity: Severity.Ok, subject: `window ${window.name}`, detail: "no stamped pane yet; delivery uses the lowest-index pane until the agent runs ttt" })
-    for (const pane of window.panes.filter((candidate) => candidate.dead)) findings.push({ severity: Severity.Warn, subject: `window ${window.name}`, detail: `pane ${pane.pane} is dead`, fix: `ttt tmux respawn ${window.name}` })
-    for (const pane of window.panes.filter((candidate) => candidate.historyLimit < Number(profile.options.find((option) => option.key === "history-limit")?.value ?? 0))) {
-      findings.push({ severity: Severity.Warn, subject: `window ${window.name}`, detail: `pane ${pane.pane} keeps only ${pane.historyLimit} lines of history` })
-    }
+/** Options off-profile, hook state, and per-window pane health for a session that was set up. */
+async function profileFindings(ctx: TmuxVerbContext, session: string, profile: SetupProfile, tree: TreeSession): Promise<Finding[]> {
+  const findings: Finding[] = []
+  const report = await ctx.tmux.setup.check(session, profile)
+  for (const check of report.checks) {
+    if (check.state === CheckState.Off) findings.push(offProfile(check))
   }
-  if (tree.windows.length === 0) findings.push({ severity: Severity.Warn, subject: "windows", detail: "session has no windows" })
-  findings.push(...await skillFindings(ctx.version))
+  if (!report.hookInstalled) findings.push({ severity: Severity.Warn, subject: "hook", detail: "after-new-window hook missing; windows opened by hand are not normalized" })
+  for (const line of await ctx.tmux.hooks.failures("_normalize-window")) findings.push({ severity: Severity.Warn, subject: "hook", detail: line.trim() })
+  const historyLimit = Number(profile.options.find((option) => option.key === "history-limit")?.value ?? 0)
+  for (const window of tree.windows) findings.push(...windowFindings(window, historyLimit))
+  return findings
+}
+
+function windowFindings(window: TreeWindow, historyLimit: number): Finding[] {
+  const subject = `window ${window.name}`
+  const findings: Finding[] = []
+  if (!window.panes.some((pane) => pane.agent === window.name)) {
+    findings.push({ severity: Severity.Ok, subject, detail: "no stamped pane yet; delivery uses the lowest-index pane until the agent runs ttt" })
+  }
+  for (const pane of window.panes) {
+    if (pane.dead) findings.push({ severity: Severity.Warn, subject, detail: `pane ${pane.pane} is dead`, fix: `ttt tmux respawn ${window.name}` })
+    if (pane.historyLimit < historyLimit) findings.push({ severity: Severity.Warn, subject, detail: `pane ${pane.pane} keeps only ${pane.historyLimit} lines of history` })
+  }
   return findings
 }
 
