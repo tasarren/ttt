@@ -424,8 +424,9 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
     assert.equal((await server("display-message", "-p", "-t", unnamed, "#{@ttt_agent}")).trim(), "SCRATCH2")
     await outside("--session", "team", "tmux", "rename", "SCRATCH2", "SCRATCH")
     await mkdir(join(home, "boards", "team", "mailboxes", "SCRATCH"), { recursive: true })
+    await mkdir(join(home, "boards", "team", "mailboxes", "STALE"), { recursive: true })
     await assert.rejects(outside("--session", "team", "tmux", "rename", "SCRATCH", "OTHER"), /SCRATCH has a mailbox; renaming would orphan it\. Close SCRATCH and open OTHER instead/)
-    await assert.rejects(outside("--session", "team", "tmux", "rename", "HUMAN", "SH-2"), /SH-2 has an old mailbox that HUMAN would inherit/)
+    await assert.rejects(outside("--session", "team", "tmux", "rename", "HUMAN", "STALE"), /STALE has an old mailbox that HUMAN would inherit/)
     await assert.rejects(outside("--session", "team", "tmux", "open", "--window", "SCRATCH", "--harness", "sh"), /window already exists: team:SCRATCH \(a teammate lives there/)
     await outside("--session", "team", "tmux", "close", "SCRATCH")
 
