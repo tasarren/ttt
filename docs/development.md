@@ -163,19 +163,24 @@ inside a pane (`TMUX`, `TMUX_PANE`, plus a temp `TTT_HOME` with `notifySeconds: 
   (the two refusals: dead pane, `synchronize-panes` on).
 - `lifecycle.ts` is open/close/split/respawn; `typing.ts` is type/press/interrupt; `screen.ts` is
   wait/popup/flash. The interactive setup wizard lives in `setup.ts`.
+- `doctor` also reports skill installs, read-only (`skill-status.ts` walks `~/.agents/skills`,
+  `~/.claude/skills`, `~/.codex/skills`, `~/.config/opencode/skills`, `~/.cursor/skills`,
+  `~/.gemini/skills`, `~/.copilot/skills`): ok when a copy or symlink matches the binary version,
+  warn on stale versions (fix: `npx skills update ttt` for copies, update the checkout for
+  symlinks), broken links, and no install at all. ttt never installs skills, never prompts, and
+  never writes to agent directories; the tarball ships `skills/ttt/SKILL.md` (`files` + `prepack`),
+  and that is the whole story.
 
 ## Structure audit (2026-09 cleanup)
 
-Source is ~2,580 lines. `jscpd --min-lines 10` reports 0 clones; `--min-lines 5`
-reports only small shared guards (winner-pick, readdir guard, inbox tags), each with
-one shared helper.
+Source is ~5,030 lines across the four packages.
 
-- `packages/board/src/board.ts` (764 lines) is intentionally large: one cohesive board
+- `packages/board/src/board.ts` (809 lines) is intentionally large: one cohesive board
   owner covering send/read/ack/notify/schema/prune/thread-index. Split
   only on unrelated reasons to change, never on length alone.
-- `packages/tmux/src/` (902 lines, 11 files) is one class per file composed by the
-  `Tmux` root; largest is `inventory.ts` (129 lines), which also owns the tree parsers.
-- `packages/cli/src/commands/inbox.ts` (250 lines) keeps the read side and its
+- `packages/tmux/src/` (1,286 lines, 14 files) is one class per file composed by the
+  `Tmux` root; largest is `inventory.ts` (186 lines), which also owns the tree parsers.
+- `packages/cli/src/commands/inbox.ts` (264 lines) keeps the read side and its
   formatters together. The formatters have one caller; moving them out would shred
   the flow.
 - Shared helpers live with their owner: `winnersByName` beside `compareWindowIds`
@@ -197,6 +202,16 @@ CI can stage, only humans can ship. First-ever publish is manual
 `pnpm --filter @tasarren/ttt publish --access public` from a clean checkout, then attach the trusted
 publisher (repo `tasarren/ttt`, workflow `release.yml`, no environment) on the package page. Never
 publish from a dev machine after that.
+
+`@tasarren/tmux` is pack-ready (own tsdown build, `pnpm pack --dry-run` proves the tarball) but has
+no release path yet: the release workflow is not extended, and nothing goes to npm from this
+branch. Its `prepack` copies `docs/tmux-api.md` as the package README, so that file *is* the
+published README — keep it a reference.
+
+One version, three places: `packages/cli/package.json` is the single source;
+`packages/cli/src/version.ts` (generated; inlined into the bundle, which has no package.json next
+to it) and the `skills/ttt/SKILL.md` frontmatter must match it. `pnpm run version:check` (part of
+`pnpm run check`) asserts this; `pnpm run version:sync` rewrites them after a bump.
 
 ```sh
 pnpm run check

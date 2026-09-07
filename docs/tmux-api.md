@@ -5,6 +5,16 @@ Targets are ids (`@n` windows, `%n` panes), never `session:name` strings built b
 are tmux-relative and never assumed to start at 0. One class per file, composed by the `Tmux` root;
 the runner is the only injection point, so tests run against a fake.
 
+Install (when published): `pnpm add @tasarren/tmux`.
+
+```ts
+import { Tmux, createRunner } from "@tasarren/tmux"
+
+const tmux = new Tmux(options, createRunner({ socket: "my-team" }))
+await tmux.requireVersion()
+const tree = await tmux.inventory.tree("work")
+```
+
 ## Root
 
 ```ts

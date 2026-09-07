@@ -161,7 +161,9 @@ Message options (for `send`, `reply`, `broadcast`):
 | `--timeout SECONDS` | With `--wait`: give up after SECONDS (1..`wait.maxSeconds`, default `wait.seconds`). Timeout is exit 0. |
 | `--file PATH` | Read the body from PATH. |
 
-Exit codes: `0` ok, `1` runtime failure (window missing, board error), `2` bad usage or bad settings.
+Exit codes: `0` ok (including `--wait` timeouts and `doctor` warnings), `1` runtime failure (tmux,
+board, dead pane, no client, `doctor` FAIL or `--strict` warn), `2` usage, settings, or layout-file
+errors.
 
 ## How it works
 
@@ -268,7 +270,12 @@ allowed before the command; `--from` is rejected; running outside tmux is fine.
 `@ttt_setup` marker and session record; every profile option (assert-only ones warn, pinned ones
 FAIL with a `tmux set-option ...` fix); the hook; the hook binary path; run-shell failures from
 `tmux show-messages`; per window: unstamped panes (informational), dead panes (warn), history
-below the profile (warn).
+below the profile (warn); and skill installs, read-only: `ok   skill <harness>: symlink -> <target>, vX`
+(or `copy, vX`), `warn skill <harness>: ... vX but ttt is vY` (fix: `npx skills update ttt` for
+copies, update the checkout for symlinks), `warn skill <harness>: symlink -> ... (target missing)`,
+and `warn skill: no ttt skill installed for any agent` with the install command. Harness
+directories checked: `~/.agents/skills`, `~/.claude/skills`, `~/.codex/skills`,
+`~/.config/opencode/skills`, `~/.cursor/skills`, `~/.gemini/skills`, `~/.copilot/skills`.
 
 ### The `agents` profile
 
@@ -436,17 +443,15 @@ The flags only come as a pair; a lone `--from` is rejected. The detached notifie
 so should any runner whose tmux environment is broken (wrong `whoami` → prefix every command with
 the pair until the runner is fixed).
 
-<!-- DRAFT (plan 9b): Agents install commands — pending FABLE's step-9 confirmation. -->
-
 ## Agents
 
-Give your agents the `ttt` skill so teammates learn `ttt` on their own. Three standard ways,
-depending on how the package is present:
+Give your agents the `ttt` skill so teammates learn `ttt` on their own. The skill ships inside the
+package under `skills/` (the npm skills convention), so both installers find it:
 
 ```sh
-npx skills add tasarren/ttt                      # from GitHub; update later with: npx skills update
-npx skills add "$(npm root -g)/@tasarren/ttt"    # from a globally installed package, version-locked
-npx skills-npm                                   # from a project dependency in node_modules
+npx skills add tasarren/ttt                               # from GitHub; later: npx skills update
+npx skills add "$(npm root -g)/@tasarren/ttt"             # from the installed package; the symlink stays current on every upgrade
+npx skills-npm                                            # when ttt is a project dependency; re-syncs on install
 ```
 
 `docs/agent-prompt.md` is the same rules as a block to paste into a system prompt. Developer

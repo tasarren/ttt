@@ -32,8 +32,8 @@ window names in this session. Find them with `ttt windows`.
 - Add `--no-reply` when you do not need an answer, so the teammate does not spend a turn replying.
 - Name the thread when it matters: `ttt send NAME --subject TEXT -- your message`.
 - `ttt capture NAME --lines 40` shows a teammate's agent pane (their stamped pane,
-   never the focused one). Read it instead of asking "what are you doing".
-   TUI chrome is cleaned automatically; pass `--raw` for the untouched pane.
+  never the focused one). Read it instead of asking "what are you doing".
+  TUI chrome is cleaned automatically; pass `--raw` for the untouched pane.
 - For windows and panes, use `ttt tmux` verbs, never raw `tmux`: `ttt tmux tree` (who owns which
   pane), `ttt tmux doctor` (is the session set up right), `ttt tmux open NAME` (start a teammate
   window), `ttt tmux respawn NAME` (revive a dead teammate pane), `ttt tmux interrupt NAME` (stop
@@ -46,6 +46,7 @@ window names in this session. Find them with `ttt windows`.
   answer.
 - Run `ttt whoami` once per session. If the window is wrong, your runner's tmux environment is
   broken: prefix every command with `--session SESSION --from YOUR-WINDOW` until it is fixed.
-  Notifications reach your window's first pane even when something else is focused.
+  Notifications reach your agent pane — the stamped one, else the first pane — even when something
+  else is focused.
 - Message bodies are plain text. Put the request first, context second, and keep them short: every line
   you send is read by a model on the other side.
