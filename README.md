@@ -227,6 +227,111 @@ Unknown keys are rejected so typos surface immediately. `TTT_HOME` moves the who
 | `tmux.enterPresses` | integer | `3` | See above. |
 | `tmux.postSendMs` | integer | `300` | See above. |
 
+<!-- DRAFT (plan 7/8/9): Tmux setup, Layouts, Waiting for messages — pending FABLE's step confirmations; do not merge until unmarked. -->
+
+## Tmux setup
+
+`ttt tmux setup` creates a ready-to-work tmux session: named windows, pinned tmux options, and
+unread badges, so agents and humans share one normalized environment. Requires tmux 3.2 or newer.
+Setup creates the session or errors; it never reworks a session that already exists.
+
+| Command | What it does |
+|---|---|
+| `ttt tmux setup [--name S] [--layout L] [--cwd DIR] [--non-interactive] [--attach]` | Create session `S` and normalize it. `--layout` builds windows and panes from a stored layout (below). With a TTY, missing flags open a wizard; `--non-interactive` (implied when stdin is not a TTY) requires `--name`, else exit 2. `--attach` attaches a client when one is available. |
+| `ttt tmux save L [--session S] [--force]` | Save the current session as layout `L` under `~/.ttt/layouts/<L>.jsonc`. `--force` overwrites. |
+| `ttt tmux restore L [--as S] [--cwd DIR]` | Shortcut for `ttt tmux setup --non-interactive --layout L --name <S or L>`. |
+| `ttt tmux layouts [--json]` | List stored layouts. |
+| `ttt tmux doctor [--session S] [--json]` | Check-only report: tmux version, every normalized option, per-pane history, hooks, badges. Warnings do not fail the command. |
+
+What setup pins: window names stop auto-renaming, a crashed process keeps its window marked
+`[dead]` until respawned, pane borders show the agent, harness, and working directory, history is
+deep enough to capture, and tmux's own activity/bell noise is silenced so the unread badge is the
+only signal. Values you had before are remembered and restored by `ttt tmux` revert paths; your
+mouse, prefix, shell, and config files are never touched.
+
+Messaging works in any session, normalized or not. In a session that was not set up, messaging
+commands print one stderr hint; they never fix anything on their own.
+
+The rest of the `ttt tmux` surface — window and pane lifecycle, typing, and screen inspection —
+is listed under [Tmux commands](#tmux-commands).
+
+## Layouts
+
+A layout is a hand-editable JSONC file at `~/.ttt/layouts/<L>.jsonc` describing the windows and
+panes of a session. Unknown keys are rejected with the file and path named, so typos surface
+immediately.
+
+```jsonc
+{
+  "version": 1,
+  "cwd": "~/proj",
+  "profile": "agents",
+  "windows": [
+    {
+      "name": "CODER",
+      "harness": "claude",
+      "layout": "a3b2,160x40,0,0{111x40,0,0[111x29,0,0,0,111x10,0,30,2],48x40,112,0,1}",
+      "panes": [                    // pane_index order; length must equal the layout's cells
+        { "command": "claude", "agent": true, "cwd": "." },
+        { "command": "pnpm test --watch", "cwd": "app" },
+        { "command": null }         // plain shell
+      ]
+    }
+  ]
+}
+```
+
+- `layout` is tmux's own layout string (`#{window_layout}`); panes are bound in index order and the
+  pane count must match. Layouts saved at one window size are rescaled on attach.
+- `command` is the process each pane starts with. `agent: true` marks the pane a messaging agent
+  targets.
+- `ttt tmux save` records each window's name, harness, layout string, and panes in index order with
+  working directory and command. The command comes from what the pane was started with; when that is
+  unknown it falls back to the pane's current process name, marked `"source": "process"`. Shells
+  save as `null`.
+- `ttt tmux restore` rebuilds the session from the layout. The board is keyed by session name:
+  restoring under the same name reconnects to that session's board and unread messages; `--as
+  OTHER` starts fresh.
+
+This is a scoped alternative to tmux-resurrect: ttt semantics, hand-editable files, save and
+restore only.
+
+<!-- DRAFT (plan 9): Tmux commands table — pending FABLE's step-6 confirmation. -->
+
+## Tmux commands
+
+`capture`, `windows`, and `whoami` stay top-level. Everything else tmux-shaped lives behind
+`ttt tmux`. `tmux` itself is a reserved window name.
+
+| Command | What it does |
+|---|---|
+| `ttt tmux tree [--session S] [--json]` | Live session > window > pane tree. |
+| `ttt tmux open NAME [--cwd DIR] [--harness H] [-- COMMAND]` | New window. |
+| `ttt tmux close NAME` | Close a window. |
+| `ttt tmux split NAME [--horizontal] [--size PCT] [-- COMMAND]` | Split the window's panes. |
+| `ttt tmux respawn NAME [-- COMMAND]` | Restart a dead (or running) pane's process. |
+| `ttt tmux type NAME -- TEXT` | Paste text into the pane without pressing Enter. |
+| `ttt tmux press NAME KEY` | Press a key (`Enter`, `Escape`, `C-c`, ...). |
+| `ttt tmux interrupt NAME` | Send `C-c` to the pane. |
+| `ttt tmux wait NAME --for PATTERN [--timeout S]` | Block until the pane's screen matches. Screen state, not messages. |
+| `ttt tmux popup [--title T] [--width W] [--height H] [--cwd DIR] -- COMMAND` | Show a popup (needs an attached client). |
+| `ttt tmux flash -- TEXT` | Status-line notice, works without a client. |
+
+## Waiting for messages
+
+`--wait` turns a send or a read into a blocking call, so an agent stops instead of polling:
+
+| Command | Effect |
+|---|---|
+| `ttt send B --wait [--timeout S] -- question` | Queue the message, then block until B replies or acks. Prints the awaited reply first, then `also unread: N` headers. |
+| `ttt reply MESSAGE_ID --wait [--timeout S] -- answer` | Same, in-thread. |
+| `ttt read --wait [--timeout S]` | Block until a message arrives, then print the batch. This is the recommended idle state. |
+
+The wait ends after `--timeout` seconds (default 120, hard-capped by the `waitMaxSeconds` setting
+at 300) with `no reply within S; N unread` and exit 0, so an agent surfaces periodically and
+re-decides. Sending `--wait` to a teammate who is already waiting on you is refused with exit 1 —
+one of you must go first.
+
 ## Identity
 
 ttt figures out who you are on its own: first your own process ancestry matched against live
@@ -239,8 +344,18 @@ The flags only come as a pair; a lone `--from` is rejected. The detached notifie
 so should any runner whose tmux environment is broken (wrong `whoami` → prefix every command with
 the pair until the runner is fixed).
 
+<!-- DRAFT (plan 9b): Agents install commands — pending FABLE's step-9 confirmation. -->
+
 ## Agents
 
-`skills/ttt/SKILL.md` is a copyable agent skill: drop the `skills/ttt/` folder into your agent's
-skills directory so teammates learn `ttt` on their own. `docs/agent-prompt.md` is the same rules
-as a block to paste into a system prompt. Developer documentation is in `docs/development.md`.
+Give your agents the `ttt` skill so teammates learn `ttt` on their own. Three standard ways,
+depending on how the package is present:
+
+```sh
+npx skills add tasarren/ttt                      # from GitHub; update later with: npx skills update
+npx skills add "$(npm root -g)/@tasarren/ttt"    # from a globally installed package, version-locked
+npx skills-npm                                   # from a project dependency in node_modules
+```
+
+`docs/agent-prompt.md` is the same rules as a block to paste into a system prompt. Developer
+documentation is in `docs/development.md`.
