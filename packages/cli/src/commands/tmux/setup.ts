@@ -1,10 +1,12 @@
+import { createInterface } from "node:readline/promises"
+
 import { NORMALIZE_HOOK, PROFILES } from "@ttt/tmux"
 import type { SetupReport } from "@ttt/tmux"
 import { assertName } from "@ttt/board"
 
 import { parseCommandArgs } from "../../args.ts"
 import { CliError, usageError } from "../../cli-error.ts"
-import { readLayout } from "../../layout.ts"
+import { listLayouts, readLayout } from "../../layout.ts"
 import { writeSessionRecord } from "../../session-record.ts"
 import type { TmuxVerb, TmuxVerbContext } from "../../tmux-context.ts"
 import { buildLayout } from "./build.ts"
@@ -26,9 +28,48 @@ const SETUP_OPTIONS = {
 export const setup: TmuxVerb = async(argv, ctx) => {
   const { values, positionals } = parseCommandArgs(argv, SETUP_OPTIONS)
   if (positionals.length > 0) throw usageError("usage: ttt tmux setup --name SESSION [--layout NAME] [--profile NAME] [--cwd DIR]")
-  const name = values.name
-  if (name === undefined) throw usageError("setup needs --name SESSION (the interactive wizard arrives with layouts)")
-  await createSession(ctx, { name, ...(values.layout !== undefined ? { layout: values.layout } : {}), ...(values.profile !== undefined ? { profile: values.profile } : {}), ...(values.cwd !== undefined ? { cwd: values.cwd } : {}) })
+  const interactive = !values["non-interactive"] && process.stdin.isTTY && process.stdout.isTTY
+  let name = values.name
+  let layout = values.layout
+  let cwd = values.cwd
+  if (name === undefined) {
+    if (!interactive) throw usageError("setup needs --name SESSION (or a terminal, for the wizard)")
+    const answers = await wizard(ctx, { layout, cwd })
+    name = answers.name
+    layout = answers.layout
+    cwd = answers.cwd
+  }
+  await createSession(ctx, {
+    name,
+    ...(layout !== undefined ? { layout } : {}),
+    ...(values.profile !== undefined ? { profile: values.profile } : {}),
+    ...(cwd !== undefined ? { cwd } : {}),
+  })
+}
+
+/** Three questions on a TTY: session name, a stored layout or none, working directory. */
+async function wizard(ctx: TmuxVerbContext, preset: { layout: string | undefined; cwd: string | undefined }): Promise<{ name: string; layout: string | undefined; cwd: string | undefined }> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout })
+  try {
+    const name = (await rl.question("Session name: ")).trim()
+    if (name === "") throw usageError("a session name is required")
+    let layout = preset.layout
+    if (layout === undefined) {
+      const stored = await listLayouts(ctx.settings.home)
+      if (stored.length > 0) {
+        const picked = (await rl.question(`Layout (none${stored.map((entry) => `, ${entry}`).join("")}) [none]: `)).trim()
+        if (picked !== "" && picked !== "none") layout = picked
+      }
+    }
+    let cwd = preset.cwd
+    if (cwd === undefined) {
+      const typed = (await rl.question(`Working directory [${process.cwd()}]: `)).trim()
+      cwd = typed === "" ? process.cwd() : typed
+    }
+    return { name, layout, cwd }
+  } finally {
+    rl.close()
+  }
 }
 
 export interface CreateSessionInput {
