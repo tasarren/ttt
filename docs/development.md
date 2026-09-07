@@ -36,6 +36,11 @@ Ownership rules:
   outside tmux is fine. `main.ts` routes `tmux` before `createContext`.
 - Session records (`~/.ttt/sessions/<S>/session.json`, written by setup, read by doctor) live in
   `packages/cli/src/session-record.ts`, outside the boards on purpose.
+- Layouts live in `packages/cli/src/layout.ts` (schema, parser, file io — every error names file
+  and path). `commands/tmux/build.ts` builds a layout into a session (open, split, `applyLayout`,
+  stamp); `save.ts` captures, `restore.ts` restores and lists. `createSession` in
+  `commands/tmux/setup.ts` is the shared flow; the placeholder window `ttt-setup` exists only until
+  the layout's windows are up. Layout parsing is covered by `packages/cli/tests/layout.test.ts`.
 - One operation lives in one file. `commands/send.ts` holds `send`, `broadcast`, and `reply` because they
   share the same `deliver` flow; `commands/inbox.ts` holds the read side and its formatters.
 

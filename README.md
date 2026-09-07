@@ -257,7 +257,10 @@ allowed before the command; `--from` is rejected; running outside tmux is fine.
 
 | Command | What it does |
 |---|---|
-| `ttt tmux setup --name SESSION [--profile agents] [--cwd DIR]` | Create a detached session and normalize it with the profile. Prints `ttt: session S set up with profile agents: N options pinned, hook after-new-window installed.`, then `attach with: tmux attach -t S`, plus `note: ...` lines for assert-only options that are off-profile. Errors: session exists (exit 1), bad name (exit 2, same charset rule as window names), unknown profile (exit 2), missing `--name` (exit 2). Any failure after the session was created kills the session again and exits 1. |
+| `ttt tmux setup --name SESSION [--profile agents] [--cwd DIR] [--layout NAME]` | Create a detached session and normalize it with the profile. With `--layout`, builds the layout's windows inside the session and prints `layout NAME: N windows created[, skipped X, Y]` before the attach hint. `--cwd` overrides the layout's cwd; `--profile` overrides the layout's profile. Prints `ttt: session S set up with profile agents: N options pinned, hook after-new-window installed.`, then `attach with: tmux attach -t S`, plus `note: ...` lines for assert-only options that are off-profile. Errors: session exists (exit 1), bad name (exit 2, same charset rule as window names), unknown profile (exit 2), missing `--name` (exit 2). Any failure after the session was created kills the session again and exits 1. |
+| `ttt tmux save NAME [--force]` | Save the current session as layout `NAME` under `~/.ttt/layouts/`. Prints `saved N windows to <path>`. Refuses to overwrite without `--force` (exit 1). |
+| `ttt tmux restore NAME [--as SESSION] [--cwd DIR]` | Shortcut for `ttt tmux setup --name <SESSION or NAME> --layout NAME`. See [Layouts](#layouts) for board semantics. |
+| `ttt tmux layouts [--json]` | List saved layouts, one name per line (or a JSON array). Empty: `ttt: no layouts saved yet (ttt tmux save NAME).` |
 | `ttt tmux tree [--json]` | Live session > window > pane view: `S $id [(attached)]`, then `  index:name @id [*]`, then `    index %id command cwd [agent=..., harness=..., dead, active]`. `--json` prints the `TreeSession` object. Needs `--session S` when run outside tmux. |
 | `ttt tmux doctor [--json] [--strict]` | Read-only check of a session against its profile. Lines `ok subject: detail`, `warn ...`, `FAIL ...`, each optionally followed by `fix: <command>`. Exit 1 on any FAIL; `--strict` also exits 1 on warn. |
 
@@ -304,52 +307,61 @@ Worth knowing:
   and the fix is a new session via setup.
 
 Setup writes a session record `~/.ttt/sessions/<S>/session.json` (`version`, `session`, `profile`,
-`hookBin`, `createdAt`) and stamps `@ttt_setup` on the session. The record lives outside the boards
+`hookBin`, `createdAt`, `layout` when the session was built from one) and stamps `@ttt_setup` on the
+session. The record lives outside the boards
 on purpose and is what `doctor` reads. Session options last for the session's lifetime; windows
 opened later are normalized by the hook.
 
-<!-- DRAFT (plan 7, step 5): Layouts, save, restore — pending FABLE's step-5 confirmation; do not merge until unmarked. -->
-
 ## Layouts
 
-A layout is a hand-editable JSONC file at `~/.ttt/layouts/<L>.jsonc` describing the windows and
-panes of a session. Unknown keys are rejected with the file and path named, so typos surface
-immediately.
+A layout is a hand-editable JSONC file at `~/.ttt/layouts/<name>.jsonc` describing the windows and
+panes of a session. Comments and trailing commas are allowed; unknown keys are rejected; every
+error names the file and the path, exit 2.
 
 ```jsonc
 {
   "version": 1,
-  "cwd": "~/proj",
-  "profile": "agents",
+  "cwd": "~/proj",                      // optional default; relative pane cwds resolve against it; ~ expands
+  "profile": "agents",                  // optional, default agents
   "windows": [
     {
-      "name": "CODER",
-      "harness": "claude",
+      "name": "CODER",                  // required; same charset as window names; unique
+      "harness": "claude",              // optional; stamped as @ttt_harness on the agent pane
       "layout": "a3b2,160x40,0,0{111x40,0,0[111x29,0,0,0,111x10,0,30,2],48x40,112,0,1}",
-      "panes": [                    // pane_index order; length must equal the layout's cells
-        { "command": "claude", "agent": true, "cwd": "." },
+      "panes": [                        // pane_index order; omitted = one plain shell
+        { "command": "claude", "agent": true, "cwd": "." },   // at most one agent: true; default first pane
         { "command": "pnpm test --watch", "cwd": "app" },
-        { "command": null }         // plain shell
+        { "command": null }             // plain shell
       ]
     }
   ]
 }
 ```
 
-- `layout` is tmux's own layout string (`#{window_layout}`); panes are bound in index order and the
-  pane count must match. Layouts saved at one window size are rescaled on attach.
-- `command` is the process each pane starts with. `agent: true` marks the pane a messaging agent
-  targets.
-- `ttt tmux save` records each window's name, harness, layout string, and panes in index order with
-  working directory and command. The command comes from what the pane was started with; when that is
-  unknown it falls back to the pane's current process name, marked `"source": "process"`. Shells
-  save as `null`.
-- `ttt tmux restore` rebuilds the session from the layout. The board is keyed by session name:
-  restoring under the same name reconnects to that session's board and unread messages; `--as
-  OTHER` starts fresh.
+- `layout` is tmux's own layout string (`#{window_layout}`); required when a window has more than
+  one pane, and its cell count must equal `panes.length` — tmux silently accepts a mismatch, ttt
+  does not. There is no layout parser: the string round-trips exactly through `select-layout`,
+  nested layouts included, and a layout saved at 160x40 restores at any size (tmux rescales on
+  attach).
+- `command` is the process each pane starts with. `agent: true` (at most one per window) marks the
+  pane a messaging agent targets.
+- `ttt tmux restore` / `setup --layout` builds the windows: panes in index order, then the layout
+  applied, then every layout window gets the profile's window options and the stamps — `@ttt_agent`
+  and `@ttt_harness` on the agent pane, `@ttt_command` on every pane with a command. Windows
+  already present by name are skipped, never duplicated, so reruns are idempotent. A failed build
+  kills the session.
+- Restoring under the same session name reconnects to the same board (boards are keyed by session
+  name), so unread messages survive; `restore NAME --as OTHER` starts with a fresh board. A missing
+  layout exits 2 with `no layout named X (run: ttt tmux layouts)`.
+- `ttt tmux save` captures each window's name, harness (from the agent pane), geometry (only for
+  multi-pane windows), and panes in index order with cwd and command. The command is `@ttt_command`
+  when ttt started the pane; otherwise the foreground process name, saved with `"source": "process"`
+  and a warning to check them before restoring (a `claude` shim shows as `node`, so a human edits
+  it). Idle shells (`sh`, `bash`, `zsh`, `fish`, ...) save as `null`. `pane_start_command` is never
+  read: it exposes the full argv, secrets included.
 
-This is a scoped alternative to tmux-resurrect: ttt semantics, hand-editable files, save and
-restore only.
+tmux-resurrect does generic save/restore; ttt's is a scoped subset with identity, stamps, badges,
+and hand-editable jsonc.
 
 <!-- DRAFT (plan 9, step 6): remaining tmux verbs — pending FABLE's step-6 confirmation; tree and doctor are documented under Tmux setup. -->
 

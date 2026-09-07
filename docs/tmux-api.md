@@ -97,12 +97,14 @@ Data:
 | `find` | `(session, name) => Promise<TmuxWindow \| undefined>` | Duplicate names resolve to the lowest id. |
 | `open` | `(input: OpenWindowInput) => Promise<{ windowId, paneId }>` | Creates a detached window; returns its id and first pane id. |
 | `close` | `(windowId: string) => Promise<void>` | Kills the window. |
+| `layout` | `(windowId: string) => Promise<string>` | The window's `#{window_layout}` string: pane geometry that `applyLayout` replays exactly. |
+| `applyLayout` | `(windowId, layout) => Promise<void>` | `select-layout` replay onto a window that already has the same number of panes. |
 
 ## panes.ts
 
 | Export | Kind | Purpose |
 |---|---|---|
-| `PaneStamp` | type | `{ agent, harness?, command? }` — what ttt stamps on a pane it starts or identifies; each field maps to one `@ttt_*` option. |
+| `PaneStamp` | type | `{ agent?, harness?, command? }` — what ttt stamps on a pane it starts or identifies; each field maps to one `@ttt_*` option. `agent` is absent for helper panes (a test watcher next to the agent); stamping without `agent` never clears siblings. |
 | `resolveAgentPane` | function | `(live: LivePane[], windowId, windowName) => string` — the pane stamped `@ttt_agent` with that window name inside the window, else the lowest-index pane (the agent's original pane, never the active one), else the window id. Pure. |
 | `SplitDirection` | vocabulary | `as const`: `vertical` (`-v`), `horizontal` (`-h`). |
 | `SplitPaneInput` | type | `{ target, direction, sizePercent?, cwd?, command? }` — `target` is a window or pane id; `sizePercent` is a percentage of the split target. |
@@ -110,7 +112,7 @@ Data:
 
 | Method | Signature | Purpose |
 |---|---|---|
-| `stamp` | `(paneId, live, stamp: PaneStamp) => Promise<void>` | Marks the pane as its window's agent pane and clears `@ttt_agent` from every sibling in the window, so at most one pane per window carries it. Writes only what differs. |
+| `stamp` | `(paneId, live, stamp: PaneStamp) => Promise<void>` | With `agent`, marks the pane as its window's agent pane and clears `@ttt_agent` from every sibling in the window, so at most one pane per window carries it. Writes only what differs. |
 | `split` | `(input: SplitPaneInput) => Promise<string>` | Creates a detached pane; returns its id. |
 | `kill` | `(paneId: string) => Promise<void>` | Kills the pane. |
 | `respawn` | `(paneId: string, command?: string) => Promise<void>` | Restarts the pane's command; `-k` kills a still-running one first, so the verb is idempotent. |
