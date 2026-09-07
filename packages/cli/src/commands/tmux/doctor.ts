@@ -6,6 +6,7 @@ import type { OptionCheck } from "@ttt/tmux"
 import { parseCommandArgs } from "../../args.ts"
 import { CliError, usageError } from "../../cli-error.ts"
 import { readSessionRecord } from "../../session-record.ts"
+import { SkillState, skillInstalls } from "../../skill-status.ts"
 import type { TmuxVerb, TmuxVerbContext } from "../../tmux-context.ts"
 
 const DOCTOR_OPTIONS = { json: { type: "boolean", default: false }, strict: { type: "boolean", default: false } } as const
@@ -74,7 +75,32 @@ async function diagnose(ctx: TmuxVerbContext, session: string): Promise<Finding[
     }
   }
   if (tree.windows.length === 0) findings.push({ severity: Severity.Warn, subject: "windows", detail: "session has no windows" })
+  findings.push(...await skillFindings(ctx.version))
   return findings
+}
+
+/** Read-only: agents need the shipped skill to match the shipped binary. Installing is the installer's job. */
+async function skillFindings(binaryVersion: string): Promise<Finding[]> {
+  const installs = await skillInstalls()
+  const present = installs.filter((install) => install.state !== SkillState.Missing)
+  if (present.length === 0) {
+    return [{ severity: Severity.Warn, subject: "skill", detail: "no ttt skill installed for any agent", fix: "npx skills add tasarren/ttt (or: npx skills add \"$(npm root -g)/@tasarren/ttt\")" }]
+  }
+  return present.map((install) => {
+    const where = install.state === SkillState.Copy ? "copy" : `symlink -> ${install.target ?? "?"}`
+    if (install.state === SkillState.Broken) {
+      return { severity: Severity.Warn, subject: `skill ${install.harness}`, detail: `${where} (target missing)`, fix: `remove ${install.path} and reinstall: npx skills add tasarren/ttt` }
+    }
+    if (install.version === binaryVersion) {
+      return { severity: Severity.Ok, subject: `skill ${install.harness}`, detail: `${where}, v${install.version}` }
+    }
+    return {
+      severity: Severity.Warn,
+      subject: `skill ${install.harness}`,
+      detail: `${where}, ${install.version === undefined ? "unversioned" : `v${install.version}`} but ttt is v${binaryVersion}`,
+      fix: install.state === SkillState.Symlink ? "the link target is stale; update the checkout or package it points to" : "npx skills update ttt, or reinstall from the current package",
+    }
+  })
 }
 
 function offProfile(check: OptionCheck): Finding {

@@ -1,4 +1,6 @@
 import { Tmux } from "@ttt/tmux"
+
+import { TTT_VERSION } from "./version.ts"
 import type { TmuxContext } from "@ttt/tmux"
 
 import { resolveSettings } from "./settings.ts"
@@ -18,6 +20,8 @@ export interface TmuxVerbContext {
   self: TmuxContext | undefined
   /** Path of this executable, used to build the normalize hook command. */
   binPath: string
+  /** The running ttt's version, for skill freshness checks. */
+  version: string
 }
 
 export type TmuxVerb = (argv: string[], ctx: TmuxVerbContext) => Promise<void>
@@ -27,5 +31,5 @@ export async function createTmuxContext(sessionOverride: string | undefined, bin
   const tmux = new Tmux(settings.tmux)
   await tmux.requireVersion()
   const self = await tmux.identity.detect(settings.currentPane).catch(() => undefined)
-  return { settings, tmux, session: sessionOverride ?? self?.session, self, binPath }
+  return { settings, tmux, session: sessionOverride ?? self?.session, self, binPath, version: TTT_VERSION }
 }

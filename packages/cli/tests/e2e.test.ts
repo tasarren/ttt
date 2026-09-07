@@ -398,6 +398,7 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
 
     const report = await outside("--session", "team", "tmux", "doctor")
     assert.match(report, /^ok {3}setup: profile agents, recorded /m)
+    assert.match(report, /^(ok {3}|warn) skill /m, "doctor reports skill installs, read-only")
     assert.match(report, /^warn clients: no client attached/m)
     assert.doesNotMatch(report, /^FAIL/m)
     await assert.rejects(outside("--session", "team", "tmux", "doctor", "--strict"), /doctor found problems in team/)

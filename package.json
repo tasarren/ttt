@@ -15,7 +15,9 @@
     "typecheck": "tsc -p tsconfig.json",
     "lint": "eslint .",
     "test": "node --test packages/*/tests/*.test.ts",
-    "check": "pnpm run runtime:check && pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run build"
+    "check": "pnpm run runtime:check && pnpm run version:check && pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run build",
+    "version:check": "node scripts/sync-version.mjs",
+    "version:sync": "node scripts/sync-version.mjs --write"
   },
   "devDependencies": {
     "@eslint/js": "catalog:devTools",
