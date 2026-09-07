@@ -24,7 +24,7 @@ export interface SetupProfile {
 }
 
 /** How a pane border names its owner: agent, harness, cwd, and a dead marker. */
-export const PANE_BORDER_FORMAT = `#{?${UserOption.Agent},#{${UserOption.Agent}},#{window_name}}#{?${UserOption.Harness}, #{${UserOption.Harness}},} #{s|$HOME|~|:pane_current_path}#{?pane_dead, [dead],}`
+export const PANE_BORDER_FORMAT = `#{?${UserOption.Agent},#{${UserOption.Agent}},#{?${UserOption.Title},#{${UserOption.Title}},#{window_name}}}#{?${UserOption.Harness}, #{${UserOption.Harness}},} #{s|$HOME|~|:pane_current_path}#{?pane_dead, [dead],}`
 
 /** Window tabs render the unread badge from `@ttt_unread` (unset when zero). */
 export const WINDOW_STATUS_FORMAT = `#I:#W#{?${UserOption.Unread},[#{${UserOption.Unread}}],}#{?window_flags,#{window_flags}, }`

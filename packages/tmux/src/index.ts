@@ -1,5 +1,7 @@
 export { DetectionSource, Identity, procAncestors } from "./context.ts"
 export type { AncestorResolver, TmuxContext } from "./context.ts"
+export { HARNESS_PRESETS, Harness, harnessPreset } from "./harness.ts"
+export type { HarnessPreset } from "./harness.ts"
 export { Hooks } from "./hooks.ts"
 export type { SessionHook } from "./hooks.ts"
 export { DEFAULT_TMUX_OPTIONS, Input, Key } from "./input.ts"

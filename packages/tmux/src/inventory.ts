@@ -49,6 +49,8 @@ export interface TreePane extends LivePane {
   startCommand: string | undefined
   /** `#{history_limit}` in effect for this pane. */
   historyLimit: number
+  /** `@ttt_title` of a helper pane. */
+  paneTitle: string | undefined
 }
 
 export interface TreeWindow extends TmuxWindow {
@@ -62,7 +64,7 @@ export interface TreeSession extends TmuxSession {
 }
 
 const PANE_FORMAT = `#{session_name}\t#{window_name}\t#{window_id}\t#{pane_id}\t#{pane_index}\t#{pane_pid}\t#{${UserOption.Agent}}`
-const TREE_PANE_FORMAT = `${PANE_FORMAT}\t#{pane_active}\t#{pane_dead}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_title}\t#{${UserOption.Harness}}\t#{${UserOption.Command}}\t#{history_limit}`
+const TREE_PANE_FORMAT = `${PANE_FORMAT}\t#{pane_active}\t#{pane_dead}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_title}\t#{${UserOption.Harness}}\t#{${UserOption.Command}}\t#{history_limit}\t#{${UserOption.Title}}`
 const SESSION_FORMAT = "#{session_id}\t#{session_name}\t#{session_attached}\t#{session_group}"
 const PANE_FIELDS = 7
 
@@ -171,7 +173,7 @@ function parseLivePane(parts: string[]): LivePane | undefined {
 function parseTreePane(parts: string[]): TreePane | undefined {
   const live = parseLivePane(parts)
   if (!live) return undefined
-  const [active, dead, cwd, command, title, harness, startCommand, historyLimit] = parts.slice(PANE_FIELDS)
+  const [active, dead, cwd, command, title, harness, startCommand, historyLimit, paneTitle] = parts.slice(PANE_FIELDS)
   return {
     ...live,
     active: active === "1",
@@ -182,5 +184,6 @@ function parseTreePane(parts: string[]): TreePane | undefined {
     harness: harness || undefined,
     startCommand: startCommand || undefined,
     historyLimit: Number.isInteger(Number(historyLimit)) ? Number(historyLimit) : 0,
+    paneTitle: paneTitle || undefined,
   }
 }

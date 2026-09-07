@@ -22,6 +22,7 @@ export function formatTree(session: TreeSession): string {
     for (const pane of window.panes) {
       const tags = [
         ...(pane.agent !== undefined ? [`agent=${pane.agent}`] : []),
+        ...(pane.paneTitle !== undefined ? [`title=${pane.paneTitle}`] : []),
         ...(pane.harness !== undefined ? [`harness=${pane.harness}`] : []),
         ...(pane.dead ? ["dead"] : []),
         ...(pane.active ? ["active"] : []),

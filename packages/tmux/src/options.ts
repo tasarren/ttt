@@ -17,6 +17,8 @@ export const UserOption = {
   Harness: "@ttt_harness",
   /** Pane: the command line ttt started the pane with, for `save`. */
   Command: "@ttt_command",
+  /** Pane: a human-readable title for a helper pane (no identity), shown in the border. */
+  Title: "@ttt_title",
   /** Window: unread message count for the badge. */
   Unread: "@ttt_unread",
   /** Session: set once setup has normalized the session. */

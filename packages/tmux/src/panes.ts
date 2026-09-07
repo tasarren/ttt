@@ -23,6 +23,8 @@ export interface PaneStamp {
   agent?: string
   harness?: string
   command?: string
+  /** Helper-pane title; never set together with `agent`. */
+  title?: string
 }
 
 export const SplitDirection = {
@@ -69,6 +71,9 @@ export class Panes {
     }
     if (stamp.command !== undefined) {
       writes.push(this.options.set({ scope: OptionScope.Pane, target: paneId, key: UserOption.Command }, stamp.command))
+    }
+    if (stamp.title !== undefined) {
+      writes.push(this.options.set({ scope: OptionScope.Pane, target: paneId, key: UserOption.Title }, stamp.title))
     }
     if (me && stamp.agent !== undefined) {
       for (const sibling of live) {

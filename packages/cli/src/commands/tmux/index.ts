@@ -35,9 +35,9 @@ export const TMUX_USAGE = `  ttt tmux setup [--name SESSION] [--layout NAME] [--
   ttt tmux save NAME [--force]                  ttt tmux restore NAME [--as SESSION] [--cwd DIR]
   ttt tmux layouts [--json]                     ttt tmux tree [--json]
   ttt tmux doctor [--json] [--strict]
-  ttt tmux open NAME [--cwd DIR] [--harness NAME] [-- COMMAND]
+  ttt tmux open --window NAME|auto [--harness NAME] [--ready REGEX|none] [--ready-timeout SECONDS] [--cwd DIR] [-- COMMAND]
+  ttt tmux open --pane [TITLE] [--in WINDOW] [--horizontal] [--size PERCENT] [--cwd DIR] [-- COMMAND]
   ttt tmux close NAME                           ttt tmux respawn NAME [-- COMMAND]
-  ttt tmux split NAME [--horizontal] [--size PERCENT] [--cwd DIR] [-- COMMAND]
   ttt tmux type NAME -- TEXT                    ttt tmux press NAME KEY
   ttt tmux interrupt NAME                       ttt tmux wait NAME --for PATTERN [--timeout SECONDS]
   ttt tmux popup [--title TEXT] [--width W] [--height H] [--cwd DIR] -- COMMAND
