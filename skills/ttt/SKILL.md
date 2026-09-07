@@ -45,7 +45,8 @@ When you have nothing else to do, wait instead of ending your turn:
 
 | Need | Run |
 |---|---|
-| See the whole session | `ttt tmux tree` (sessions > windows > panes, live) |
+| See the whole session: who owns which pane | `ttt tmux tree` |
+| Check the session is set up correctly | `ttt tmux doctor` |
 | New teammate window | `ttt tmux open NAME` |
 | Stop a stuck process | `ttt tmux interrupt NAME` |
 | Restart a dead pane | `ttt tmux respawn NAME -- COMMAND` |

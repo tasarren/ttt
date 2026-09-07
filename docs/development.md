@@ -5,8 +5,8 @@
 ```
 packages/
   tmux/        @ttt/tmux        the tmux adapter, one class per file: runner, context (identity),
-                                inventory, windows, panes, input, screen, options, hooks,
-                                composed by the `Tmux` root
+                                inventory, sessions, windows, panes, input, screen, options, hooks,
+                                profile, setup, composed by the `Tmux` root
   board/       @ttt/board       the message board on disk: messages, receipts, locks, notification markers
   migrations/  @ttt/migrations  ordered schema steps over a session root; rerunnable, with a version ledger
   cli/         @tasarren/ttt    the `ttt` bin: settings, argument parsing, commands, output
@@ -31,6 +31,11 @@ Ownership rules:
 - `packages/cli/src/context.ts` is the composition root: it resolves settings, detects the tmux context,
   and constructs one `Tmux` and one `Board` per invocation. Commands are `(argv, ctx) => Promise<void>`
   and are dispatched from a single map in `main.ts`.
+- `packages/cli/src/tmux-context.ts` is the second composition root, for `ttt tmux` verbs only: no
+  board, no sender identity. `--session NAME` alone is accepted and `--from` is rejected; running
+  outside tmux is fine. `main.ts` routes `tmux` before `createContext`.
+- Session records (`~/.ttt/sessions/<S>/session.json`, written by setup, read by doctor) live in
+  `packages/cli/src/session-record.ts`, outside the boards on purpose.
 - One operation lives in one file. `commands/send.ts` holds `send`, `broadcast`, and `reply` because they
   share the same `deliver` flow; `commands/inbox.ts` holds the read side and its formatters.
 
@@ -127,6 +132,13 @@ inside a pane (`TMUX`, `TMUX_PANE`, plus a temp `TTT_HOME` with `notifySeconds: 
 3. Parse arguments with `parseCommandArgs` (`node:util` parseArgs, strict) and `splitAtTerminator` when the
    command takes a `-- body`.
 4. Cover it in `e2e.test.ts` if it touches tmux, otherwise in a unit test.
+
+## Adding a tmux verb
+
+1. Write `commands/tmux/<verb>.ts` as a `TmuxVerb`.
+2. Register it in `VERBS` in `commands/tmux/index.ts` and add it to `TMUX_USAGE`.
+3. Cover it in `packages/tmux/tests/e2e.test.ts` or the CLI e2e. Verbs starting with `_` are
+   internal hook entries and stay out of the usage list.
 
 ## Adding a schema version
 

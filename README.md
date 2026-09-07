@@ -246,33 +246,69 @@ Unknown keys are rejected so typos surface immediately. `TTT_HOME` moves the who
 | `tmux.postSendMs` | integer | `300` | See above. |
 | `tmux.badges` | boolean | `true` | Mirror unread counts into the `@ttt_unread` window option after each command. |
 
-<!-- DRAFT (plan 7/9): Tmux setup, Layouts, Tmux commands — pending FABLE's step confirmations; do not merge until unmarked. -->
-
 ## Tmux setup
 
 `ttt tmux setup` creates a ready-to-work tmux session: named windows, pinned tmux options, and
 unread badges, so agents and humans share one normalized environment. Requires tmux 3.2 or newer.
 Setup creates the session or errors; it never reworks a session that already exists.
 
+`ttt tmux` is its own composition root: no board, no sender identity. `--session NAME` alone is
+allowed before the command; `--from` is rejected; running outside tmux is fine.
+
 | Command | What it does |
 |---|---|
-| `ttt tmux setup [--name S] [--layout L] [--cwd DIR] [--non-interactive] [--attach]` | Create session `S` and normalize it. `--layout` builds windows and panes from a stored layout (below). With a TTY, missing flags open a wizard; `--non-interactive` (implied when stdin is not a TTY) requires `--name`, else exit 2. `--attach` attaches a client when one is available. |
-| `ttt tmux save L [--session S] [--force]` | Save the current session as layout `L` under `~/.ttt/layouts/<L>.jsonc`. `--force` overwrites. |
-| `ttt tmux restore L [--as S] [--cwd DIR]` | Shortcut for `ttt tmux setup --non-interactive --layout L --name <S or L>`. |
-| `ttt tmux layouts [--json]` | List stored layouts. |
-| `ttt tmux doctor [--session S] [--json]` | Check-only report: tmux version, every normalized option, per-pane history, hooks, badges. Warnings do not fail the command. |
+| `ttt tmux setup --name SESSION [--profile agents] [--cwd DIR]` | Create a detached session and normalize it with the profile. Prints `ttt: session S set up with profile agents: N options pinned, hook after-new-window installed.`, then `attach with: tmux attach -t S`, plus `note: ...` lines for assert-only options that are off-profile. Errors: session exists (exit 1), bad name (exit 2, same charset rule as window names), unknown profile (exit 2), missing `--name` (exit 2). Any failure after the session was created kills the session again and exits 1. |
+| `ttt tmux tree [--json]` | Live session > window > pane view: `S $id [(attached)]`, then `  index:name @id [*]`, then `    index %id command cwd [agent=..., harness=..., dead, active]`. `--json` prints the `TreeSession` object. Needs `--session S` when run outside tmux. |
+| `ttt tmux doctor [--json] [--strict]` | Read-only check of a session against its profile. Lines `ok subject: detail`, `warn ...`, `FAIL ...`, each optionally followed by `fix: <command>`. Exit 1 on any FAIL; `--strict` also exits 1 on warn. |
 
-What setup pins: window names stop auto-renaming, a crashed process keeps its window marked
-`[dead]` until respawned, pane borders show the agent, harness, and working directory, history is
-deep enough to capture, and tmux's own activity/bell noise is silenced so the unread badge is the
-only signal. Values you had before are remembered and restored by `ttt tmux` revert paths; your
-mouse, prefix, shell, and config files are never touched.
+`doctor` checks: tmux version, socket, config files; attached clients; session group; the
+`@ttt_setup` marker and session record; every profile option (assert-only ones warn, pinned ones
+FAIL with a `tmux set-option ...` fix); the hook; the hook binary path; run-shell failures from
+`tmux show-messages`; per window: unstamped panes (informational), dead panes (warn), history
+below the profile (warn).
 
-Messaging works in any session, normalized or not. In a session that was not set up, messaging
-commands print one stderr hint; they never fix anything on their own.
+### The `agents` profile
 
-The rest of the `ttt tmux` surface — window and pane lifecycle, typing, and screen inspection —
-is listed under [Tmux commands](#tmux-commands).
+"pin" = set the value and save the original as `@ttt_prev_<key>` on the same target; "assert" =
+report only; "lower-only" = pin only when the current value is higher.
+
+| Option | Scope | Value | Mode | Why |
+|---|---|---|---|---|
+| `allow-rename`, `automatic-rename` | window | off | pin | identity = window name |
+| `remain-on-exit` | window | on | pin | a crashed agent keeps its window; respawn revives it |
+| `synchronize-panes` | window | off | pin | a paste would hit every pane |
+| `monitor-activity` | window | off | pin | pastes are activity; the badge is the signal |
+| `pane-border-status`, `pane-border-format` | window | top, `#{?@ttt_agent,#{@ttt_agent},#{window_name}}#{?@ttt_harness, #{@ttt_harness},} #{s\|$HOME\|~\|:pane_current_path}#{?pane_dead, [dead],}` | pin | borders name the agent pane |
+| `window-status-format`, `window-status-current-format` | window | `#I:#W#{?@ttt_unread,[#{@ttt_unread}],}#{?window_flags,#{window_flags}, }` (current: bold) | pin | tabs show the unread badge |
+| `base-index`, `pane-base-index` | session | 1 | pin | numbers on the bar match `prefix+N` |
+| `renumber-windows` | session | on | pin | no gaps after closing |
+| `history-limit` | session | 10000 | pin | capture depth |
+| `destroy-unattached`, `detach-on-destroy` | session | off | pin | detached sessions survive; killing one does not detach |
+| `visual-activity`, `visual-bell`, `bell-action` | session | off, `none` | pin | no flashes |
+| `status` | session | on | pin | badges need a bar |
+| `aggressive-resize` | session | on | assert | capture width follows the attached client |
+| `escape-time` | server | 10 | lower-only | TUIs see Escape promptly |
+| `focus-events` | server | on | pin | TUI harnesses expect it |
+
+Worth knowing:
+
+- Nothing is ever written with `-g`; the only server-scope writes are `escape-time` and
+  `focus-events`. Your mouse, prefix, shell, and config files are never touched.
+- Options your own config already satisfies are not pinned, so "N options pinned" varies by machine.
+- Window options are applied per window id, and to windows opened later by a session hook — tmux
+  has no session-level window-option layer (`set -w -t SESSION` leaks to every session). The hook
+  `after-new-window` runs `ttt tmux _normalize-window #{window_id}` with an absolute binary path,
+  because tmux's PATH is whatever the server started with. `_normalize-window` is internal, not for
+  humans or agents, and silent on success.
+- If the binary moves after setup, new windows silently stay unnormalized; `doctor` reports FAIL,
+  and the fix is a new session via setup.
+
+Setup writes a session record `~/.ttt/sessions/<S>/session.json` (`version`, `session`, `profile`,
+`hookBin`, `createdAt`) and stamps `@ttt_setup` on the session. The record lives outside the boards
+on purpose and is what `doctor` reads. Session options last for the session's lifetime; windows
+opened later are normalized by the hook.
+
+<!-- DRAFT (plan 7, step 5): Layouts, save, restore — pending FABLE's step-5 confirmation; do not merge until unmarked. -->
 
 ## Layouts
 
@@ -315,7 +351,7 @@ immediately.
 This is a scoped alternative to tmux-resurrect: ttt semantics, hand-editable files, save and
 restore only.
 
-<!-- DRAFT (plan 9): Tmux commands table — pending FABLE's step-6 confirmation. -->
+<!-- DRAFT (plan 9, step 6): remaining tmux verbs — pending FABLE's step-6 confirmation; tree and doctor are documented under Tmux setup. -->
 
 ## Tmux commands
 
@@ -324,7 +360,6 @@ restore only.
 
 | Command | What it does |
 |---|---|
-| `ttt tmux tree [--session S] [--json]` | Live session > window > pane tree. |
 | `ttt tmux open NAME [--cwd DIR] [--harness H] [-- COMMAND]` | New window. |
 | `ttt tmux close NAME` | Close a window. |
 | `ttt tmux split NAME [--horizontal] [--size PCT] [-- COMMAND]` | Split the window's panes. |

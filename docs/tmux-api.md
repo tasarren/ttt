@@ -16,6 +16,7 @@ Holds one runner and one option set; the CLI composes exactly one `Tmux` per inv
 | Member | Type |
 |---|---|
 | `inventory` | `Inventory` |
+| `sessions` | `Sessions` |
 | `identity` | `Identity` |
 | `windows` | `Windows` |
 | `panes` | `Panes` |
@@ -23,6 +24,7 @@ Holds one runner and one option set; the CLI composes exactly one `Tmux` per inv
 | `screen` | `Screen` |
 | `options` | `Options` |
 | `hooks` | `Hooks` |
+| `setup` | `Setup` |
 
 | Method | Signature | Purpose |
 |---|---|---|
@@ -62,10 +64,10 @@ Data:
 
 | Type | Fields |
 |---|---|
-| `TmuxSession` | `id`, `name`, `attached` |
+| `TmuxSession` | `id`, `name`, `attached`, `group` (session group name when the session shares windows with others) |
 | `TmuxWindow` | `name`, `id` |
 | `LivePane` | `session`, `window`, `windowId`, `pane`, `index`, `pid`, `agent` (`@ttt_agent`, when stamped) |
-| `TreePane` | `LivePane` plus `active`, `dead`, `cwd`, `command` (process name only), `title`, `harness` (`@ttt_harness`), `startCommand` (`@ttt_command`; never `pane_start_command`) |
+| `TreePane` | `LivePane` plus `active`, `dead`, `cwd`, `command` (process name only), `title`, `harness` (`@ttt_harness`), `startCommand` (`@ttt_command`; never `pane_start_command`), `historyLimit` |
 | `TreeWindow` | `TmuxWindow` plus `index`, `active`, `panes` |
 | `TreeSession` | `TmuxSession` plus `windows` |
 
@@ -73,11 +75,12 @@ Data:
 
 | Method | Signature | Purpose |
 |---|---|---|
-| `listSessions` | `() => Promise<TmuxSession[]>` | Every session on the server. |
+| `listSessions` | `() => Promise<TmuxSession[]>` | Every session on the server; an empty list when no server is running. |
 | `hasSession` | `(name: string) => Promise<boolean>` | Membership check. |
 | `listWindows` | `(session: string) => Promise<TmuxWindow[]>` | Windows of one session, with ids. |
 | `listBadges` | `(session: string) => Promise<Array<TmuxWindow & { unread: number }>>` | Windows with the unread badge each currently shows (`@ttt_unread`, 0 when unset), in one round trip. |
 | `listAllPanes` | `() => Promise<LivePane[]>` | Every live pane on the server (used by identity detection). |
+| `serverInfo` | `() => Promise<ServerInfo>` | `{ version, socketPath, configFiles }` of the server, in one `display-message`. |
 | `tree` | `(session: string) => Promise<TreeSession>` | Session > Window > Pane in tmux order; panes sorted by index. |
 
 ## windows.ts
@@ -163,7 +166,7 @@ Data:
 | `getEffective` | `(ref) => Promise<string \| undefined>` | The effective value, following inheritance (`-A`). |
 | `set` | `(ref, value) => Promise<void>` | Writes at the ref's scope. |
 | `unset` | `(ref) => Promise<void>` | Removes the option; absent options are fine. |
-| `pin` | `(ref, value) => Promise<void>` | Saves the previous explicit value under `@ttt_prev_<key>` on the same target first (`"<unset>"` when there was none); a second pin never overwrites the saved original. |
+| `pin` | `(ref, value) => Promise<void>` | Saves the previous explicit value under `@ttt_prev_<key>` on the same target first (`"<unset>"` when there was none); a second pin never overwrites the saved original. On a server option the effective value is saved instead — server options have no parent to inherit from — and `restore` writes it back explicitly. |
 | `restore` | `(ref) => Promise<boolean>` | Puts back the pinned value (or unsets) and drops the saved copy; `false` when nothing was pinned. |
 
 ## hooks.ts
@@ -177,3 +180,43 @@ Data:
 | `set` | `(session, name, command) => Promise<void>` | Installs a session hook. |
 | `unset` | `(session, name) => Promise<void>` | Removes it. |
 | `list` | `(session) => Promise<SessionHook[]>` | Hooks explicitly set on the session. |
+| `failures` | `(needle: string) => Promise<string[]>` | Lines from `tmux show-messages` matching `needle` — how hook failures surface for `doctor`. |
+
+## sessions.ts
+
+`CreateSessionInput`: `{ name, windowName?, cwd?, command?, width?, height? }` — dimensions are the initial size of a detached session; clients resize on attach.
+
+`class Sessions(run)` — sessions are created detached; attaching is the human's move:
+
+| Method | Signature | Purpose |
+|---|---|---|
+| `create` | `(input: CreateSessionInput) => Promise<{ sessionId, windowId, paneId }>` | New detached session; returns its id and its first window and pane ids. |
+| `kill` | `(name: string) => Promise<void>` | Kills the session. |
+
+## profile.ts
+
+| Export | Kind | Purpose |
+|---|---|---|
+| `SetupMode` | vocabulary | `as const`: `pin` (set and save the original), `pin-lower-only` (pin only when the current value is higher), `assert` (report only). |
+| `ProfileOption` | type | `{ scope, key, value, mode, why }` — one row of a profile. |
+| `SetupProfile` | type | `{ name, options: ProfileOption[] }`. |
+| `AGENTS_PROFILE` | constant | The built-in `agents` profile: rename off, `remain-on-exit` on, `synchronize-panes` off, border and status formats, index 1, `renumber-windows`, `history-limit` 10000, `destroy-unattached`/`detach-on-destroy` off, bells off, `status` on, `aggressive-resize` assert, `escape-time` lower-only, `focus-events` on. |
+| `PROFILES` | constant | Profiles by name (`agents` today). |
+| `PANE_BORDER_FORMAT`, `WINDOW_STATUS_FORMAT`, `WINDOW_STATUS_CURRENT_FORMAT` | constants | The exact border and tab formats (tabs carry the unread badge; the current tab is bold). |
+
+## setup.ts
+
+| Export | Kind | Purpose |
+|---|---|---|
+| `NORMALIZE_HOOK` | constant | `"after-new-window"` — the session hook that normalizes windows humans open later; the command is supplied by the CLI (absolute path). |
+| `CheckState` | vocabulary | `as const`: `ok`, `off`, `pinned`. |
+| `OptionCheck` | type | `{ scope, target, key, wanted, found, mode, state, why }` — `target` is a session name, window id, or `""` for server. |
+| `SetupReport` | type | `{ session, profile, checks: OptionCheck[], hookInstalled }` — `pinned` rows were changed. |
+| `Setup` | class | `(options, hooks, inventory)`. Applies a profile with every change reversible via `@ttt_prev_*`. |
+
+| Method | Signature | Purpose |
+|---|---|---|
+| `apply` | `(session, profile, hookCommand) => Promise<SetupReport>` | Session and server options once, window options on every window, the normalize hook, and `@ttt_setup=<profile>`. Idempotent. |
+| `applyWindow` | `(windowId, profile) => Promise<OptionCheck[]>` | The window-scoped part of `apply` for one window; what the hook runs. |
+| `check` | `(session, profile) => Promise<SetupReport>` | Reports without writing: every option on every target, plus hook and marker presence. |
+| `revert` | `(session, profile) => Promise<number>` | Restores every pinned option, removes the hook and marker; returns how many were restored. |
