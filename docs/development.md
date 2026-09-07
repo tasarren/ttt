@@ -4,7 +4,9 @@
 
 ```
 packages/
-  tmux/        @ttt/tmux        the tmux adapter: detect context, list windows, paste text, capture a pane
+  tmux/        @ttt/tmux        the tmux adapter, one class per file: runner, context (identity),
+                                inventory, windows, panes, input, screen, options, hooks,
+                                composed by the `Tmux` root
   board/       @ttt/board       the message board on disk: messages, receipts, locks, notification markers
   migrations/  @ttt/migrations  ordered schema steps over a session root; rerunnable, with a version ledger
   cli/         @tasarren/ttt    the `ttt` bin: settings, argument parsing, commands, output
@@ -16,7 +18,10 @@ Ownership rules:
   (`board.deliverNotification(target, token, deliver)`, `board.deliverUrgent(message, recipient, deliver)`).
 - `@ttt/migrations` orchestrates `@ttt/board` over a session root and owns the version ledger
   (`state/schema.json`). Steps are idempotent; unknown newer versions are a hard error, never a fallback.
-- `@ttt/tmux` never reads settings or the board. It takes `TmuxOptions` and an injectable command runner.
+- `@ttt/tmux` never reads settings or the board. It takes `TmuxOptions` and an injectable command
+  runner — the only injection point. Every failure surfaces as a typed `TmuxError` over the closed
+  `TmuxFailure` vocabulary (`no_server`, `no_session`, `no_target`, `pane_dead`, `bad_option`,
+  `no_client`, `timeout`, `unknown`); options are written with explicit targets, never `-g`.
 - `process.env` is read in exactly one file, `packages/cli/src/settings.ts` (`TTT_HOME`, `TMUX_PANE`).
   Everything else receives the resolved `Settings` object.
 - `packages/cli/src/context.ts` is the composition root: it resolves settings, detects the tmux context,
@@ -71,10 +76,11 @@ that runs the current source. Edit, save, run: no build. `publishConfig.bin` swa
 ## Tests
 
 `node:test`, no framework. Unit tests inject a fake tmux runner or a temp `sessionRoot`.
-`packages/cli/tests/e2e.test.ts` starts a private tmux server on its own socket (`tmux -L ttt-e2e-<pid>`),
-creates windows `A` and `B`, runs the real CLI from source with the environment tmux gives a process
-inside a pane (`TMUX`, `TMUX_PANE`, plus a temp `TTT_HOME` with `notifySeconds: 1`), and asserts on
-`capture-pane` output and board files. It never touches your own tmux session.
+Two e2e suites, each on its own private tmux server socket: `packages/tmux/tests/e2e.test.ts`
+(`tmux -L ttt-tmux-e2e-<pid>`, the package verbs) and `packages/cli/tests/e2e.test.ts`
+(`tmux -L ttt-e2e-<pid>`, the real CLI from source with the environment tmux gives a process
+inside a pane (`TMUX`, `TMUX_PANE`, plus a temp `TTT_HOME` with `notifySeconds: 1`), asserting on
+`capture-pane` output and board files). Neither touches your own tmux session.
 
 ## Adding a setting
 
@@ -109,6 +115,8 @@ one shared helper.
 - `packages/board/src/board.ts` (764 lines) is intentionally large: one cohesive board
   owner covering send/read/ack/notify/pane-registry/schema/prune/thread-index. Split
   only on unrelated reasons to change, never on length alone.
+- `packages/tmux/src/` (902 lines, 11 files) is one class per file composed by the
+  `Tmux` root; largest is `inventory.ts` (129 lines), which also owns the tree parsers.
 - `packages/cli/src/commands/inbox.ts` (250 lines) keeps the read side and its
   formatters together. The formatters have one caller; moving them out would shred
   the flow.
