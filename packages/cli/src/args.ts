@@ -35,6 +35,8 @@ export const MESSAGE_OPTIONS = {
   file: { type: "string" },
   subject: { type: "string" },
   ttl: { type: "string" },
+  wait: { type: "boolean", default: false },
+  timeout: { type: "string" },
 } as const satisfies ParseArgsOptionsConfig
 
 export interface MessagePayload {

@@ -4,12 +4,15 @@ import type { BoardMessage, MessageReceipt } from "@ttt/board"
 import { boundedInt, parseCommandArgs, splitAtTerminator } from "../args.ts"
 import { usageError } from "../cli-error.ts"
 import type { Handler } from "../context.ts"
+import { WaitOutcome, waitForMail } from "../wait.ts"
 
 const READ_OPTIONS = {
   max: { type: "string" },
   peek: { type: "boolean", default: false },
   latest: { type: "boolean", default: false },
   "headers-only": { type: "boolean", default: false },
+  wait: { type: "boolean", default: false },
+  timeout: { type: "string" },
 } as const
 
 export const read: Handler = async(argv, ctx) => {
@@ -17,6 +20,17 @@ export const read: Handler = async(argv, ctx) => {
   if (positionals.length > 0) throw usageError("read takes no positional arguments")
   const max = boundedInt(values.max, "--max", ctx.settings.readMax, 1_000)
   const headersOnly = values["headers-only"]
+  if (values.timeout !== undefined && !values.wait) throw usageError("--timeout needs --wait")
+  if (values.wait) {
+    if (values.peek || values.latest || headersOnly) throw usageError("--wait cannot be combined with --peek, --latest, or --headers-only")
+    const seconds = boundedInt(values.timeout, "--timeout", ctx.settings.wait.seconds, ctx.settings.wait.maxSeconds)
+    const waited = await waitForMail(ctx, { expect: "any", timeoutMs: seconds * 1_000 })
+    if (waited.outcome !== WaitOutcome.Arrived) {
+      const unread = await ctx.board.unreadCount(ctx.senderName)
+      process.stdout.write(`ttt: ${waited.outcome === WaitOutcome.TimedOut ? `nothing arrived within ${seconds}s` : "wait interrupted"}; ${unread} unread.\n`)
+      return
+    }
+  }
   const { messages, remaining } = await ctx.board.read(ctx.senderName, { max, peek: values.peek || headersOnly, latest: values.latest, ...(ctx.actor ? { actor: ctx.actor } : {}) })
   process.stdout.write(`${headersOnly ? formatHeaders(messages, remaining) : formatBatch(messages, remaining, values.peek)}\n`)
 }

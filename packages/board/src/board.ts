@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { readdir, rm, stat } from "node:fs/promises"
+import { mkdir, readdir, rm, stat } from "node:fs/promises"
 import { join } from "node:path"
 import { setTimeout as sleep } from "node:timers/promises"
 
@@ -18,6 +18,7 @@ import type {
   MessageKind,
   MessageReceipt,
   NotificationMarker,
+  Presence,
 } from "./model.ts"
 import { atomicWriteJson, isErrno, readJsonIfExists, readJsonTree, sweepTempFiles, withDirectoryLock } from "./store.ts"
 import type { LockOptions } from "./store.ts"
@@ -48,6 +49,8 @@ export interface SendResult {
   message: BoardMessage
   /** Notification markers created by this send; the caller schedules a notifier per marker. */
   notifications: NotificationMarker[]
+  /** Recipients blocked in `--wait`: they deliver to themselves, so no marker and no paste. */
+  waiting: string[]
 }
 
 export interface ReadOptions {
@@ -58,6 +61,8 @@ export interface ReadOptions {
   latest: boolean
   /** Detected performer, recorded as `readBy` on flipped receipts. */
   actor?: Actor
+  /** Restrict to these message ids (a `--wait` reply); `remaining` still counts the whole mailbox. */
+  only?: ReadonlySet<string>
 }
 
 export interface ReadResult {
@@ -92,6 +97,18 @@ interface Unread {
 
 /** Notifier heartbeat: how often a waiting notifier refreshes its marker while the batch builds. */
 const HEARTBEAT_MS = 5_000
+/** A waiter that has not refreshed its presence in this long is treated as gone even if its pid lives on. */
+const PRESENCE_MAX_AGE_MS = 10 * 60_000
+
+/** `kill(pid, 0)` probes without signalling; EPERM still means the process exists. */
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch(error) {
+    return isErrno(error, "EPERM")
+  }
+}
 
 /**
  * The durable message board for one tmux session. Pure filesystem: delivering text to a window is
@@ -146,6 +163,7 @@ export class Board {
     await this.appendThreadIndex(message.threadId, messageId)
 
     const notifications: NotificationMarker[] = []
+    const waiting: string[] = []
     for (const target of targets) {
       const marker = await this.withMailboxLock(target, async() => {
         if (message.replaceKey) await this.supersedeUnlocked(message, target)
@@ -158,11 +176,59 @@ export class Board {
           seq: await this.nextSeqUnlocked(target),
         })
         await this.addUnreadUnlocked(target, 1)
+        // A live waiter delivers this itself; pasting would wake a turn that is already listening.
+        if (await this.presenceUnlocked(target)) {
+          waiting.push(target)
+          return undefined
+        }
         return options.priority === MessagePriority.Normal ? this.ensureMarkerUnlocked(target) : undefined
       })
       if (marker) notifications.push(marker)
     }
-    return { message, notifications }
+    return { message, notifications, waiting }
+  }
+
+  /** The receipt directory for `agent`, created if missing so it can be watched before any mail arrives. */
+  async mailboxPath(agent: string): Promise<string> {
+    assertName(agent, "agent name")
+    const path = join(this.mailboxesRoot, agent)
+    await mkdir(path, { recursive: true })
+    return path
+  }
+
+  /**
+   * Announces that `agent` is blocked waiting for mail. Written after the caller armed its
+   * watcher so no receipt can land unseen between the two. Returns the removal callback.
+   */
+  async announcePresence(agent: string, expect: Presence["expect"]): Promise<() => Promise<void>> {
+    assertName(agent, "agent name")
+    const path = this.presencePath(agent)
+    await atomicWriteJson(path, { pid: process.pid, since: new Date().toISOString(), expect } satisfies Presence)
+    return async() => {
+      const current = await readJsonIfExists<Presence>(path).catch(() => undefined)
+      if (current?.pid === process.pid) await rm(path, { force: true })
+    }
+  }
+
+  /** The live presence for `agent`, if any; stale files (dead pid, too old) are removed on read. */
+  async presence(agent: string): Promise<Presence | undefined> {
+    return this.withMailboxLock(agent, () => this.presenceUnlocked(agent))
+  }
+
+  private async presenceUnlocked(agent: string): Promise<Presence | undefined> {
+    const path = this.presencePath(agent)
+    const found = await readJsonIfExists<Presence>(path).catch(() => undefined)
+    if (!found || !Number.isInteger(found.pid)) return undefined
+    const ageMs = Date.now() - Date.parse(found.since)
+    if (!isProcessAlive(found.pid) || !Number.isFinite(ageMs) || ageMs > PRESENCE_MAX_AGE_MS) {
+      await rm(path, { force: true })
+      return undefined
+    }
+    return found
+  }
+
+  private presencePath(agent: string): string {
+    return join(this.stateRoot, `${agent}.waiting.json`)
   }
 
   async read(agent: string, options: ReadOptions): Promise<ReadResult> {
@@ -172,7 +238,8 @@ export class Board {
         || (a.receipt.seq ?? 0) - (b.receipt.seq ?? 0)
         || a.message.messageId.localeCompare(b.message.messageId)
       const unread = (await this.unreadUnlocked(agent)).sort(byTime)
-      const selected = options.latest ? unread.slice(-options.max) : unread.slice(0, options.max)
+      const eligible = options.only ? unread.filter((item) => options.only!.has(item.message.messageId)) : unread
+      const selected = options.latest ? eligible.slice(-options.max) : eligible.slice(0, options.max)
 
       if (!options.peek) {
         const readAt = new Date().toISOString()

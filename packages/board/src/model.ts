@@ -78,6 +78,16 @@ export interface NotificationMarker {
   delaySeconds: number
 }
 
+/**
+ * A mailbox owner blocked in `--wait`. While the pid is alive and the record fresh, senders skip
+ * the paste: the waiter itself delivers. `expect` narrows what wakes it.
+ */
+export interface Presence {
+  pid: number
+  since: string
+  expect: { threadId: string } | "any"
+}
+
 /** Window, agent, and session names double as directory names, so keep them to a safe charset. */
 export const NAME_RE = /^[A-Za-z0-9_-]+$/
 

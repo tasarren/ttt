@@ -313,3 +313,40 @@ test("ttl lapses unread receipts to superseded on next access; acking expired re
   await assert.rejects(board.ack("B", late.message.messageId), /expired/)
   assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 0, superseded: 2 })
 })
+
+test("a live presence suppresses the notification marker; a dead or withdrawn one does not", async() => {
+  const { board, sessionRoot } = await freshSession({ notifySeconds: 5 })
+  const withdraw = await board.announcePresence("B", "any")
+  assert.deepEqual((await board.presence("B"))?.expect, "any")
+  const quiet = await board.send("A", ["B"], "while waiting", NORMAL)
+  assert.deepEqual(quiet.waiting, ["B"])
+  assert.equal(quiet.notifications.length, 0, "no marker while B is listening")
+  assert.equal(await board.unreadCount("B"), 1, "the receipt is still written")
+
+  await withdraw()
+  assert.equal(await board.presence("B"), undefined)
+  const loud = await board.send("A", ["B"], "after leaving", NORMAL)
+  assert.deepEqual(loud.waiting, [])
+  assert.equal(loud.notifications.length, 1)
+
+  // A crashed waiter leaves a file with a dead pid: senders treat it as absent and clean it up.
+  await writeFile(join(sessionRoot, "state", "B.waiting.json"), JSON.stringify({ pid: 2 ** 22 - 1, since: new Date().toISOString(), expect: "any" }))
+  assert.equal(await board.presence("B"), undefined)
+  await assert.rejects(access(join(sessionRoot, "state", "B.waiting.json")), "stale presence removed")
+
+  // A thread-scoped presence is reported as such so senders can detect mutual waits.
+  const rootId = quiet.message.threadId
+  const withdrawThread = await board.announcePresence("B", { threadId: rootId })
+  assert.deepEqual((await board.presence("B"))?.expect, { threadId: rootId })
+  await withdrawThread()
+})
+
+test("read with `only` flips just those receipts and reports the rest as remaining", async() => {
+  const { board } = await freshSession()
+  const first = await board.send("A", ["B"], "one", NORMAL)
+  await board.send("A", ["B"], "two", NORMAL)
+  const shown = await board.read("B", { max: 10, peek: false, latest: false, only: new Set([first.message.messageId]) })
+  assert.deepEqual(shown.messages.map((message) => message.body), ["one"])
+  assert.equal(shown.remaining, 1)
+  assert.equal(await board.unreadCount("B"), 1)
+})

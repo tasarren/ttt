@@ -20,6 +20,8 @@ export interface Settings {
   /** Per-window batching windows; a missing name falls back to `notifySeconds`. */
   notifyOverrides: Record<string, number>
   readMax: number
+  /** `--wait` defaults: how long a wait lasts without `--timeout`, and the most any wait may last. */
+  wait: { seconds: number; maxSeconds: number }
   capture: { lines: number; maxLines: number }
   lock: LockOptions
   tmux: TmuxOptions & {
@@ -39,6 +41,7 @@ export function defaultSettings(home: string): Settings {
     notifySeconds: 20,
     notifyOverrides: {},
     readMax: 10,
+    wait: { seconds: 120, maxSeconds: 300 },
     capture: { lines: 40, maxLines: 500 },
     lock: { timeoutMs: 10_000, staleMs: 60_000 },
     tmux: { ...DEFAULT_TMUX_OPTIONS, badges: true },
@@ -73,7 +76,8 @@ function applySettings(defaults: Settings, file: string, text: string): Settings
   if (errors[0]) {
     throw new CliError(`${file}: ${printParseErrorCode(errors[0].error)} at offset ${errors[0].offset}`, 2)
   }
-  const root = section(raw, file, "settings", ["boardRoot", "notifySeconds", "notifyOverrides", "readMax", "capture", "lock", "tmux"])
+  const root = section(raw, file, "settings", ["boardRoot", "notifySeconds", "notifyOverrides", "readMax", "wait", "capture", "lock", "tmux"])
+  const wait = section(root["wait"], file, "wait", ["seconds", "maxSeconds"])
   const capture = section(root["capture"], file, "capture", ["lines", "maxLines"])
   const lock = section(root["lock"], file, "lock", ["timeoutMs", "staleMs"])
   const tmux = section(root["tmux"], file, "tmux", ["inputSettleMs", "postPasteMs", "enterPresses", "postSendMs", "badges"])
@@ -90,6 +94,10 @@ function applySettings(defaults: Settings, file: string, text: string): Settings
     notifySeconds: int(root["notifySeconds"], "notifySeconds", defaults.notifySeconds),
     notifyOverrides: notifyOverrides(root["notifyOverrides"], file),
     readMax: atLeastOne(root["readMax"], "readMax", defaults.readMax),
+    wait: {
+      seconds: atLeastOne(wait["seconds"], "wait.seconds", defaults.wait.seconds),
+      maxSeconds: atLeastOne(wait["maxSeconds"], "wait.maxSeconds", defaults.wait.maxSeconds),
+    },
     capture: {
       lines: atLeastOne(capture["lines"], "capture.lines", defaults.capture.lines),
       maxLines: atLeastOne(capture["maxLines"], "capture.maxLines", defaults.capture.maxLines),

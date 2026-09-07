@@ -5,7 +5,7 @@
 import assert from "node:assert/strict"
 import { execFile } from "node:child_process"
 import { existsSync } from "node:fs"
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises"
+import { access, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { setTimeout as sleep } from "node:timers/promises"
@@ -37,10 +37,11 @@ async function badge(window: string): Promise<string> {
   return (await tmux("display-message", "-p", "-t", `${SESSION}:${window}`, "#{@ttt_unread}")).trim()
 }
 
+/** `window` is a window name or a pane id (`%n`); pane ids stay unambiguous once duplicate names exist. */
 async function paneShows(window: string, needle: string, timeoutMs = 10_000): Promise<string> {
   const deadline = Date.now() + timeoutMs
   for (;;) {
-    const text = await tmux("capture-pane", "-p", "-J", "-t", `${SESSION}:${window}`)
+    const text = await tmux("capture-pane", "-p", "-J", "-t", window.startsWith("%") ? window : `${SESSION}:${window}`)
     if (text.includes(needle)) return text
     if (Date.now() > deadline) assert.fail(`window ${window} never showed ${JSON.stringify(needle)}:\n${text}`)
     await sleep(200)
@@ -282,4 +283,65 @@ test("per-window notify overrides change the send receipt", async() => {
   assert.match(queued, /\(notify in ~7s\)/)
   await writeFile(settings, "{\"notifySeconds\": 1}")
   assert.match(await ttt("A", "send", "B", "--", "backoff probe"), /joins pending batch|notify in ~1s/)
+})
+
+test("send --wait returns the reply in-turn and no paste reaches the waiter", async() => {
+  await ttt("A", "ack", "--all").catch(() => undefined)
+  await ttt("B", "ack", "--all").catch(() => undefined)
+  await ttt("A", "read").catch(() => undefined)
+  await ttt("B", "read").catch(() => undefined)
+  for (const pane of [panes["A"]!, panes["B"]!]) {
+    await tmux("clear-history", "-t", pane)
+    await tmux("send-keys", "-t", pane, "clear", "Enter")
+  }
+
+  // A asks and blocks. Meanwhile B receives a normal notification, reads, replies.
+  const asking = ttt("A", "send", "B", "--wait", "--timeout", "20", "--", "what is the answer?")
+  const presencePath = join(home, "boards", SESSION, "state", "A.waiting.json")
+  const deadline = Date.now() + 5_000
+  while (!existsSync(presencePath)) {
+    if (Date.now() > deadline) assert.fail("A never announced its presence")
+    await sleep(50)
+  }
+  const waiting = JSON.parse(await readFile(presencePath, "utf8")) as { expect: unknown }
+  assert.notEqual(waiting.expect, "any", "A waits on its thread, not on anything")
+  await paneShows(panes["B"]!, "ttt: 1 new from A(1); 1 unread. Run: ttt read")
+  const batch = await ttt("B", "read")
+  const id = /\[1\/1\] A (ttt-\S+)/.exec(batch)?.[1]
+  assert.ok(id, batch)
+  // While A waits, another message from B and the reply itself must not be pasted into A.
+  assert.match(await ttt("B", "send", "A", "--no-reply", "--", "unrelated note"), /\(A waiting: delivered directly\)$/)
+  assert.match(await ttt("B", "reply", id, "--", "forty-two"), /\(A waiting: delivered directly\)$/)
+
+  const answer = await asking
+  assert.match(answer, /^queued ttt-\S+ -> B \((notify in ~1s|joins pending batch)\)$/m)
+  assert.match(answer, /forty-two/, "the reply body is printed in full")
+  assert.match(answer, /1 message shown, 1 unread message still unread\./, "honest tail after the reply")
+  assert.match(answer, /ttt: 1 message \(headers; still unread\)\n\[1\/1\] B ttt-\S+ \(no-reply\)\n {2}unrelated note/, "the rest of the mailbox as headers")
+  await sleep(1_500)
+  const screen = await tmux("capture-pane", "-p", "-t", panes["A"]!)
+  assert.doesNotMatch(screen, /ttt: \d new from B/, "no notification was pasted into the waiting window")
+  assert.doesNotMatch(screen, /URGENT/, "no urgent paste either")
+  await assert.rejects(access(presencePath), "presence withdrawn after the wait")
+  assert.equal(await ttt("A", "inbox", "--count"), "1", "only the reply was marked read")
+})
+
+test("read --wait times out honestly and refuses a mutual wait", async() => {
+  await ttt("A", "ack", "--all").catch(() => undefined)
+  await ttt("A", "read").catch(() => undefined)
+  const idle = await ttt("A", "read", "--wait", "--timeout", "1")
+  assert.equal(idle, "ttt: nothing arrived within 1s; 0 unread.")
+  await assert.rejects(ttt("A", "read", "--wait", "--timeout", "9999"), /--timeout must be an integer between 1 and 300/)
+  await assert.rejects(ttt("A", "read", "--timeout", "5"), /--timeout needs --wait/)
+  await assert.rejects(ttt("A", "send", "B", "--wait", "--no-reply", "--", "x"), /--wait needs a reply/)
+
+  // B blocks on a question to A; A must not block on a reply from B in the same thread.
+  const bAsks = ttt("B", "send", "A", "--wait", "--timeout", "20", "--", "your turn?")
+  await sleep(500)
+  const batch = await ttt("A", "read")
+  const id = /\[1\/1\] B (ttt-\S+)/.exec(batch)?.[1]
+  assert.ok(id, batch)
+  await assert.rejects(ttt("A", "reply", id, "--wait", "--", "and you?"), /B is already waiting on a reply from you/)
+  assert.match(await ttt("A", "reply", id, "--", "done"), /\(B waiting: delivered directly\)$/)
+  assert.match(await bAsks, /done/)
 })

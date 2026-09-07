@@ -41,6 +41,7 @@ usage:
   ttt ack MESSAGE_ID [NOTE]                     ttt ack --all [-- NOTE]
 
   ttt read [--max COUNT] [--peek] [--latest] [--headers-only]
+  ttt read --wait [--timeout SECONDS]           block until mail arrives, then print it
   ttt inbox [--count]                           ttt inbox --detail [--max COUNT] [--from NAME]
   ttt status MESSAGE_ID
   ttt thread MESSAGE_ID [--headers-only]
@@ -57,9 +58,11 @@ message options:
   --subject TEXT  thread subject, set once on the root message (not on replies)
   --ttl SECONDS   unread receipts lapse to superseded after SECONDS (1..2592000)
   --file PATH     read the message body from PATH
+  --wait          block until the recipient replies (or acks) in this thread, then print the reply
+  --timeout SEC   how long --wait blocks (default settings.wait.seconds, max settings.wait.maxSeconds)
 
 Normal messages are queued. A target gets one notification per burst and reads the batch with
-"ttt read". ACK is board state only; it sends nothing. Settings: ~/.ttt/settings.jsonc
+"ttt read". A recipient blocked in --wait gets no paste at all: the wait returns the mail itself. ACK is board state only; it sends nothing. Settings: ~/.ttt/settings.jsonc
 Shorthand "ttt TARGET -- MESSAGE" sends; a window named like a command (send, read, inbox,
 status, thread, capture, broadcast, reply, windows, whoami, prune, migrate) needs the explicit "ttt send" form.
 Identity is automatic (PID ancestry, then TMUX_PANE) and never uses the active window.
