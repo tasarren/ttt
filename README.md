@@ -103,8 +103,8 @@ Window names are expected to be unique. When two windows share a name, the lowes
 so either twin can `ttt read` the same messages.
 
 A window named like a command (`send`, `read`, `inbox`, `status`, `thread`, `capture`, `broadcast`,
-`reply`, `windows`, `whoami`, `prune`, `migrate`) needs the explicit `ttt send` form. The shorthand
-`ttt NAME -- MESSAGE` resolves the command first.
+`reply`, `windows`, `whoami`, `prune`, `migrate`, `tmux`) needs the explicit `ttt send` form. The
+shorthand `ttt NAME -- MESSAGE` resolves the command first.
 
 Acking without a prior `ttt read` warns on stderr. The receipt is still marked acked.
 
@@ -363,25 +363,35 @@ error names the file and the path, exit 2.
 tmux-resurrect does generic save/restore; ttt's is a scoped subset with identity, stamps, badges,
 and hand-editable jsonc.
 
-<!-- DRAFT (plan 9, step 6): remaining tmux verbs — pending FABLE's step-6 confirmation; tree and doctor are documented under Tmux setup. -->
-
 ## Tmux commands
 
 `capture`, `windows`, and `whoami` stay top-level. Everything else tmux-shaped lives behind
-`ttt tmux`. `tmux` itself is a reserved window name.
+`ttt tmux` (`ttt --help` lists them all). `tmux` itself is a reserved window name. Every verb acts
+on the window's *agent pane* — the pane stamped `@ttt_agent` with the window's name, else the
+lowest-index pane, never the active pane — and none touch the message board. Run outside tmux,
+they need `--session S` before the command.
 
 | Command | What it does |
 |---|---|
-| `ttt tmux open NAME [--cwd DIR] [--harness H] [-- COMMAND]` | New window. |
-| `ttt tmux close NAME` | Close a window. |
-| `ttt tmux split NAME [--horizontal] [--size PCT] [-- COMMAND]` | Split the window's panes. |
-| `ttt tmux respawn NAME [-- COMMAND]` | Restart a dead (or running) pane's process. |
-| `ttt tmux type NAME -- TEXT` | Paste text into the pane without pressing Enter. |
-| `ttt tmux press NAME KEY` | Press a key (`Enter`, `Escape`, `C-c`, ...). |
-| `ttt tmux interrupt NAME` | Send `C-c` to the pane. |
-| `ttt tmux wait NAME --for PATTERN [--timeout S]` | Block until the pane's screen matches. Screen state, not messages. |
-| `ttt tmux popup [--title T] [--width W] [--height H] [--cwd DIR] -- COMMAND` | Show a popup (needs an attached client). |
-| `ttt tmux flash -- TEXT` | Status-line notice, works without a client. |
+| `ttt tmux open NAME [--cwd DIR] [--harness NAME] [-- COMMAND]` | New detached window; its pane is stamped `@ttt_agent`, `@ttt_harness`, `@ttt_command`. Prints `opened NAME @id pane %id`. Errors: exists (exit 1), bad name (exit 2). |
+| `ttt tmux close NAME` | Kills the window; refuses to close the window the command itself runs in (exit 1). Prints `closed NAME @id`. The board on disk is untouched. |
+| `ttt tmux split NAME [--horizontal] [--size PERCENT] [--cwd DIR] [-- COMMAND]` | A helper pane next to the agent pane (below by default, `--horizontal` = right, `--size` 1..99). Never gets an agent stamp. Prints `split NAME: pane %id`. |
+| `ttt tmux respawn NAME [-- COMMAND]` | Restarts the agent pane's command: `COMMAND`, else the recorded `@ttt_command`, else the default shell. Re-stamps agent and harness. Prints `respawned NAME pane %id[ with: COMMAND]`. The fix for a `[dead]` pane. |
+| `ttt tmux type NAME -- TEXT` | Bracketed paste into the agent pane, no Enter. Not for messages — those go through `ttt send`. Prints `typed into NAME pane %id`. |
+| `ttt tmux press NAME KEY` | One tmux key name (`Enter`, `Escape`, `Tab`, `C-c`, `M-x`, ...). Prints `pressed KEY in NAME pane %id`. |
+| `ttt tmux interrupt NAME` | Ctrl-C to the agent pane. Prints `interrupted NAME pane %id`. |
+| `ttt tmux wait NAME --for REGEX [--timeout SECONDS]` | Polls the agent pane's screen (last 200 lines, every 500 ms) until a line matches the JS regular expression; prints the matching line, exit 0. Timeout: exit 1, `NAME did not show /REGEX/ within Ns`. Bad regex: exit 2. `--timeout` defaults to `wait.seconds`, capped by `wait.maxSeconds` — same settings as message waits. Screen state, not messages. |
+| `ttt tmux popup [--title TEXT] [--width W] [--height H] [--cwd DIR] -- COMMAND` | `display-popup -E` on the session's first attached client; blocks until the popup closes. Width/height take columns or percentages (`80%`). Without a client: exit 1. |
+| `ttt tmux flash -- TEXT` | One line on the status line. Harmless without a client. |
+
+`type`, `press`, and `interrupt` refuse two things, both exit 1: a dead pane (`pane %id of NAME is
+dead; run: ttt tmux respawn NAME` — tmux's `send-keys` into a dead pane silently succeeds, so the
+refusal is the point) and a window with `synchronize-panes` on (keys would reach every pane).
+
+`ttt tmux setup` without `--name`, on a terminal, is a wizard: `Session name:`, then
+`Layout (none, a, b) [none]:` when layouts exist, then `Working directory [cwd]:`. `--layout`/`--cwd`
+given on the command line skip their question. `--non-interactive` or a non-TTY stdin: exit 2,
+`setup needs --name SESSION (or a terminal, for the wizard)`.
 
 ## Waiting for messages
 

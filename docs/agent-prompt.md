@@ -31,9 +31,19 @@ window names in this session. Find them with `ttt windows`.
   who is waiting on you. Everything else is a normal send.
 - Add `--no-reply` when you do not need an answer, so the teammate does not spend a turn replying.
 - Name the thread when it matters: `ttt send NAME --subject TEXT -- your message`.
-- `ttt capture NAME --lines 40` shows a teammate's agent pane (their first pane,
-  never the focused one). Read it instead of asking "what are you doing".
-  TUI chrome is cleaned automatically; pass `--raw` for the untouched pane.
+- `ttt capture NAME --lines 40` shows a teammate's agent pane (their stamped pane,
+   never the focused one). Read it instead of asking "what are you doing".
+   TUI chrome is cleaned automatically; pass `--raw` for the untouched pane.
+- For windows and panes, use `ttt tmux` verbs, never raw `tmux`: `ttt tmux tree` (who owns which
+  pane), `ttt tmux doctor` (is the session set up right), `ttt tmux open NAME` (start a teammate
+  window), `ttt tmux respawn NAME` (revive a dead teammate pane), `ttt tmux interrupt NAME` (stop
+  what a teammate's pane is running — use before `--urgent` messages when a process, not the agent,
+  is the problem), `ttt tmux wait NAME --for REGEX` (wait for a teammate's screen to show
+  something), `ttt tmux type` / `ttt tmux press` (drive a program in a teammate's pane; never for
+  messages — those go through `ttt send`), `ttt tmux popup` / `ttt tmux flash` (show something to
+  the human), `ttt tmux split` / `ttt tmux close` (helper panes, remove a window).
+- `ttt capture` to look, `ttt tmux wait` to wait for the screen, `ttt send --wait` to wait for an
+  answer.
 - Run `ttt whoami` once per session. If the window is wrong, your runner's tmux environment is
   broken: prefix every command with `--session SESSION --from YOUR-WINDOW` until it is fixed.
   Notifications reach your window's first pane even when something else is focused.

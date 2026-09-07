@@ -41,22 +41,23 @@ When you have nothing else to do, wait instead of ending your turn:
 | Peek at a teammate's screen | `ttt capture NAME --lines 40` (their agent pane, never the focused one; `--grep PATTERN`, or `--around PATTERN --context N`; TUI chrome is cleaned unless `--raw`) |
 | Who/where am I (session, window, board) | `ttt whoami` (check `via:`; wrong window = broken runner env) |
 
-<!-- DRAFT (plan 9): ttt tmux table and the raw-tmux rule — pending FABLE's step confirmations. -->
-
 | Need | Run |
 |---|---|
-| See the whole session: who owns which pane | `ttt tmux tree` |
-| Check the session is set up correctly | `ttt tmux doctor` |
-| New teammate window | `ttt tmux open NAME` |
-| Stop a stuck process | `ttt tmux interrupt NAME` |
-| Restart a dead pane | `ttt tmux respawn NAME -- COMMAND` |
-| Wait for a screen state | `ttt tmux wait NAME --for PATTERN --timeout S` |
-| Show something to the human | `ttt tmux popup -- COMMAND` (needs a client) |
+| See the session: who owns which pane | `ttt tmux tree` |
+| Is the session set up right | `ttt tmux doctor` |
+| Start a teammate window | `ttt tmux open NAME [-- COMMAND]` |
+| Revive a dead teammate pane | `ttt tmux respawn NAME` |
+| Stop what a teammate's pane is running | `ttt tmux interrupt NAME` (use before `--urgent` messages when a process, not the agent, is the problem) |
+| Wait for a teammate's screen to show something | `ttt tmux wait NAME --for REGEX` |
+| Drive a program in a teammate's pane | `ttt tmux type` / `ttt tmux press` (never for messages — those go through `ttt send`) |
+| Show something to the human | `ttt tmux popup` / `ttt tmux flash` |
+| Helper panes, remove a window | `ttt tmux split` / `ttt tmux close` |
 
 ## Rules
 
 - Never poll. Do not run `ttt read` or `ttt inbox` in a loop; when idle, `ttt read --wait` is the one call per idle period, otherwise you will be notified.
 - Use `ttt tmux` verbs, never raw `tmux`, so identity and setup stay consistent.
+- `ttt capture` to look, `ttt tmux wait` to wait for the screen, `ttt send --wait` to wait for an answer.
 - `--urgent` interrupts the teammate now. Use it only to stop harmful work or unblock a
   teammate waiting on you. Everything else is a normal send.
 - Status updates carry a key so stale ones vanish: `ttt send NAME --replace status -- tests green`.

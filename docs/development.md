@@ -156,6 +156,14 @@ inside a pane (`TMUX`, `TMUX_PANE`, plus a temp `TTT_HOME` with `notifySeconds: 
 4. Record the ledger in `state/schema.json` and cover the step in `migrations.test.ts` (dry-run counts,
    idempotent rerun, newer-than-code refusal).
 
+## tmux verb files
+
+- `commands/tmux/target.ts` holds the shared pane truth: `requireSession`, `resolveAgentTarget`
+  (the stamped agent pane, else the lowest-index pane, never the active pane), and `requireTypable`
+  (the two refusals: dead pane, `synchronize-panes` on).
+- `lifecycle.ts` is open/close/split/respawn; `typing.ts` is type/press/interrupt; `screen.ts` is
+  wait/popup/flash. The interactive setup wizard lives in `setup.ts`.
+
 ## Structure audit (2026-09 cleanup)
 
 Source is ~2,580 lines. `jscpd --min-lines 10` reports 0 clones; `--min-lines 5`
