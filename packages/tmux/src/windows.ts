@@ -19,8 +19,8 @@ export function compareWindowIds(a: string, b: string): number {
 }
 
 /** Lowest id wins per window name; duplicate names share one mailbox. */
-export function winnersByName(windows: TmuxWindow[]): Map<string, TmuxWindow> {
-  const winners = new Map<string, TmuxWindow>()
+export function winnersByName<W extends TmuxWindow>(windows: W[]): Map<string, W> {
+  const winners = new Map<string, W>()
   for (const window of windows) {
     const current = winners.get(window.name)
     if (!current || compareWindowIds(window.id, current.id) < 0) winners.set(window.name, window)

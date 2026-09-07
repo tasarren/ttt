@@ -85,6 +85,19 @@ export class Inventory {
       .map(([name, id]) => ({ name, id }))
   }
 
+  /** Windows with the unread badge each currently shows (`@ttt_unread`, 0 when unset), in one round trip. */
+  async listBadges(session: string): Promise<Array<TmuxWindow & { unread: number }>> {
+    const stdout = await this.run(["list-windows", "-t", session, "-F", `#{window_name}\t#{window_id}\t#{${UserOption.Unread}}`])
+    const rows: Array<TmuxWindow & { unread: number }> = []
+    for (const line of stdout.split("\n")) {
+      const [name, id, badge] = line.split("\t")
+      if (!name || !id) continue
+      const unread = Number(badge)
+      rows.push({ name, id, unread: Number.isInteger(unread) ? unread : 0 })
+    }
+    return rows
+  }
+
   /** Every live pane on this server, with the process id each pane started from. */
   async listAllPanes(): Promise<LivePane[]> {
     const stdout = await this.run(["list-panes", "-a", "-F", PANE_FORMAT])

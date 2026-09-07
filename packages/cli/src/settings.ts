@@ -22,7 +22,10 @@ export interface Settings {
   readMax: number
   capture: { lines: number; maxLines: number }
   lock: LockOptions
-  tmux: TmuxOptions
+  tmux: TmuxOptions & {
+    /** Mirror unread counts into `@ttt_unread` window options after each command. */
+    badges: boolean
+  }
   /** `$TMUX_PANE`: the pane this process was started in, needed to identify the caller's window. */
   currentPane: string | undefined
 }
@@ -38,7 +41,7 @@ export function defaultSettings(home: string): Settings {
     readMax: 10,
     capture: { lines: 40, maxLines: 500 },
     lock: { timeoutMs: 10_000, staleMs: 60_000 },
-    tmux: { ...DEFAULT_TMUX_OPTIONS },
+    tmux: { ...DEFAULT_TMUX_OPTIONS, badges: true },
     currentPane: undefined,
   }
 }
@@ -73,7 +76,7 @@ function applySettings(defaults: Settings, file: string, text: string): Settings
   const root = section(raw, file, "settings", ["boardRoot", "notifySeconds", "notifyOverrides", "readMax", "capture", "lock", "tmux"])
   const capture = section(root["capture"], file, "capture", ["lines", "maxLines"])
   const lock = section(root["lock"], file, "lock", ["timeoutMs", "staleMs"])
-  const tmux = section(root["tmux"], file, "tmux", ["inputSettleMs", "postPasteMs", "enterPresses", "postSendMs"])
+  const tmux = section(root["tmux"], file, "tmux", ["inputSettleMs", "postPasteMs", "enterPresses", "postSendMs", "badges"])
   const int = (value: unknown, path: string, fallback: number): number => positiveInt(value, file, path, fallback)
   const atLeastOne = (value: unknown, path: string, fallback: number): number => {
     const parsed = int(value, path, fallback)
@@ -100,6 +103,7 @@ function applySettings(defaults: Settings, file: string, text: string): Settings
       postPasteMs: int(tmux["postPasteMs"], "tmux.postPasteMs", defaults.tmux.postPasteMs),
       enterPresses: int(tmux["enterPresses"], "tmux.enterPresses", defaults.tmux.enterPresses),
       postSendMs: int(tmux["postSendMs"], "tmux.postSendMs", defaults.tmux.postSendMs),
+      badges: bool(tmux["badges"], file, "tmux.badges", defaults.tmux.badges),
     },
     currentPane: defaults.currentPane,
   }
@@ -143,6 +147,12 @@ function notifyOverrides(value: unknown, file: string): Record<string, number> {
     overrides[name] = seconds
   }
   return overrides
+}
+
+function bool(value: unknown, file: string, path: string, fallback: boolean): boolean {
+  if (value === undefined) return fallback
+  if (typeof value !== "boolean") throw new CliError(`${file}: ${path} must be true or false`, 2)
+  return value
 }
 
 function text_(value: unknown, file: string, path: string, fallback: string): string {

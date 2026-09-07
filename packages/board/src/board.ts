@@ -186,6 +186,20 @@ export class Board {
     })
   }
 
+  /**
+   * Unread counters for every mailbox, read without locks from `state/<name>.unread.json`.
+   * A counter mid-rewrite reads as its last complete value (atomic rename), so this is
+   * safe for display; mailboxes without a counter yet are omitted.
+   */
+  async unreadCounts(): Promise<Map<string, number>> {
+    const counts = new Map<string, number>()
+    for (const mailbox of await this.mailboxNames()) {
+      const indexed = await readJsonIfExists<{ count: number }>(this.unreadPath(mailbox)).catch(() => undefined)
+      if (indexed && Number.isInteger(indexed.count)) counts.set(mailbox, indexed.count)
+    }
+    return counts
+  }
+
   async unreadCount(agent: string): Promise<number> {
     return this.withMailboxLock(agent, async() => {
       const indexed = await readJsonIfExists<{ count: number }>(this.unreadPath(agent))

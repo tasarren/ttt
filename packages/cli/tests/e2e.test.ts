@@ -32,6 +32,11 @@ async function ttt(as: string, ...args: string[]): Promise<string> {
   return stdout.trim()
 }
 
+/** The `@ttt_unread` badge a window currently carries; empty when unset. */
+async function badge(window: string): Promise<string> {
+  return (await tmux("display-message", "-p", "-t", `${SESSION}:${window}`, "#{@ttt_unread}")).trim()
+}
+
 async function paneShows(window: string, needle: string, timeoutMs = 10_000): Promise<string> {
   const deadline = Date.now() + timeoutMs
   for (;;) {
@@ -70,8 +75,11 @@ test("normal send: queued, one batched notification, read, ack, status, thread",
 
   await paneShows("B", "ttt: 2 new from A(2); 2 unread. Run: ttt read")
   assert.equal(await ttt("B", "inbox", "--count"), "2")
+  assert.equal(await badge("B"), "2", "the sender mirrored B's unread count into @ttt_unread")
+  assert.equal(await badge("A"), "", "A has nothing unread, so no badge option at all")
 
   const batch = await ttt("B", "read")
+  assert.equal(await badge("B"), "", "reading clears the badge")
   assert.match(batch, /^ttt: 2 messages/)
   assert.match(batch, /hello from A/)
   assert.match(batch, /second, via shorthand/)

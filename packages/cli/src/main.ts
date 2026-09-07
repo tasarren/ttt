@@ -1,3 +1,4 @@
+import { syncBadges } from "./badges.ts"
 import { usageError } from "./cli-error.ts"
 import { capture } from "./commands/capture.ts"
 import { ack, inbox, read, status, thread } from "./commands/inbox.ts"
@@ -9,6 +10,9 @@ import { windows } from "./commands/windows.ts"
 import { whoami } from "./commands/whoami.ts"
 import { createContext } from "./context.ts"
 import type { GlobalOverrides, Handler } from "./context.ts"
+
+/** Commands that only read: no receipt changes, so no badge to refresh. */
+const READ_ONLY = new Set(["inbox", "status", "thread", "capture", "windows", "whoami", "migrate", "prune"])
 
 const COMMANDS: Record<string, Handler> = {
   send,
@@ -75,6 +79,7 @@ export async function main(argv: string[], binPath: string): Promise<void> {
   const [command, args] = first in COMMANDS ? [first, rest.slice(1)] : ["send", rest]
   const ctx = await createContext(overrides, binPath)
   await COMMANDS[command]!(args, ctx)
+  if (!READ_ONLY.has(command)) await syncBadges(ctx)
 }
 
 /** `--session S --from NAME` before the command. Recovery/automation only; the notifier relies on them. */
