@@ -63,4 +63,18 @@ export class Windows {
   async close(windowId: string): Promise<void> {
     await this.run(["kill-window", "-t", windowId])
   }
+
+  /** The window's `#{window_layout}` string: pane geometry that `applyLayout` can replay exactly. */
+  async layout(windowId: string): Promise<string> {
+    return (await this.run(["display-message", "-p", "-t", windowId, "#{window_layout}"])).trim()
+  }
+
+  /**
+   * Replays a saved layout onto a window that already has the same number of panes; tmux binds
+   * cells to panes in `pane_index` order. tmux silently accepts a count mismatch, so callers
+   * validate the count first.
+   */
+  async applyLayout(windowId: string, layout: string): Promise<void> {
+    await this.run(["select-layout", "-t", windowId, layout])
+  }
 }

@@ -19,7 +19,8 @@ export function resolveAgentPane(live: LivePane[], windowId: string, windowName:
 
 /** What ttt stamps on a pane it starts or identifies; each field maps to one `@ttt_*` option. */
 export interface PaneStamp {
-  agent: string
+  /** The owning window name; absent for helper panes (a test watcher next to the agent). */
+  agent?: string
   harness?: string
   command?: string
 }
@@ -53,14 +54,14 @@ export class Panes {
   }
 
   /**
-   * Marks `paneId` as the agent pane of its window and clears the mark from every
-   * sibling in `live`, so at most one pane per window carries `@ttt_agent`. Only
-   * writes what differs; a pane already stamped costs nothing.
+   * Stamps ttt's pane options. With `agent`, marks `paneId` as the agent pane of its window
+   * and clears the mark from every sibling in `live`, so at most one pane per window carries
+   * `@ttt_agent`. Only writes what differs; a pane already stamped costs nothing.
    */
   async stamp(paneId: string, live: LivePane[], stamp: PaneStamp): Promise<void> {
     const me = live.find((pane) => pane.pane === paneId)
     const writes: Promise<void>[] = []
-    if (me?.agent !== stamp.agent) {
+    if (stamp.agent !== undefined && me?.agent !== stamp.agent) {
       writes.push(this.options.set({ scope: OptionScope.Pane, target: paneId, key: UserOption.Agent }, stamp.agent))
     }
     if (stamp.harness !== undefined) {
@@ -69,7 +70,7 @@ export class Panes {
     if (stamp.command !== undefined) {
       writes.push(this.options.set({ scope: OptionScope.Pane, target: paneId, key: UserOption.Command }, stamp.command))
     }
-    if (me) {
+    if (me && stamp.agent !== undefined) {
       for (const sibling of live) {
         if (sibling.windowId !== me.windowId || sibling.pane === paneId || sibling.agent === undefined) continue
         writes.push(this.options.unset({ scope: OptionScope.Pane, target: sibling.pane, key: UserOption.Agent }))

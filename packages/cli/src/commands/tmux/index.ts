@@ -3,17 +3,24 @@ import { createTmuxContext } from "../../tmux-context.ts"
 import type { TmuxVerb } from "../../tmux-context.ts"
 import { doctor } from "./doctor.ts"
 import { normalizeWindow } from "./normalize-window.ts"
+import { layouts, restore } from "./restore.ts"
+import { save } from "./save.ts"
 import { setup } from "./setup.ts"
 import { tree } from "./tree.ts"
 
 const VERBS: Record<string, TmuxVerb> = {
   setup,
+  save,
+  restore,
+  layouts,
   doctor,
   tree,
   "_normalize-window": normalizeWindow,
 }
 
-export const TMUX_USAGE = `  ttt tmux setup --name SESSION [--profile NAME] [--cwd DIR]
+export const TMUX_USAGE = `  ttt tmux setup --name SESSION [--layout NAME] [--profile NAME] [--cwd DIR]
+  ttt tmux save NAME [--force]                  ttt tmux restore NAME [--as SESSION] [--cwd DIR]
+  ttt tmux layouts [--json]
   ttt tmux tree [--json]                        ttt tmux doctor [--json] [--strict]`
 
 /**
