@@ -2,8 +2,8 @@ import { join } from "node:path"
 
 import { Board, assertName } from "@ttt/board"
 import type { Actor } from "@ttt/board"
-import { Tmux } from "@ttt/tmux"
-import type { DetectionSource, TmuxWindow } from "@ttt/tmux"
+import { DetectionSource, Tmux } from "@ttt/tmux"
+import type { TmuxWindow } from "@ttt/tmux"
 
 import { CliError, usageError } from "./cli-error.ts"
 import { resolveSettings } from "./settings.ts"
@@ -78,6 +78,13 @@ export async function createContext(overrides: GlobalOverrides, binPath: string)
     }
     via = overrides.from === undefined ? detected.via : "override"
     actor = { window: detected.windowName, session: detected.session }
+    // Only a PID walk proves which pane the agent's own process lives in; the env hint
+    // can be inherited by a stray shell. Best-effort: a failed stamp never fails the command.
+    if (detected.via === DetectionSource.PidWalk) {
+      void tmux.inventory.listAllPanes()
+        .then((live) => tmux.panes.stamp(detected.paneId, live, { agent: detected.windowName }))
+        .catch(() => undefined)
+    }
   }
 
   try {

@@ -47,7 +47,7 @@ export const notify: Handler = async(argv, ctx) => {
     await ctx.board.deliverNotification(target, token, async(summary) => {
       try {
         const window = await requireWindow(ctx, target)
-        await pasteToTeammate(ctx, target, window, formatNotification(summary))
+        await pasteToTeammate(ctx, window, formatNotification(summary))
       } catch(error) {
         process.stderr.write(`ttt: notification paste to ${target} failed: ${error instanceof Error ? error.message : String(error)}\n`)
         throw new CancelledNotification(target)
@@ -80,12 +80,9 @@ export function formatNotification(summary: NotificationSummary): string {
  * are pruned. Failures propagate so the notifier re-arms and urgent falls
  * back, as before.
  */
-async function pasteToTeammate(ctx: Context, target: string, window: TmuxWindow, text: string): Promise<void> {
+async function pasteToTeammate(ctx: Context, window: TmuxWindow, text: string): Promise<void> {
   const live = await ctx.tmux.inventory.listAllPanes().catch(() => [])
-  const binding = await ctx.board.resolvePane(target)
-  const hit = binding && live.some((pane) => pane.pane === binding.paneId && pane.windowId === binding.windowId)
-  if (binding && !hit) await ctx.board.prunePane(target)
-  await ctx.tmux.input.sendText(resolveAgentPane(live, window.id, hit ? binding : undefined), text)
+  await ctx.tmux.input.sendText(resolveAgentPane(live, window.id, window.name), text)
 }
 
 export function formatUrgent(message: BoardMessage): string {
@@ -100,7 +97,7 @@ export async function pushUrgent(ctx: Context, message: BoardMessage, windows: M
   const failures: string[] = []
   for (const [name, window] of windows) {
     try {
-      await ctx.board.deliverUrgent(message, name, (urgent) => pasteToTeammate(ctx, name, window, formatUrgent(urgent)))
+      await ctx.board.deliverUrgent(message, name, (urgent) => pasteToTeammate(ctx, window, formatUrgent(urgent)))
     } catch(error) {
       failures.push(name)
       process.stderr.write(`ttt: urgent delivery to ${name} failed: ${error instanceof Error ? error.message : String(error)}\n`)

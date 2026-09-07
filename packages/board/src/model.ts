@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto"
 
-export const BOARD_VERSION = 6
+export const BOARD_VERSION = 7
 export const RECEIPT_VERSION = 1
 
 export const MessageKind = {
@@ -76,18 +76,6 @@ export interface NotificationMarker {
   target: string
   createdAt: string
   delaySeconds: number
-}
-
-/**
- * Last-known pane binding for a window: which exact pane its agent sends from.
- * `session` is absent for same-board entries (the file's own session) and names
- * the origin board whenever an entry comes from elsewhere.
- */
-export interface PaneBinding {
-  paneId: string
-  windowId: string
-  updatedAt: string
-  session?: string
 }
 
 /** Window, agent, and session names double as directory names, so keep them to a safe charset. */

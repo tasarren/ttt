@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { readdir, rm } from "node:fs/promises"
+import { readdir, rm, stat } from "node:fs/promises"
 import { join } from "node:path"
 import { setTimeout as sleep } from "node:timers/promises"
 
@@ -18,7 +18,6 @@ import type {
   MessageKind,
   MessageReceipt,
   NotificationMarker,
-  PaneBinding,
 } from "./model.ts"
 import { atomicWriteJson, isErrno, readJsonIfExists, readJsonTree, sweepTempFiles, withDirectoryLock } from "./store.ts"
 import type { LockOptions } from "./store.ts"
@@ -370,57 +369,6 @@ export class Board {
   }
 
   /**
-   * Records the exact pane `window` sends from. Refresh on every send; overrides
-   * carry no pane and never call this. Last-writer-wins is benign, so no lock.
-   */
-  async registerPane(window: string, binding: { paneId: string; windowId: string; session?: string }): Promise<void> {
-    if (!binding.paneId || !binding.windowId) throw new Error("pane binding needs a pane id and a window id")
-    const all = await this.readPaneRegistry()
-    all[window] = { ...binding, updatedAt: new Date().toISOString() }
-    await atomicWriteJson(this.paneRegistryPath(), all)
-  }
-
-  /**
-   * The registered pane for `window`, or undefined when unknown, malformed, or
-   * unreadable. Never throws: delivery must fall back to the window, not fail.
-   */
-  async resolvePane(window: string): Promise<PaneBinding | undefined> {
-    const entry = (await this.readPaneRegistry())[window]
-    if (!entry || typeof entry.paneId !== "string" || !entry.paneId || typeof entry.windowId !== "string" || !entry.windowId) {
-      return undefined
-    }
-    return entry
-  }
-
-  /** Drops a dead binding; best-effort, never throws. */
-  async prunePane(window: string): Promise<void> {
-    try {
-      const all = await this.readPaneRegistry()
-      if (!(window in all)) return
-      const kept: Record<string, PaneBinding> = {}
-      for (const [name, binding] of Object.entries(all)) {
-        if (name !== window) kept[name] = binding
-      }
-      await atomicWriteJson(this.paneRegistryPath(), kept)
-    } catch {
-      // A broken registry heals on the next registerPane; delivery already fell back.
-    }
-  }
-
-  private paneRegistryPath(): string {
-    return join(this.stateRoot, "panes.json")
-  }
-
-  /** Missing or corrupt registry reads as empty; registerPane heals over corruption. */
-  private async readPaneRegistry(): Promise<Record<string, PaneBinding>> {
-    try {
-      return await readJsonIfExists<Record<string, PaneBinding>>(this.paneRegistryPath()) ?? {}
-    } catch {
-      return {}
-    }
-  }
-
-  /**
    * Garbage-collects terminal history: messages older than the cutoff whose every listed recipient holds a
    * terminal (acked/superseded) receipt at least that old, plus orphan terminal receipts whose message is gone.
    * Unread/read history is never touched. Message files are removed before their receipts so a crash leaves
@@ -710,6 +658,22 @@ export class Board {
    * One-time counter builder used by the v5→v6 migration: recomputes the unread counter for every
    * mailbox. Returns the mailbox count. Idempotent.
    */
+  /**
+   * Drops the v6 pane registry (`state/panes.json`); v7 keeps pane ownership in tmux itself
+   * (`@ttt_agent`). Returns whether a file was there, so the migration can count.
+   */
+  async dropPaneRegistry(options: { dryRun: boolean }): Promise<boolean> {
+    const path = join(this.stateRoot, "panes.json")
+    try {
+      await stat(path)
+    } catch(error) {
+      if (isErrno(error, "ENOENT")) return false
+      throw error
+    }
+    if (!options.dryRun) await rm(path, { force: true })
+    return true
+  }
+
   async rebuildUnreadIndex(): Promise<number> {
     let mailboxes = 0
     for (const mailbox of await this.mailboxNames()) {

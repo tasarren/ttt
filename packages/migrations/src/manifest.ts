@@ -2,6 +2,7 @@ import { Board } from "@ttt/board"
 import type { LockOptions } from "@ttt/board"
 
 import { buildUnreadIndex } from "./steps/build-unread-index.ts"
+import { dropPaneRegistry } from "./steps/drop-pane-registry.ts"
 import { rebuildThreadIndex } from "./steps/rebuild-thread-index.ts"
 
 /** One schema jump: idempotent, rerunnable, operating on a single session root. */
@@ -11,14 +12,14 @@ export interface MigrationStep {
   /** Short human name shown by `ttt migrate`. */
   name: string
   /** Counts first (`dryRun`), writes only when false. */
-  migrate: (board: Board, options: { dryRun: boolean }) => Promise<{ threads?: number; mailboxes?: number }>
+  migrate: (board: Board, options: { dryRun: boolean }) => Promise<{ threads?: number; mailboxes?: number; files?: number }>
 }
 
 /** Ordered schema history. New versions append exactly one step. */
-export const MIGRATION_STEPS: MigrationStep[] = [rebuildThreadIndex, buildUnreadIndex]
+export const MIGRATION_STEPS: MigrationStep[] = [rebuildThreadIndex, buildUnreadIndex, dropPaneRegistry]
 
 /** Schema version written by fresh code; the ledger starts here when no migration ever ran. */
-export const CURRENT_SCHEMA_VERSION = 6
+export const CURRENT_SCHEMA_VERSION = 7
 
 /** Ledger version when no `state/schema.json` exists yet (last version before ledgers). */
 export const PRE_LEDGER_VERSION = 4

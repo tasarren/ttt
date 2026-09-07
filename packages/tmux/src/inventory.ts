@@ -1,3 +1,4 @@
+import { UserOption } from "./options.ts"
 import type { TmuxRunner } from "./runner.ts"
 
 export interface TmuxSession {
@@ -20,6 +21,8 @@ export interface LivePane {
   /** Positional index within the window; the lowest is the original pane. */
   index: number
   pid: number
+  /** `@ttt_agent`: the window name of the agent that owns this pane, when stamped. */
+  agent: string | undefined
 }
 
 /** A pane as `tree` shows it: `LivePane` plus what a human or agent wants to see at a glance. */
@@ -27,8 +30,13 @@ export interface TreePane extends LivePane {
   active: boolean
   dead: boolean
   cwd: string
+  /** `#{pane_current_command}`: the foreground process name, never its arguments. */
   command: string
   title: string
+  /** `@ttt_harness`, when ttt started the pane. */
+  harness: string | undefined
+  /** `@ttt_command`: the command line ttt started the pane with; never `pane_start_command`. */
+  startCommand: string | undefined
 }
 
 export interface TreeWindow extends TmuxWindow {
@@ -41,8 +49,9 @@ export interface TreeSession extends TmuxSession {
   windows: TreeWindow[]
 }
 
-const PANE_FORMAT = "#{session_name}\t#{window_name}\t#{window_id}\t#{pane_id}\t#{pane_index}\t#{pane_pid}"
-const TREE_PANE_FORMAT = `${PANE_FORMAT}\t#{pane_active}\t#{pane_dead}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_title}`
+const PANE_FORMAT = `#{session_name}\t#{window_name}\t#{window_id}\t#{pane_id}\t#{pane_index}\t#{pane_pid}\t#{${UserOption.Agent}}`
+const TREE_PANE_FORMAT = `${PANE_FORMAT}\t#{pane_active}\t#{pane_dead}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_title}\t#{${UserOption.Harness}}\t#{${UserOption.Command}}`
+const PANE_FIELDS = 7
 
 /** Lists sessions, windows, and panes as typed rows; malformed lines are skipped, never thrown. */
 export class Inventory {
@@ -114,16 +123,25 @@ export class Inventory {
 }
 
 function parseLivePane(parts: string[]): LivePane | undefined {
-  const [session, window, windowId, pane, rawIndex, rawPid] = parts
+  const [session, window, windowId, pane, rawIndex, rawPid, agent] = parts
   const pid = Number(rawPid)
   const index = Number(rawIndex)
   if (!session || !window || !windowId || !pane || !Number.isInteger(pid) || !Number.isInteger(index)) return undefined
-  return { session, window, windowId, pane, index, pid }
+  return { session, window, windowId, pane, index, pid, agent: agent || undefined }
 }
 
 function parseTreePane(parts: string[]): TreePane | undefined {
   const live = parseLivePane(parts)
   if (!live) return undefined
-  const [active, dead, cwd, command, title] = parts.slice(6)
-  return { ...live, active: active === "1", dead: dead === "1", cwd: cwd ?? "", command: command ?? "", title: title ?? "" }
+  const [active, dead, cwd, command, title, harness, startCommand] = parts.slice(PANE_FIELDS)
+  return {
+    ...live,
+    active: active === "1",
+    dead: dead === "1",
+    cwd: cwd ?? "",
+    command: command ?? "",
+    title: title ?? "",
+    harness: harness || undefined,
+    startCommand: startCommand || undefined,
+  }
 }

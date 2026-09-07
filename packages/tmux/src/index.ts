@@ -9,7 +9,7 @@ export type { LivePane, TmuxSession, TmuxWindow, TreePane, TreeSession, TreeWind
 export { Options, PREVIOUS_PREFIX, OptionScope, UserOption, previousKey } from "./options.ts"
 export type { OptionRef } from "./options.ts"
 export { Panes, SplitDirection, resolveAgentPane } from "./panes.ts"
-export type { PaneTarget, SplitPaneInput } from "./panes.ts"
+export type { PaneStamp, SplitPaneInput } from "./panes.ts"
 export { DEFAULT_COMMAND_TIMEOUT_MS, TmuxError, TmuxFailure, classifyFailure, createRunner, parseVersion, runTmux, versionAtLeast } from "./runner.ts"
 export type { TmuxRunner, TmuxServer } from "./runner.ts"
 export { Screen, WaitOutcome } from "./screen.ts"

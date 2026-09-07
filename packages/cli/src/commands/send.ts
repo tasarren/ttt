@@ -83,13 +83,6 @@ async function deliver(
   })
   for (const marker of notifications) spawnNotifier(ctx, marker)
 
-  // Remember the exact pane agents send from, so notifications land there instead
-  // of the window's active pane. Overrides carry no pane and never register.
-  // Best-effort: the registry must never break a send.
-  if (ctx.senderId && ctx.senderPane) {
-    await ctx.board.registerPane(ctx.senderName, { paneId: ctx.senderPane, windowId: ctx.senderId }).catch(() => undefined)
-  }
-
   const to = message.recipients.join(", ")
   const thread = route.kind === MessageKind.Reply ? ` (thread ${message.threadId})` : ""
   if (payload.priority === MessagePriority.Urgent) {

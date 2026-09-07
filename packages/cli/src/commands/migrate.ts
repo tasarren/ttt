@@ -33,7 +33,8 @@ export const migrate: Handler = async(argv, ctx) => {
         `${result.threads} thread${result.threads === 1 ? "" : "s"}`,
         `${result.mailboxes} mailbox${result.mailboxes === 1 ? "" : "es"}`,
       ].join(", ")
-      process.stdout.write(`ttt: session ${session}: ${moved}, ${units} indexed${dry}.\n`)
+      const dropped = result.files > 0 ? `, ${result.files} obsolete file${result.files === 1 ? "" : "s"} removed` : ""
+      process.stdout.write(`ttt: session ${session}: ${moved}, ${units} indexed${dropped}${dry}.\n`)
     } catch(error) {
       failures += 1
       process.stderr.write(`ttt: session ${session} failed: ${error instanceof Error ? error.message : String(error)}\n`)

@@ -1,27 +1,27 @@
 import type { LivePane } from "./inventory.ts"
+import { OptionScope, UserOption } from "./options.ts"
+import type { Options } from "./options.ts"
 import type { TmuxRunner } from "./runner.ts"
 
-/** Minimal pane binding: what the board remembers per window. Structural on
- * purpose — `@ttt/tmux` never imports `@ttt/board`. */
-export interface PaneTarget {
-  paneId: string
-  windowId: string
+/**
+ * One pane truth for notify and capture: the pane stamped `@ttt_agent=<window name>`
+ * inside that window, else the window's lowest-index pane (the agent's original
+ * pane — never the active pane, which is whoever touched it last), else the window
+ * id when nothing live is known. Pure: unit-tests run on fake arrays, no tmux server.
+ */
+export function resolveAgentPane(live: LivePane[], windowId: string, windowName: string): string {
+  const inWindow = live.filter((pane) => pane.windowId === windowId).sort((a, b) => a.index - b.index)
+  const tagged = inWindow.find((pane) => pane.agent === windowName)
+  if (tagged) return tagged.pane
+  const first = inWindow[0]
+  return first ? first.pane : windowId
 }
 
-/**
- * One pane truth for notify and capture: the registered pane when it is still
- * that window's live pane, else the window's lowest-index pane (the agent's
- * original pane — never the active pane, which is whoever touched it last),
- * else the window id when nothing live is known. Pure: unit-tests run on fake
- * arrays, no tmux server needed.
- */
-export function resolveAgentPane(live: LivePane[], windowId: string, binding: PaneTarget | undefined): string {
-  if (binding) {
-    const hit = live.find((pane) => pane.pane === binding.paneId)
-    if (hit && hit.windowId === binding.windowId) return binding.paneId
-  }
-  const first = live.filter((pane) => pane.windowId === windowId).sort((a, b) => a.index - b.index)[0]
-  return first ? first.pane : windowId
+/** What ttt stamps on a pane it starts or identifies; each field maps to one `@ttt_*` option. */
+export interface PaneStamp {
+  agent: string
+  harness?: string
+  command?: string
 }
 
 export const SplitDirection = {
@@ -45,9 +45,37 @@ export interface SplitPaneInput {
 /** Pane lifecycle. Every verb takes a pane or window id and returns ids. */
 export class Panes {
   private readonly run: TmuxRunner
+  private readonly options: Options
 
-  constructor(run: TmuxRunner) {
+  constructor(run: TmuxRunner, options: Options) {
     this.run = run
+    this.options = options
+  }
+
+  /**
+   * Marks `paneId` as the agent pane of its window and clears the mark from every
+   * sibling in `live`, so at most one pane per window carries `@ttt_agent`. Only
+   * writes what differs; a pane already stamped costs nothing.
+   */
+  async stamp(paneId: string, live: LivePane[], stamp: PaneStamp): Promise<void> {
+    const me = live.find((pane) => pane.pane === paneId)
+    const writes: Promise<void>[] = []
+    if (me?.agent !== stamp.agent) {
+      writes.push(this.options.set({ scope: OptionScope.Pane, target: paneId, key: UserOption.Agent }, stamp.agent))
+    }
+    if (stamp.harness !== undefined) {
+      writes.push(this.options.set({ scope: OptionScope.Pane, target: paneId, key: UserOption.Harness }, stamp.harness))
+    }
+    if (stamp.command !== undefined) {
+      writes.push(this.options.set({ scope: OptionScope.Pane, target: paneId, key: UserOption.Command }, stamp.command))
+    }
+    if (me) {
+      for (const sibling of live) {
+        if (sibling.windowId !== me.windowId || sibling.pane === paneId || sibling.agent === undefined) continue
+        writes.push(this.options.unset({ scope: OptionScope.Pane, target: sibling.pane, key: UserOption.Agent }))
+      }
+    }
+    await Promise.all(writes)
   }
 
   async split(input: SplitPaneInput): Promise<string> {

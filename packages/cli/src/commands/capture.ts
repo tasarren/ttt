@@ -26,13 +26,10 @@ export const capture: Handler = async(argv, ctx) => {
   }
   const lines = boundedInt(values.lines, "--lines", ctx.settings.capture.lines, ctx.settings.capture.maxLines)
   const window = await requireWindow(ctx, target)
-  // Same pane truth as notify delivery: the agent's pane, never the window's
-  // active pane (which is whoever touched it last). Dead bindings are pruned.
+  // Same pane truth as notify delivery: the agent's stamped pane, never the window's
+  // active pane (which is whoever touched it last).
   const live = await ctx.tmux.inventory.listAllPanes().catch(() => [])
-  const binding = await ctx.board.resolvePane(target)
-  const hit = binding && live.some((pane) => pane.pane === binding.paneId && pane.windowId === binding.windowId)
-  if (binding && !hit) await ctx.board.prunePane(target)
-  const raw = await ctx.tmux.screen.capture(resolveAgentPane(live, window.id, hit ? binding : undefined), lines, !values.raw)
+  const raw = await ctx.tmux.screen.capture(resolveAgentPane(live, window.id, window.name), lines, !values.raw)
   const text = values.raw ? raw : normalizePane(raw)
   if (values.around !== undefined) {
     const context = boundedInt(values.context, "--context", 3, ctx.settings.capture.maxLines)

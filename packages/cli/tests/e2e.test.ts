@@ -4,7 +4,8 @@
  */
 import assert from "node:assert/strict"
 import { execFile } from "node:child_process"
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
+import { existsSync } from "node:fs"
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { setTimeout as sleep } from "node:timers/promises"
@@ -121,9 +122,9 @@ test("triage stays unread; bare-note ack and ack --all clear the mailbox", async
   assert.equal(await ttt("B", "ack", "--all"), "ttt: nothing to ack.")
   await assert.rejects(ttt("B", "prune"), /prune needs --days/)
   assert.match(await ttt("B", "prune", "--days", "30", "--dry-run"), /would prune 0 messages, 0 receipts older than 30 days\./)
-  assert.match(await ttt("B", "migrate", "--dry-run"), /session work: v4 -> v6, 0 threads, 2 mailboxes indexed \(dry-run\)\./)
-  assert.match(await ttt("B", "migrate"), /session work: v4 -> v6, 0 threads, 2 mailboxes indexed\./)
-  assert.match(await ttt("B", "migrate"), /session work: already v6, 0 threads, 0 mailboxes indexed\./)
+  assert.match(await ttt("B", "migrate", "--dry-run"), /session work: v4 -> v7, 0 threads, 2 mailboxes indexed \(dry-run\)\./)
+  assert.match(await ttt("B", "migrate"), /session work: v4 -> v7, 0 threads, 2 mailboxes indexed\./)
+  assert.match(await ttt("B", "migrate"), /session work: already v7, 0 threads, 0 mailboxes indexed\./)
 })
 
 test("subjects tag threads; sender filter and thread triage stay unread", async() => {
@@ -185,31 +186,36 @@ test("override reads are attributed to the detected window", async() => {
   assert.match(await ttt("A", "ack", id, "--", "audit done"), new RegExp(`acked ${id}`))
 })
 
-test("delivery targets the sending pane and prunes dead panes", async() => {
+test("delivery targets the stamped pane, falls back on death, ignores focus", async() => {
+  // A ttt run *inside* the pane (real PID ancestry) stamps @ttt_agent on that pane, never on siblings.
   const newPane = (await tmux("split-window", "-t", `${SESSION}:A`, "-P", "-F", "#{pane_id}", "sh")).trim()
-  const splitEnv = { ...process.env, TTT_HOME: home, TMUX: `${socketPath},0,0`, TMUX_PANE: newPane }
-  const sent = (await execFileAsync(process.execPath, [BIN, "send", "B", "--", "pane probe"], { env: splitEnv })).stdout.trim()
-  assert.match(sent, /queued ttt-\S+ -> B/)
-  const registry = JSON.parse(await readFile(join(home, "boards", SESSION, "state", "panes.json"), "utf8"))
-  assert.equal(registry["A"].paneId, newPane)
+  await tmux("send-keys", "-t", newPane, `TTT_HOME=${home} ${process.execPath} ${BIN} send B -- pane probe`, "Enter")
+  await paneShows("A", "queued ttt-")
+  const deadline = Date.now() + 5_000
+  for (;;) {
+    const stamped = (await tmux("display-message", "-p", "-t", newPane, "#{@ttt_agent}")).trim()
+    if (stamped === "A") break
+    if (Date.now() > deadline) assert.fail(`pane ${newPane} never got stamped @ttt_agent=A (got ${JSON.stringify(stamped)})`)
+    await sleep(100)
+  }
+  assert.equal((await tmux("display-message", "-p", "-t", panes["A"]!, "#{@ttt_agent}")).trim(), "", "the original pane lost any stamp")
   await tmux("kill-pane", "-t", newPane)
   await tmux("clear-history", "-t", `${SESSION}:A`)
   await tmux("send-keys", "-t", `${SESSION}:A`, "clear", "Enter")
+  // With the stamped pane gone, delivery falls back to the window's lowest-index pane.
   const probe = await ttt("B", "send", "A", "--no-reply", "--", "fallback probe")
   assert.match(probe, /queued ttt-\S+ -> A/)
   await paneShows("A", "ttt: 1 new from B(1); 1 unread. Run: ttt read")
-  const pruned = JSON.parse(await readFile(join(home, "boards", SESSION, "state", "panes.json"), "utf8"))
-  assert.equal("A" in pruned, false)
-  // A focused foreign pane must not steal the delivery: unregistered windows land on pane index 0.
+  // A focused foreign pane must not steal the delivery: unstamped windows land on the lowest index.
   const focusPane = (await tmux("split-window", "-t", `${SESSION}:A`, "-P", "-F", "#{pane_id}", "sh")).trim()
   await tmux("select-pane", "-t", focusPane)
   const focusProbe = await ttt("B", "send", "A", "--no-reply", "--", "focus probe")
   assert.match(focusProbe, /queued ttt-\S+ -> A/)
-  const deadline = Date.now() + 10_000
+  const focusDeadline = Date.now() + 10_000
   for (;;) {
     const original = await tmux("capture-pane", "-p", "-t", panes["A"]!)
     if (original.includes("ttt: 1 new from B(1);")) break
-    if (Date.now() > deadline) assert.fail(`original pane never showed the focus probe:\n${original}`)
+    if (Date.now() > focusDeadline) assert.fail(`original pane never showed the focus probe:\n${original}`)
     await sleep(200)
   }
   const focused = await tmux("capture-pane", "-p", "-t", focusPane)
@@ -218,6 +224,7 @@ test("delivery targets the sending pane and prunes dead panes", async() => {
   assert.match(await ttt("B", "capture", "A", "--lines", "20"), /ttt: 1 new from B\(1\);/)
   assert.match(await ttt("A", "ack", "--all", "--", "pane done"), /^acked ttt-/m)
   assert.match(await ttt("B", "ack", "--all", "--", "pane done"), /^acked ttt-/m)
+  assert.equal(existsSync(join(home, "boards", SESSION, "state", "panes.json")), false, "no registry file is written anymore")
 })
 
 test("refuses to message itself and unknown windows; capture peeks at the other pane", async() => {

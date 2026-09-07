@@ -35,10 +35,10 @@ export class Tmux {
     this.inventory = new Inventory(run)
     this.identity = new Identity(run, this.inventory, ancestors)
     this.windows = new Windows(run, this.inventory)
-    this.panes = new Panes(run)
+    this.options = new Options(run)
+    this.panes = new Panes(run, this.options)
     this.input = new Input(run, options)
     this.screen = new Screen(run)
-    this.options = new Options(run)
     this.hooks = new Hooks(run)
   }
 

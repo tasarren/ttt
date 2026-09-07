@@ -16,7 +16,7 @@ function fakeTmux(replies: Record<string, string> = {}, ancestors: number[] = []
 }
 
 test("detectContext trusts PID ancestry over a stale TMUX_PANE", async() => {
-  const { tmux, calls } = fakeTmux({ "list-panes": "work\tCODER\t@3\t%7\t0\t4242\n" }, [4242, 100])
+  const { tmux, calls } = fakeTmux({ "list-panes": "work\tCODER\t@3\t%7\t0\t4242\t\n" }, [4242, 100])
   assert.deepEqual(await tmux.identity.detect("%9"), {
     session: "work", windowName: "CODER", windowId: "@3", paneId: "%7", via: "pid-walk",
   })
@@ -32,28 +32,27 @@ test("detectContext falls back to the TMUX_PANE hint when ancestry misses", asyn
 })
 
 test("detectContext refuses to guess without ancestry or pane", async() => {
-  const { tmux } = fakeTmux({ "list-panes": "work\tCODER\t@3\t%7\t0\t4242\n" })
+  const { tmux } = fakeTmux({ "list-panes": "work\tCODER\t@3\t%7\t0\t4242\t\n" })
   await assert.rejects(tmux.identity.detect(undefined), /cannot tell which tmux pane/)
 })
 
 test("listAllPanes parses live panes and skips malformed rows", async() => {
-  const { tmux } = fakeTmux({ "list-panes": "work\tCODER\t@3\t%7\t0\t4242\nbroken\nwork\tX\t@4\t%8\t1\tnan\n" })
+  const { tmux } = fakeTmux({ "list-panes": "work\tCODER\t@3\t%7\t0\t4242\tCODER\nbroken\nwork\tX\t@4\t%8\t1\tnan\t\n" })
   assert.deepEqual(await tmux.inventory.listAllPanes(), [
-    { session: "work", window: "CODER", windowId: "@3", pane: "%7", index: 0, pid: 4242 },
+    { session: "work", window: "CODER", windowId: "@3", pane: "%7", index: 0, pid: 4242, agent: "CODER" },
   ])
 })
 
-test("resolveAgentPane trusts a live binding, else the lowest-index pane, else the window", () => {
+test("resolveAgentPane prefers the stamped pane, else the lowest index, else the window", () => {
   const live: LivePane[] = [
-    { session: "s", window: "A", windowId: "@1", pane: "%10", index: 2, pid: 1 },
-    { session: "s", window: "A", windowId: "@1", pane: "%11", index: 1, pid: 2 },
-    { session: "s", window: "B", windowId: "@2", pane: "%12", index: 1, pid: 3 },
+    { session: "s", window: "A", windowId: "@1", pane: "%10", index: 2, pid: 1, agent: "A" },
+    { session: "s", window: "A", windowId: "@1", pane: "%11", index: 1, pid: 2, agent: undefined },
+    { session: "s", window: "B", windowId: "@2", pane: "%12", index: 1, pid: 3, agent: "A" },
   ]
-  assert.equal(resolveAgentPane(live, "@1", { paneId: "%10", windowId: "@1" }), "%10")
-  assert.equal(resolveAgentPane(live, "@1", { paneId: "%10", windowId: "@2" }), "%11")
-  assert.equal(resolveAgentPane(live, "@1", { paneId: "%99", windowId: "@1" }), "%11")
-  assert.equal(resolveAgentPane(live, "@1", undefined), "%11")
-  assert.equal(resolveAgentPane([], "@1", undefined), "@1")
+  assert.equal(resolveAgentPane(live, "@1", "A"), "%10", "the stamp wins over a lower index")
+  assert.equal(resolveAgentPane(live, "@1", "Z"), "%11", "a stamp for another name is ignored")
+  assert.equal(resolveAgentPane(live, "@2", "B"), "%12", "a stale stamp in another window never leaks")
+  assert.equal(resolveAgentPane([], "@1", "A"), "@1")
 })
 
 test("detectContext rejects an incomplete line", async() => {
@@ -115,4 +114,29 @@ test("capture asks for the last N lines and joins wrapped lines on request", asy
   assert.deepEqual(calls[0], ["capture-pane", "-p", "-t", "@2", "-S", "-40", "-J"])
   await tmux.screen.capture("@2", 5, false)
   assert.deepEqual(calls[1], ["capture-pane", "-p", "-t", "@2", "-S", "-5"])
+})
+
+test("panes.stamp writes only what differs and clears sibling stamps in the same window", async() => {
+  const { tmux, calls } = fakeTmux()
+  const live: LivePane[] = [
+    { session: "s", window: "A", windowId: "@1", pane: "%1", index: 0, pid: 1, agent: "A" },
+    { session: "s", window: "A", windowId: "@1", pane: "%2", index: 1, pid: 2, agent: undefined },
+    { session: "s", window: "B", windowId: "@2", pane: "%3", index: 0, pid: 3, agent: "B" },
+  ]
+  await tmux.panes.stamp("%2", live, { agent: "A", harness: "claude" })
+  const writes = calls.map((args) => args.join(" ")).sort()
+  assert.deepEqual(writes, [
+    "set-option -p -t %1 -u @ttt_agent",
+    "set-option -p -t %2 @ttt_agent A",
+    "set-option -p -t %2 @ttt_harness claude",
+  ], "sibling %1 is cleared, window B is untouched")
+  calls.length = 0
+  await tmux.panes.stamp("%1", live.map((pane) => pane.pane === "%2" ? { ...pane, agent: "A" } : { ...pane, agent: undefined }), { agent: "A" })
+  assert.deepEqual(calls.map((args) => args.join(" ")).sort(), [
+    "set-option -p -t %1 @ttt_agent A",
+    "set-option -p -t %2 -u @ttt_agent",
+  ])
+  calls.length = 0
+  await tmux.panes.stamp("%1", live, { agent: "A" })
+  assert.deepEqual(calls, [], "an already-correct stamp costs nothing")
 })

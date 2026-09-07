@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { setTimeout as sleep } from "node:timers/promises"
@@ -94,28 +94,16 @@ test("peeks and system transitions record no actor; old receipts stay silent", a
   assert.deepEqual(plain.receipts[0]!.readBy, undefined, "actor is optional")
 })
 
-test("pane registry registers, resolves, prunes, and never breaks delivery", async() => {
+test("dropPaneRegistry removes the v6 registry once and counts honestly on dry-run", async() => {
   const { board, sessionRoot } = await freshSession()
-  assert.equal(await board.resolvePane("A"), undefined)
-  await board.registerPane("A", { paneId: "%7", windowId: "@3" })
-  const binding = await board.resolvePane("A")
-  assert.ok(binding)
-  assert.equal(binding.paneId, "%7")
-  assert.equal(binding.windowId, "@3")
-  assert.equal(typeof binding.updatedAt, "string")
-  assert.equal(binding.session, undefined, "same-session entries omit the session")
-  await board.registerPane("A", { paneId: "%8", windowId: "@3" })
-  assert.equal((await board.resolvePane("A"))?.paneId, "%8", "last writer wins")
-  await board.registerPane("B", { paneId: "%9", windowId: "@4", session: "other" })
-  assert.equal((await board.resolvePane("B"))?.session, "other")
-  await board.prunePane("A")
-  assert.equal(await board.resolvePane("A"), undefined)
-  await board.prunePane("A")
-  await writeFile(join(sessionRoot, "state", "panes.json"), "not json")
-  assert.equal(await board.resolvePane("B"), undefined, "corrupt registry falls back")
-  await board.registerPane("B", { paneId: "%9", windowId: "@4" })
-  assert.equal((await board.resolvePane("B"))?.paneId, "%9", "registry heals on next register")
-  await assert.rejects(board.registerPane("C", { paneId: "", windowId: "@5" }), /pane binding needs/)
+  assert.equal(await board.dropPaneRegistry({ dryRun: true }), false)
+  await mkdir(join(sessionRoot, "state"), { recursive: true })
+  await writeFile(join(sessionRoot, "state", "panes.json"), "{}")
+  assert.equal(await board.dropPaneRegistry({ dryRun: true }), true)
+  await assert.doesNotReject(access(join(sessionRoot, "state", "panes.json")), "dry-run leaves the file")
+  assert.equal(await board.dropPaneRegistry({ dryRun: false }), true)
+  await assert.rejects(access(join(sessionRoot, "state", "panes.json")))
+  assert.equal(await board.dropPaneRegistry({ dryRun: false }), false, "rerun is a no-op")
 })
 
 test("threadParticipants unions senders and recipients across nested replies", async() => {
