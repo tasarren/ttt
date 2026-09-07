@@ -1,5 +1,6 @@
 ---
 name: ttt
+version: 0.1.3
 description: Message teammate agents that share your tmux session. Use when you see a line starting with `ttt:`, when you need to contact, reply to, or check on another agent window, or when instructions mention `ttt send`, `ttt read`, `ttt ack`, or a teammate window name.
 ---
 
@@ -31,9 +32,23 @@ tmux window name. Teammates are the other window names; list them with `ttt wind
 | Peek at a teammate's screen | `ttt capture NAME --lines 40` (their agent pane, never the focused one; `--grep PATTERN`, or `--around PATTERN --context N`; TUI chrome is cleaned unless `--raw`) |
 | Who/where am I (session, window, board) | `ttt whoami` (check `via:`; wrong window = broken runner env) |
 
+<!-- DRAFT (plan 8/9): ttt tmux table, wait rule, raw-tmux rule — pending FABLE's step confirmations. -->
+
+| Need | Run |
+|---|---|
+| See the whole session | `ttt tmux tree` (sessions > windows > panes, live) |
+| New teammate window | `ttt tmux open NAME` |
+| Stop a stuck process | `ttt tmux interrupt NAME` |
+| Restart a dead pane | `ttt tmux respawn NAME -- COMMAND` |
+| Wait for a screen state | `ttt tmux wait NAME --for PATTERN --timeout S` |
+| Show something to the human | `ttt tmux popup -- COMMAND` (needs a client) |
+
 ## Rules
 
 - Never poll. Do not run `ttt read` or `ttt inbox` in a loop; you will be notified.
+- Need the answer to continue → `ttt send NAME --wait -- question`. Idle → `ttt read --wait`.
+  Otherwise send and move on. Never loop `read --wait` blindly; one call per idle period.
+- Use `ttt tmux` verbs, never raw `tmux`, so identity and setup stay consistent.
 - `--urgent` interrupts the teammate now. Use it only to stop harmful work or unblock a
   teammate waiting on you. Everything else is a normal send.
 - Status updates carry a key so stale ones vanish: `ttt send NAME --replace status -- tests green`.
