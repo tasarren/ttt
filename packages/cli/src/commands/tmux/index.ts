@@ -39,7 +39,7 @@ export const TMUX_USAGE = `  ttt tmux setup [--name SESSION] [--layout NAME] [--
   ttt tmux open --window NAME|auto [--harness NAME] [--ready REGEX|none] [--ready-timeout SECONDS] [--cwd DIR] [-- COMMAND]
   ttt tmux open --pane [TITLE] [--in WINDOW] [--horizontal] [--size PERCENT] [--cwd DIR] [-- COMMAND]
   ttt tmux close NAME                           ttt tmux respawn NAME [-- COMMAND]
-  ttt tmux rename OLD NEW                       (furniture only: a teammate's name is its identity)
+  ttt tmux rename OLD NEW                       (refused once OLD has a mailbox: the name is the mailbox key)
   ttt tmux type TARGET -- TEXT                  ttt tmux press TARGET KEY
   ttt tmux interrupt TARGET                     ttt tmux wait TARGET --for PATTERN [--timeout SECONDS]
 TARGET is NAME (the window's agent pane), NAME.N (pane index N) or %id. Only a window whose pane is

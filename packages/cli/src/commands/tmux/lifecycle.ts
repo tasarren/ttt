@@ -179,8 +179,9 @@ export const close: TmuxVerb = async(argv, ctx) => {
 }
 
 /**
- * `ttt tmux rename OLD NEW`: renames furniture. A teammate's name is its identity and mailbox key,
- * so a stamped window is refused; close it and open a new one instead.
+ * `ttt tmux rename OLD NEW`: renames a window and moves its agent stamp with it. Refused once OLD
+ * has a mailbox on disk: the name is the mailbox key, and a rename would orphan queued messages
+ * and split the thread history.
  */
 export const rename: TmuxVerb = async(argv, ctx) => {
   const { positionals } = parseCommandArgs(argv, {} as const)
@@ -191,10 +192,14 @@ export const rename: TmuxVerb = async(argv, ctx) => {
   const window = await ctx.tmux.windows.find(session, from)
   if (!window) throw new CliError(`tmux window does not exist: ${session}:${from}`)
   if (await ctx.tmux.windows.find(session, to)) throw new CliError(`tmux window already exists: ${session}:${to}`)
+  const mailboxes = await mailboxNames(ctx.settings.boardRoot, session)
+  if (mailboxes.includes(from)) throw new CliError(`${from} has a mailbox; renaming would orphan it. Close ${from} and open ${to} instead`)
+  if (mailboxes.includes(to)) throw new CliError(`${to} has an old mailbox that ${from} would inherit; pick another name`)
   const live = await ctx.tmux.inventory.listAllPanes()
-  if (resolveAgentPane(live, window.id, window.name) !== undefined) throw new CliError(`${from} is a teammate; its name is its identity and mailbox. Close it and open ${to} instead`)
+  const agentPane = resolveAgentPane(live, window.id, window.name)
   await ctx.tmux.windows.rename(window.id, to)
-  process.stdout.write(`renamed ${from} to ${to} ${window.id}\n`)
+  if (agentPane !== undefined) await ctx.tmux.panes.stamp(agentPane, live, { agent: to })
+  process.stdout.write(`renamed ${from} to ${to} ${window.id}${agentPane !== undefined ? ` (agent pane ${agentPane} follows)` : ""}\n`)
 }
 
 /** `ttt tmux respawn NAME [-- COMMAND]`: restarts the agent pane (default: its recorded `@ttt_command`) and re-stamps it. */

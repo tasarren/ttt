@@ -13,7 +13,7 @@ step "messaging furniture is refused (exit 1); broadcast --all skips it"
 ttt send W-1 -- hi; echo "exit=$?"
 step "driving furniture by pane works"
 ttt tmux type W-1.1 -- "echo driven"; ttt tmux press W-1.1 Enter; ttt tmux wait W-1.1 --for '^driven$' --timeout 5
-step "rename furniture; a teammate refuses"
+step "rename: the stamp follows; a window with a mailbox refuses"
 ttt tmux rename W-1 V-SCRATCH; ttt tmux rename FABLE X; echo "exit=$?"
 step "adopt: open --window on furniture restarts pane 1 with the harness and stamps it"
 ttt tmux open --window V-SCRATCH --harness sh; ttt tmux tree | grep -A1 'V-SCRATCH'

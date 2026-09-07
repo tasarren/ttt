@@ -419,7 +419,13 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
     assert.match(await outside("--session", "team", "tmux", "open", "--window", "SCRATCH", "--harness", "sh"), /^adopted SCRATCH @\d+ pane %\d+ \(ready after \d+\.\ds\)$/)
     assert.equal((await server("display-message", "-p", "-t", unnamed, "#{@ttt_agent} #{@ttt_harness}")).trim(), "SCRATCH sh")
     assert.match(await server("display-message", "-p", "-t", unnamed, "#{T:window-status-format}"), /^\d+:SCRATCH[^·]/, "the mark goes once a pane is stamped")
-    await assert.rejects(outside("--session", "team", "tmux", "rename", "SCRATCH", "OTHER"), /SCRATCH is a teammate; its name is its identity and mailbox/)
+    // A stamped window renames fine while it has no mailbox; the stamp follows. A mailbox pins the name.
+    assert.match(await outside("--session", "team", "tmux", "rename", "SCRATCH", "SCRATCH2"), /^renamed SCRATCH to SCRATCH2 @\d+ \(agent pane %\d+ follows\)$/)
+    assert.equal((await server("display-message", "-p", "-t", unnamed, "#{@ttt_agent}")).trim(), "SCRATCH2")
+    await outside("--session", "team", "tmux", "rename", "SCRATCH2", "SCRATCH")
+    await mkdir(join(home, "boards", "team", "mailboxes", "SCRATCH"), { recursive: true })
+    await assert.rejects(outside("--session", "team", "tmux", "rename", "SCRATCH", "OTHER"), /SCRATCH has a mailbox; renaming would orphan it\. Close SCRATCH and open OTHER instead/)
+    await assert.rejects(outside("--session", "team", "tmux", "rename", "HUMAN", "SH-2"), /SH-2 has an old mailbox that HUMAN would inherit/)
     await assert.rejects(outside("--session", "team", "tmux", "open", "--window", "SCRATCH", "--harness", "sh"), /window already exists: team:SCRATCH \(a teammate lives there/)
     await outside("--session", "team", "tmux", "close", "SCRATCH")
 
