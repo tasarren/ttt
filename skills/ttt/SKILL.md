@@ -6,7 +6,7 @@ description: Message teammate agents that share your tmux session. Use when you 
 # ttt — talk to teammates
 
 `ttt` is durable, batched messaging between the windows of one tmux session. Your name is your
-tmux window name. Teammates are the other window names; list them with `ttt windows`.
+tmux window name. Teammates are the other window names; list them with `ttt windows`. Teammates can belong to any harness on any provider, they are not subagents.
 
 ## The loop (follow it exactly)
 
