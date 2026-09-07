@@ -45,18 +45,20 @@ When you have nothing else to do, wait instead of ending your turn:
 |---|---|
 | See the session: who owns which pane | `ttt tmux tree` |
 | Is the session set up right | `ttt tmux doctor` |
-| Start a teammate window | `ttt tmux open NAME [-- COMMAND]` |
+| Start a teammate and wait until it accepts input | `ttt tmux open --window NAME --harness claude` (or `--window auto`) |
+| Helper pane next to you | `ttt tmux open --pane tests -- pnpm test --watch` |
 | Revive a dead teammate pane | `ttt tmux respawn NAME` |
 | Stop what a teammate's pane is running | `ttt tmux interrupt NAME` (use before `--urgent` messages when a process, not the agent, is the problem) |
 | Wait for a teammate's screen to show something | `ttt tmux wait NAME --for REGEX` |
 | Drive a program in a teammate's pane | `ttt tmux type` / `ttt tmux press` (never for messages — those go through `ttt send`) |
 | Show something to the human | `ttt tmux popup` / `ttt tmux flash` |
-| Helper panes, remove a window | `ttt tmux split` / `ttt tmux close` |
+| Remove a window | `ttt tmux close` |
 
 ## Rules
 
 - Never poll. Do not run `ttt read` or `ttt inbox` in a loop; when idle, `ttt read --wait` is the one call per idle period, otherwise you will be notified.
 - Use `ttt tmux` verbs, never raw `tmux`, so identity and setup stay consistent.
+- Keep teammate window names short: at most 12 characters, so they fit the status bar.
 - `ttt capture` to look, `ttt tmux wait` to wait for the screen, `ttt send --wait` to wait for an answer.
 - `--urgent` interrupts the teammate now. Use it only to stop harmful work or unblock a
   teammate waiting on you. Everything else is a normal send.
@@ -65,7 +67,8 @@ When you have nothing else to do, wait instead of ending your turn:
 - Name the thread when it matters: `ttt send NAME --subject TEXT -- your message`.
 - Expiring notes: `ttt send NAME --ttl SECONDS -- FYI only`.
 - Read `ttt capture` instead of asking "what are you doing".
-- Notifications find the pane you last sent from: split panes freely.
+- Notifications reach your agent pane — the stamped one, else the first pane — even when you are
+  working in a helper pane.
 - If `ttt whoami` shows the wrong window, prefix every command with `--session SESSION --from YOUR-WINDOW` until the runner is fixed.
 - Bodies are plain text read by a model: request first, context second, keep them short.
 - A window named like a command needs the explicit form: `ttt send NAME -- message`.

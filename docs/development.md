@@ -69,6 +69,11 @@ that runs the current source. Edit, save, run: no build. `publishConfig.bin` swa
 `pnpm build` bundles the workspace packages plus `jsonc-parser` into one file with tsdown
 (`packages/cli/tsdown.config.ts`, `deps.alwaysBundle`).
 
+Verify inside your own session with `ttt`, not with ad-hoc tmux servers: `.orchestrator/scripts/`
+holds `verify-open.sh` and `verify-teammate-flow.sh`, run from inside the live ttt session
+(`sh .orchestrator/scripts/verify-open.sh`). They exercise the real verbs end to end, prefix their
+windows with `V-`, and clean up after themselves via a trap.
+
 ## How a normal send flows
 
 1. `commands/send.ts` resolves the target windows (lowest id wins on duplicate names, must not be the
@@ -163,6 +168,12 @@ inside a pane (`TMUX`, `TMUX_PANE`, plus a temp `TTT_HOME` with `notifySeconds: 
   (the two refusals: dead pane, `synchronize-panes` on).
 - `lifecycle.ts` is open/close/split/respawn; `typing.ts` is type/press/interrupt; `screen.ts` is
   wait/popup/flash. The interactive setup wizard lives in `setup.ts`.
+- `names.ts` owns window names: `MAX_WINDOW_NAME` (12, fits the bar), `checkWindowName` (charset
+  plus the length error), `generateWindowName` (`HARNESS-N`/`AGENT-N`, lowest N free of live windows
+  *and* mailbox directories — a reused name would silently inherit an old inbox), and
+  `mailboxNames`. Harness presets live in `packages/tmux/src/harness.ts` (`Harness`, `HarnessPreset`
+  `{command, ready, note?}`, `HARNESS_PRESETS`, `harnessPreset`); only presets verified on a real
+  start ship, each with the version and date in a comment.
 - `doctor` also reports skill installs, read-only (`skill-status.ts` walks `~/.agents/skills`,
   `~/.claude/skills`, `~/.codex/skills`, `~/.config/opencode/skills`, `~/.cursor/skills`,
   `~/.gemini/skills`, `~/.copilot/skills`): ok when a copy or symlink matches the binary version,

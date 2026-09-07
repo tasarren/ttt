@@ -35,13 +35,15 @@ window names in this session. Find them with `ttt windows`.
   never the focused one). Read it instead of asking "what are you doing".
   TUI chrome is cleaned automatically; pass `--raw` for the untouched pane.
 - For windows and panes, use `ttt tmux` verbs, never raw `tmux`: `ttt tmux tree` (who owns which
-  pane), `ttt tmux doctor` (is the session set up right), `ttt tmux open NAME` (start a teammate
-  window), `ttt tmux respawn NAME` (revive a dead teammate pane), `ttt tmux interrupt NAME` (stop
+  pane), `ttt tmux doctor` (is the session set up right), `ttt tmux open --window NAME --harness
+  claude` (start a teammate and wait until it accepts input; `--window auto` picks a short free
+  name, at most 12 characters), `ttt tmux open --pane tests -- pnpm test --watch` (helper pane next
+  to you), `ttt tmux respawn NAME` (revive a dead teammate pane), `ttt tmux interrupt NAME` (stop
   what a teammate's pane is running — use before `--urgent` messages when a process, not the agent,
   is the problem), `ttt tmux wait NAME --for REGEX` (wait for a teammate's screen to show
   something), `ttt tmux type` / `ttt tmux press` (drive a program in a teammate's pane; never for
   messages — those go through `ttt send`), `ttt tmux popup` / `ttt tmux flash` (show something to
-  the human), `ttt tmux split` / `ttt tmux close` (helper panes, remove a window).
+  the human), `ttt tmux close` (remove a window).
 - `ttt capture` to look, `ttt tmux wait` to wait for the screen, `ttt send --wait` to wait for an
   answer.
 - Run `ttt whoami` once per session. If the window is wrong, your runner's tmux environment is

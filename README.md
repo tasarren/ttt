@@ -92,6 +92,18 @@ ttt read --headers-only       # same, explicit triage mode
 ttt ack --all -- cleared      # ack everything at once
 ```
 
+Teammates, the second way — start one that is actually ready before you message it:
+
+```sh
+ttt tmux open --window REVIEWER --harness claude --cwd ~/proj
+# opened REVIEWER @12 pane %31 (ready after 2.1s)
+ttt send REVIEWER --wait -- Review src/wait.ts for lost-wakeup bugs and reply with findings.
+```
+
+Identity is the window name, so a teammate is always a window. A pane is a helper (tests, logs)
+that shares its window's mailbox and cannot be messaged; teammates living in panes is a deliberate
+non-goal for now.
+
 ## Identity
 
 ttt has no accounts. Your tmux window name is your name, and `ttt whoami` prints the session,
@@ -380,9 +392,10 @@ they need `--session S` before the command.
 
 | Command | What it does |
 |---|---|
-| `ttt tmux open NAME [--cwd DIR] [--harness NAME] [-- COMMAND]` | New detached window; its pane is stamped `@ttt_agent`, `@ttt_harness`, `@ttt_command`. Prints `opened NAME @id pane %id`. Errors: exists (exit 1), bad name (exit 2). |
+| `ttt tmux open --window NAME\|auto [--harness NAME] [--ready REGEX\|none] [--ready-timeout SECONDS] [--cwd DIR] [-- COMMAND]` | A teammate: a new detached window, its pane stamped `@ttt_agent`, `@ttt_harness`, `@ttt_command`. Exactly one of `--window`/`--pane` is required. NAME: same charset as window names, at most 12 characters (fits the bar); `auto` generates `HARNESS-N` (uppercase; `AGENT-N` without a harness) with the lowest N that is neither a live window nor an existing mailbox directory, and prints it. `--harness H` implies COMMAND = the preset's command (when no COMMAND is given) and `--ready` = the preset's regex; presets shipped: `claude`, `opencode`, `codex`, `sh`. Unknown harness without `--ready`: exit 2, `no readiness preset for harness "x" (known: claude, opencode, codex, sh); pass --ready REGEX or --ready none`. `--ready REGEX` blocks until a screen line matches; `--ready none` returns immediately; `--ready-timeout` defaults to `wait.seconds`, capped by `wait.maxSeconds`. Prints `opened NAME @id pane %id` or, when it waited, `opened NAME @id pane %id (ready after 2.1s)`. Timeout: exit 1, `NAME did not become ready (/REGEX/) within Ns; the window @id stays open` (plus the preset's note, e.g. codex's trust prompt: answer with `ttt tmux press NAME Enter` or start it in a trusted `--cwd`). Errors: exists (exit 1), too long (exit 2, `window name "X" is longer than 12 characters; it must fit the status bar`), `--in`/`--horizontal`/`--size` with `--window` (exit 2, `--in applies to --pane only`). |
+| `ttt tmux open --pane [TITLE] [--in WINDOW] [--horizontal] [--size PERCENT] [--cwd DIR] [-- COMMAND]` | A helper pane next to an agent: no identity, no mailbox. TITLE (may be empty: `--pane ""`) lands in `@ttt_title` and the border shows it instead of the window name. `--in` defaults to the caller's own window; outside an agent window it is required (exit 2). `--horizontal` puts it to the right (below by default), `--size` takes 1..99. Prints `opened pane %id in WINDOW[ (TITLE)]`. `--harness`/`--ready` with `--pane`: exit 2. |
 | `ttt tmux close NAME` | Kills the window; refuses to close the window the command itself runs in (exit 1). Prints `closed NAME @id`. The board on disk is untouched. |
-| `ttt tmux split NAME [--horizontal] [--size PERCENT] [--cwd DIR] [-- COMMAND]` | A helper pane next to the agent pane (below by default, `--horizontal` = right, `--size` 1..99). Never gets an agent stamp. Prints `split NAME: pane %id`. |
+| `ttt tmux split NAME ...` | Deprecated alias of `ttt tmux open --pane --in NAME`; prints a one-line notice on stderr; removed next release. |
 | `ttt tmux respawn NAME [-- COMMAND]` | Restarts the agent pane's command: `COMMAND`, else the recorded `@ttt_command`, else the default shell. Re-stamps agent and harness. Prints `respawned NAME pane %id[ with: COMMAND]`. The fix for a `[dead]` pane. |
 | `ttt tmux type NAME -- TEXT` | Bracketed paste into the agent pane, no Enter. Not for messages — those go through `ttt send`. Prints `typed into NAME pane %id`. |
 | `ttt tmux press NAME KEY` | One tmux key name (`Enter`, `Escape`, `Tab`, `C-c`, `M-x`, ...). Prints `pressed KEY in NAME pane %id`. |

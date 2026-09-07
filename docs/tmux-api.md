@@ -77,7 +77,7 @@ Data:
 | `TmuxSession` | `id`, `name`, `attached`, `group` (session group name when the session shares windows with others) |
 | `TmuxWindow` | `name`, `id` |
 | `LivePane` | `session`, `window`, `windowId`, `pane`, `index`, `pid`, `agent` (`@ttt_agent`, when stamped) |
-| `TreePane` | `LivePane` plus `active`, `dead`, `cwd`, `command` (process name only), `title`, `harness` (`@ttt_harness`), `startCommand` (`@ttt_command`; never `pane_start_command`), `historyLimit` |
+| `TreePane` | `LivePane` plus `active`, `dead`, `cwd`, `command` (process name only), `title` (pane title), `harness` (`@ttt_harness`), `startCommand` (`@ttt_command`; never `pane_start_command`), `historyLimit`, `paneTitle` (`@ttt_title`, when stamped) |
 | `TreeWindow` | `TmuxWindow` plus `index`, `active`, `panes` |
 | `TreeSession` | `TmuxSession` plus `windows` |
 
@@ -114,7 +114,7 @@ Data:
 
 | Export | Kind | Purpose |
 |---|---|---|
-| `PaneStamp` | type | `{ agent?, harness?, command? }` — what ttt stamps on a pane it starts or identifies; each field maps to one `@ttt_*` option. `agent` is absent for helper panes (a test watcher next to the agent); stamping without `agent` never clears siblings. |
+| `PaneStamp` | type | `{ agent?, harness?, command?, title? }` — what ttt stamps on a pane it starts or identifies; each field maps to one `@ttt_*` option. `agent` is absent for helper panes (a test watcher next to the agent); stamping without `agent` never clears siblings. `title` is a helper pane's border title and never set together with `agent`. |
 | `resolveAgentPane` | function | `(live: LivePane[], windowId, windowName) => string` — the pane stamped `@ttt_agent` with that window name inside the window, else the lowest-index pane (the agent's original pane, never the active one), else the window id. Pure. |
 | `SplitDirection` | vocabulary | `as const`: `vertical` (`-v`), `horizontal` (`-h`). |
 | `SplitPaneInput` | type | `{ target, direction, sizePercent?, cwd?, command? }` — `target` is a window or pane id; `sizePercent` is a percentage of the split target. |
@@ -166,7 +166,7 @@ Data:
 | Export | Kind | Purpose |
 |---|---|---|
 | `OptionScope` | vocabulary | `as const`: `server`, `session`, `window`, `pane`. |
-| `UserOption` | vocabulary | `as const`: `Agent` `@ttt_agent` (pane: owning agent's window name), `Harness` `@ttt_harness` (pane), `Command` `@ttt_command` (pane), `Unread` `@ttt_unread` (window: badge count), `Setup` `@ttt_setup` (session). |
+| `UserOption` | vocabulary | `as const`: `Agent` `@ttt_agent` (pane: owning agent's window name), `Harness` `@ttt_harness` (pane), `Command` `@ttt_command` (pane), `Title` `@ttt_title` (pane: helper-pane title), `Unread` `@ttt_unread` (window: badge count), `Setup` `@ttt_setup` (session). |
 | `PREVIOUS_PREFIX` | constant | `"@ttt_prev_"` — where `pin` saves previous values. |
 | `previousKey` | function | `(key) => string` — the saved copy's name for a key. |
 | `OptionRef` | type | `{ scope, target?, key }` — target is a session name/id, window id, or pane id; ignored for `server`. |
@@ -180,6 +180,19 @@ Data:
 | `unset` | `(ref) => Promise<void>` | Removes the option; absent options are fine. |
 | `pin` | `(ref, value) => Promise<void>` | Saves the previous explicit value under `@ttt_prev_<key>` on the same target first (`"<unset>"` when there was none); a second pin never overwrites the saved original. On a server option the effective value is saved instead — server options have no parent to inherit from — and `restore` writes it back explicitly. |
 | `restore` | `(ref) => Promise<boolean>` | Puts back the pinned value (or unsets) and drops the saved copy; `false` when nothing was pinned. |
+
+## harness.ts
+
+What `open --harness H` knows about a harness: how to start it and which screen line means it
+accepts input. Only entries observed on a real start ship here; each preset carries the version and
+date it was verified against (tmux 3.7c at 160x40).
+
+| Export | Kind | Purpose |
+|---|---|---|
+| `Harness` | vocabulary | `as const`: `claude`, `opencode`, `codex`, `sh`. |
+| `HarnessPreset` | type | `{ command, ready: RegExp, note? }` — `ready` matches one screen line once the harness accepts input; `note` warns the operator (codex's trust prompt). |
+| `HARNESS_PRESETS` | constant | The four presets, each with its verification comment (e.g. Claude Code 2.1.260, 2026-09-07: the mode line under the input box). |
+| `harnessPreset` | function | `(name) => HarnessPreset | undefined` — lookup by name. |
 
 ## hooks.ts
 
@@ -214,7 +227,7 @@ Data:
 | `SetupProfile` | type | `{ name, options: ProfileOption[] }`. |
 | `AGENTS_PROFILE` | constant | The built-in `agents` profile: rename off, `remain-on-exit` on, `synchronize-panes` off, border and status formats, index 1, `renumber-windows`, `history-limit` 10000, `destroy-unattached`/`detach-on-destroy` off, bells off, `status` on, `aggressive-resize` assert, `escape-time` lower-only, `focus-events` on. |
 | `PROFILES` | constant | Profiles by name (`agents` today). |
-| `PANE_BORDER_FORMAT`, `WINDOW_STATUS_FORMAT`, `WINDOW_STATUS_CURRENT_FORMAT` | constants | The exact border and tab formats (tabs carry the unread badge; the current tab is bold). |
+| `PANE_BORDER_FORMAT`, `WINDOW_STATUS_FORMAT`, `WINDOW_STATUS_CURRENT_FORMAT` | constants | The exact border and tab formats (tabs carry the unread badge; the current tab is bold). The border falls back agent name -> pane title -> window name, so a titled helper pane shows its own title. |
 
 ## setup.ts
 
