@@ -186,15 +186,17 @@ Data:
 
 ## harness.ts
 
-What `open --harness H` knows about a harness: how to start it and which screen line means it
-accepts input. Only entries observed on a real start ship here; each preset carries the version and
-date it was verified against (tmux 3.7c at 160x40).
+What `open --harness H` knows about a harness (an agent program that runs in a pane — claude,
+opencode, codex, whatever the operator declares; a shell is not a harness): how to start it and
+which screen line means it accepts input. Only entries observed on a real start ship here; each
+preset carries the version and date it was verified against (tmux 3.7c at 160x40). The operator's
+settings file may override `bin`/`ready` and declare more.
 
 | Export | Kind | Purpose |
 |---|---|---|
-| `Harness` | vocabulary | `as const`: `claude`, `opencode`, `codex`, `sh`. |
-| `HarnessPreset` | type | `{ command, ready: RegExp, note? }` — `ready` matches one screen line once the harness accepts input; `note` warns the operator (codex's trust prompt). |
-| `HARNESS_PRESETS` | constant | The four presets, each with its verification comment (e.g. Claude Code 2.1.260, 2026-09-07: the mode line under the input box). Notes where trusting is involved: claude — a folder with pre-approved permissions asks 'Only proceed if you trust this configuration' first; answer with `ttt tmux press NAME Down` then `Enter`, or start it in a trusted `--cwd`. codex — an unseen directory asks 'Do you trust the contents' first; answer with `ttt tmux press NAME Enter` or a trusted `--cwd`. The note is appended to the open timeout message. |
+| `Harness` | vocabulary | `as const`: `claude`, `opencode`, `codex`. |
+| `HarnessPreset` | type | `{ command, ready: RegExp, note? }` — `ready` matches one screen line once the harness accepts input; `note` warns the operator (codex's trust prompt, claude's trust-configuration prompt). |
+| `HARNESS_PRESETS` | constant | The three presets, each with its verification comment (e.g. Claude Code 2.1.260, 2026-09-07: the mode line under the input box). Notes where trusting is involved: claude — a folder with pre-approved permissions asks 'Only proceed if you trust this configuration' first; answer with `ttt tmux press NAME Down` then `Enter`, or start it in a trusted `--cwd`. codex — an unseen directory asks 'Do you trust the contents' first; answer with `ttt tmux press NAME Enter` or a trusted `--cwd`. The note is appended to the open timeout message and only while the preset's `ready` is still in use. |
 | `harnessPreset` | function | `(name) => HarnessPreset | undefined` — lookup by name. |
 
 ## hooks.ts
@@ -231,7 +233,7 @@ date it was verified against (tmux 3.7c at 160x40).
 | `AGENTS_PROFILE` | constant | The built-in `agents` profile: rename off, `remain-on-exit` on, `synchronize-panes` off, border and status formats, index 1, `renumber-windows`, `history-limit` 10000, `destroy-unattached`/`detach-on-destroy` off, bells off, `status` on, `aggressive-resize` assert, `escape-time` lower-only, `focus-events` on. |
 | `PROFILES` | constant | Profiles by name (`agents` today). |
 | `FURNITURE_MARK` | constant | `"·"` — trailing mark on a window tab whose panes carry no `@ttt_agent` (furniture: nobody reads a mailbox there). |
-| `PANE_BORDER_FORMAT`, `WINDOW_STATUS_FORMAT`, `WINDOW_STATUS_CURRENT_FORMAT` | constants | The exact border and tab formats (tabs carry the unread badge; the current tab is bold). The tab marks furniture via `#{P:#{@ttt_agent}}` (joins every pane's stamp; empty plus `FURNITURE_MARK`). The border falls back agent name -> pane title -> `pane N · command`, so a titled helper pane shows its own title and an unstamped pane says what it is. |
+| `PANE_BORDER_FORMAT`, `WINDOW_STATUS_FORMAT`, `WINDOW_STATUS_CURRENT_FORMAT` | constants | The exact border and tab formats (tabs carry the unread badge; the current tab is bold). The tab marks furniture via `#{P:#{@ttt_agent}}` (joins every pane's stamp; empty plus `FURNITURE_MARK`). The border names the pane first — agent name, else pane title, else `pane N · command` — then the harness when ttt started one there, the cwd, and a dead marker. |
 
 ## setup.ts
 

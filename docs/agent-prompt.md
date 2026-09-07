@@ -37,10 +37,11 @@ be driven (`ttt tmux type`), never messaged.
   never the focused one). Read it instead of asking "what are you doing".
   TUI chrome is cleaned automatically; pass `--raw` for the untouched pane.
 - For windows and panes, use `ttt tmux` verbs, never raw `tmux`: `ttt tmux tree` (who owns which
-  pane), `ttt tmux doctor` (is the session set up right), `ttt tmux open --window NAME --harness
-  claude` (start a teammate and wait until it accepts input; `--window auto` picks a short free
-  name, at most 12 characters), `ttt tmux open --pane tests -- pnpm test --watch` (helper pane next
-  to you), `ttt tmux respawn NAME` (revive a dead teammate pane), `ttt tmux interrupt NAME` (stop
+  pane), `ttt tmux doctor` (is the session set up right; harness rows list what exists),
+  `ttt tmux open --window auto --harness` (one teammate on the default harness; returns when it
+  accepts input; `--window auto` picks a short free name, at most 12 characters; `--harness claude`
+  to pick a specific one), `ttt tmux open --pane tests -- pnpm test --watch` (helper pane next
+  to you; `--pane --harness` runs a second agent, stamped but never messageable), `ttt tmux respawn NAME` (revive a dead teammate pane), `ttt tmux interrupt NAME` (stop
   what a teammate's pane is running — use before `--urgent` messages when a process, not the agent,
   is the problem), `ttt tmux wait NAME --for REGEX` (wait for a teammate's screen to show
   something), `ttt tmux type` / `ttt tmux press` (drive a program in a teammate's pane; never for
@@ -48,9 +49,15 @@ be driven (`ttt tmux type`), never messaged.
   the human), `ttt tmux rename OLD NEW` (rename; refused when it would orphan a mailbox, otherwise
   the agent stamp follows), `ttt tmux close` (remove a window).
 - "Use W-2 for the verification run": adopt the existing window —
-  `ttt tmux open --window W-2 --harness claude --cwd ~/proj` (works when W-2 is unstamped with
+  `ttt tmux open --window W-2 --harness` (works when W-2 is unstamped with
   exactly one pane), then `ttt tmux open --pane tests --in W-2 -- pnpm test --watch`, then
   `ttt send W-2 --wait -- ...`.
+- Cheapest forms: `ttt tmux open --window auto --harness` then `ttt send NAME --wait -- task` —
+  two commands, no `wait --for`, no `capture` to check readiness. `ttt tmux open --window auto`
+  is a scratch shell (`W-N`): drive it with `NAME.1` targets, adopt later with
+  `ttt tmux open --window W-1 --harness`. Skip `--cwd` when the teammate should share your
+  directory; skip `--ready` (the harness knows its prompt); skip `--ready-timeout` (settings
+  `wait.seconds`).
 - `ttt capture` to look, `ttt tmux wait` to wait for the screen, `ttt send --wait` to wait for an
   answer.
 - Run `ttt whoami` once per session. If the window is wrong, your runner's tmux environment is

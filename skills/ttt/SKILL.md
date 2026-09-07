@@ -47,9 +47,10 @@ When you have nothing else to do, wait instead of ending your turn:
 |---|---|
 | See the session: who owns which pane | `ttt tmux tree` |
 | Is the session set up right | `ttt tmux doctor` |
-| Start a teammate and wait until it accepts input | `ttt tmux open --window NAME --harness claude` (or `--window auto`) |
-| Turn an existing single-pane window into a teammate | `ttt tmux open --window W-2 --harness claude --cwd ~/proj` (adopts it), then `ttt tmux open --pane tests --in W-2 -- pnpm test --watch`, then `ttt send W-2 --wait -- ...` |
-| Helper pane next to you | `ttt tmux open --pane tests -- pnpm test --watch` |
+| Start a teammate and wait until it accepts input | `ttt tmux open --window auto --harness` (bare `--harness` = the default; `--harness claude` to pick) |
+| Turn an existing single-pane window into a teammate | `ttt tmux open --window W-2 --harness` (adopts it), then `ttt tmux open --pane tests --in W-2 -- pnpm test --watch`, then `ttt send W-2 --wait -- ...` |
+| Helper pane next to you | `ttt tmux open --pane tests -- pnpm test --watch` (or `--pane --harness` for a second, non-messageable agent) |
+| Which harnesses exist here | `ttt tmux doctor` (harness rows) |
 | Revive a dead teammate pane | `ttt tmux respawn NAME` |
 | Stop what a teammate's pane is running | `ttt tmux interrupt NAME` (use before `--urgent` messages when a process, not the agent, is the problem) |
 | Wait for a teammate's screen to show something | `ttt tmux wait NAME --for REGEX` |
@@ -57,6 +58,20 @@ When you have nothing else to do, wait instead of ending your turn:
 | Show something to the human | `ttt tmux popup` / `ttt tmux flash` |
 | Remove a window | `ttt tmux close` |
 | Rename a window | `ttt tmux rename OLD NEW` (refused when it would orphan a mailbox; otherwise the agent stamp follows) |
+
+## Cheapest forms
+
+- `ttt tmux open --window auto --harness`: one teammate on the default harness, name chosen for
+  you, returns when it accepts input. Then `ttt send NAME --wait -- task`. Two commands, no
+  `wait --for`, no `capture` to check readiness.
+- `ttt tmux open --pane --harness`: a second agent next to you (not messageable; drive it with
+  `ttt tmux type NAME.N`).
+- `ttt tmux open --window auto`: a scratch shell (`W-N`); use `NAME.1` targets to drive it; adopt
+  later with `ttt tmux open --window W-1 --harness`.
+- Skip `--cwd` when the teammate should share your directory (it inherits the session's); skip
+  `--ready` (the harness knows its prompt); skip `--ready-timeout` (settings `wait.seconds`).
+- `--harness NAME` only when you need a specific one; the operator's settings decide what exists
+  (`ttt tmux doctor` lists them).
 
 ## Rules
 

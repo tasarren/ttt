@@ -41,7 +41,9 @@ Ownership rules:
   `commands/tmux/build.ts` builds a layout into a session: panes in file order, each extra pane
   split from the pane created last so `pane_index` follows the file (the saved `layout` string binds
   cells by index); only `agent: true` stamps — a window whose panes mark none is built as furniture;
-  `title` stamps `@ttt_title`; the shorthand `{ "name": "X" }` parses as one shell agent pane.
+  `title` stamps `@ttt_title`; `setup.ts` validates each pane's `harness` against the declared
+  harnesses before building (exit 2 naming the pane); the shorthand `{ "name": "X" }` parses as one
+  shell agent pane.
   `save.ts` captures (`savePane` emits `@ttt_title` as `title`), `restore.ts` restores and lists.
   `createSession` in `commands/tmux/setup.ts` is the shared flow; the placeholder window
   `ttt-setup` exists only until the layout's windows are up. Layout parsing is covered by
@@ -77,7 +79,7 @@ that runs the current source. Edit, save, run: no build. `publishConfig.bin` swa
 Verify inside your own session with `ttt`, not with ad-hoc tmux servers: `.orchestrator/scripts/`
 holds `verify-open.sh`, `verify-teammate-flow.sh`, and `verify-furniture.sh`, run from inside the
 live ttt session (`sh .orchestrator/scripts/verify-furniture.sh`). They exercise the real verbs end
-to end, prefix their
+to end, take an optional harness name (default: the settings' default), prefix their
 windows with `V-`, and clean up after themselves via a trap.
 
 ## How a normal send flows
@@ -132,7 +134,9 @@ Two e2e suites, each on its own private tmux server socket: `packages/tmux/tests
 (`tmux -L ttt-tmux-e2e-<pid>`, the package verbs) and `packages/cli/tests/e2e.test.ts`
 (`tmux -L ttt-e2e-<pid>`, the real CLI from source with the environment tmux gives a process
 inside a pane (`TMUX`, `TMUX_PANE`, plus a temp `TTT_HOME` with `notifySeconds: 1`), asserting on
-`capture-pane` output and board files). Neither touches your own tmux session.
+`capture-pane` output and board files). Neither touches your own tmux session. The CLI e2e declares
+a `shell` harness in its settings file (`bin sh`, a prompt regex), so its opens never depend on the
+machine's `harnesses` section.
 
 ## Adding a setting
 
@@ -183,16 +187,27 @@ inside a pane (`TMUX`, `TMUX_PANE`, plus a temp `TTT_HOME` with `notifySeconds: 
 - `normalize-window.ts` (the hook verb) pins the profile on a new window and, when tmux named the
   window itself, renames it `W-N` — `FURNITURE_STEM` in `names.ts`, lowest free N against live
   windows and mailbox directories. It never stamps.
+- `packages/cli/src/harnesses.ts` owns the harness settings: `HarnessSettings` (`declared`,
+  `defaultName`, `source`), `ResolvedHarness` (`name`, `bin`, `ready`, `note?`), `shippedHarnesses`
+  (no `harnesses` section: every preset allowed, no default), and `parseHarnesses` (only declared
+  names allowed; `bin`/`ready` required without a preset; exactly one `default: true`; overriding
+  `ready` drops the preset's note). `settings.ts` parses the section into `Settings.harnesses` and
+  carries `Settings.path` (the caller's `PATH`) so `doctor` can find binaries.
+- `lifecycle.ts` resolves what a pane runs: `withBareHarness` (a lone `--harness` is a flag, not a
+  value), `resolveProgram`/`pickHarness` (default or declared harness, the exact refusal lines),
+  and `awaitReady` (harness regex or `--ready`, visible screen only). A shell start stamps nothing;
+  only a harness or COMMAND stamps, and a harness helper pane gets `@ttt_harness` + `@ttt_command`
+  but never `@ttt_agent`.
 - `names.ts` owns window names: `MAX_WINDOW_NAME` (12, fits the bar), `checkWindowName` (charset
-  plus the length error), `generateWindowName` (`HARNESS-N`/`AGENT-N`, lowest N free of live windows
-  *and* mailbox directories — a reused name would silently inherit an old inbox), and
-  `mailboxNames`. Harness presets live in `packages/tmux/src/harness.ts` (`Harness`, `HarnessPreset`
-  `{command, ready, note?}`, `HARNESS_PRESETS`, `harnessPreset`); only presets verified on a real
-  start ship, each with the version and date in a comment.
+  plus the length error), and `generateWindowName` (`<STEM>-N` from the resolved harness or `W`,
+  lowest N free of live windows *and* mailbox directories — a reused name would silently inherit an
+  old inbox) and `mailboxNames`.
 - `doctor`'s window findings (`windowFindings`) report furniture, stale stamps (`warn window X:
   pane %id is stamped @ttt_agent=OLD, which is not this window's name; ttt ignores it` — a rename
   done with plain tmux; fix: claim by running ttt inside the pane, or clear the option), dead panes,
-  and thin history. It also reports skill installs, read-only (`skill-status.ts` walks `~/.agents/skills`,
+  and thin history. `harnessFindings` lists the section and finds each `bin` on `Settings.path`
+  (`findBinary`: absolute as is, else first PATH hit), warning when it is missing. It also reports
+  skill installs, read-only (`skill-status.ts` walks `~/.agents/skills`,
   `~/.claude/skills`, `~/.codex/skills`, `~/.config/opencode/skills`, `~/.cursor/skills`,
   `~/.gemini/skills`, `~/.copilot/skills`): ok when a copy or symlink matches the binary version,
   warn on stale versions (fix: `npx skills update ttt` for copies, update the checkout for
