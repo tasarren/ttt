@@ -45,8 +45,9 @@ export const save: TmuxVerb = async(argv, ctx) => {
 /** `@ttt_command` when ttt started the pane; else the process name, flagged; a bare shell is null. */
 function savePane(pane: TreePane, window: TreeWindow): LayoutPane {
   const agent = pane.agent === window.name ? { agent: true } : {}
+  const title = pane.paneTitle !== undefined ? { title: pane.paneTitle } : {}
   const cwd = pane.cwd !== "" ? { cwd: pane.cwd } : {}
-  if (pane.startCommand !== undefined) return { command: pane.startCommand, ...agent, ...cwd }
-  if (SHELLS.has(pane.command) || pane.command === "") return { command: null, ...agent, ...cwd }
-  return { command: pane.command, source: "process", ...agent, ...cwd }
+  if (pane.startCommand !== undefined) return { command: pane.startCommand, ...agent, ...title, ...cwd }
+  if (SHELLS.has(pane.command) || pane.command === "") return { command: null, ...agent, ...title, ...cwd }
+  return { command: pane.command, source: "process", ...agent, ...title, ...cwd }
 }

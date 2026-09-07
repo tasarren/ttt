@@ -13,8 +13,9 @@ export interface BuildReport {
 /**
  * Materializes a layout inside an existing session: every window not already present by name
  * is opened with its first pane's command, split once per extra pane, given the saved layout
- * string, and stamped (`@ttt_agent`, `@ttt_harness`, `@ttt_command`). Windows that exist are
- * skipped, never duplicated, so a rerun is safe.
+ * string, and stamped (`@ttt_agent` only where the file says `agent: true`; `@ttt_harness`,
+ * `@ttt_command`, `@ttt_title`). Windows that exist are skipped, never duplicated, so a rerun
+ * is safe.
  */
 export async function buildLayout(tmux: Tmux, session: string, layout: Layout, baseCwd: string | undefined): Promise<BuildReport> {
   const present = new Set((await tmux.inventory.listWindows(session)).map((window) => window.name))
@@ -41,19 +42,20 @@ async function buildWindow(tmux: Tmux, session: string, window: LayoutWindow, ro
   })
   const paneIds = [opened.paneId]
   for (const pane of rest) {
-    // Direction does not matter: the saved layout string decides the geometry afterwards.
-    paneIds.push(await tmux.panes.split({ target: opened.windowId, direction: SplitDirection.Vertical, ...cwdOf(pane, root), ...commandOf(pane) }))
+    // Split from the pane created last so pane_index runs 1..N in file order; the saved layout
+    // string binds cells by that index, so direction does not matter for the final geometry.
+    paneIds.push(await tmux.panes.split({ target: paneIds.at(-1)!, direction: SplitDirection.Vertical, ...cwdOf(pane, root), ...commandOf(pane) }))
   }
   if (window.layout !== undefined) await tmux.windows.applyLayout(opened.windowId, window.layout)
 
   const live: LivePane[] = await tmux.inventory.listAllPanes()
-  const agentIndex = Math.max(0, window.panes.findIndex((pane) => pane.agent === true))
   for (const [index, pane] of window.panes.entries()) {
-    const isAgent = index === agentIndex
+    const isAgent = pane.agent === true
     await tmux.panes.stamp(paneIds[index]!, live, {
       ...(isAgent ? { agent: window.name } : {}),
       ...(isAgent && window.harness !== undefined ? { harness: window.harness } : {}),
       ...(pane.command !== null ? { command: pane.command } : {}),
+      ...(pane.title !== undefined ? { title: pane.title } : {}),
     })
   }
 }

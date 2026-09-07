@@ -29,8 +29,10 @@ export interface LayoutWindow {
 export interface LayoutPane {
   /** Shell command line; `null` is a plain shell. */
   command: string | null
-  /** The agent's pane: at most one per window; defaults to the first pane. */
+  /** The agent's pane: at most one per window. A window with none is furniture and stays unstamped. */
   agent?: boolean
+  /** Helper-pane title (`@ttt_title`); never together with `agent`. */
+  title?: string
   cwd?: string
   /** `process` when `save` could only read the foreground process name, so a human should check it. */
   source?: "process"
@@ -130,9 +132,11 @@ function parseWindow(raw: unknown, file: string, path: string): LayoutWindow {
     throw new CliError(`${file}: ${error instanceof Error ? error.message : String(error)}`, 2)
   }
   const panesRaw = window["panes"]
+  // `{ "name": "LEAD" }` is the teammate shorthand: one shell pane that is the agent. A window that
+  // lists panes and marks none is furniture and is built unstamped (what `save` writes for W-N).
   const panes = Array.isArray(panesRaw) && panesRaw.length > 0
     ? panesRaw.map((pane, index) => parsePane(pane, file, `${path}.panes[${index}]`))
-    : [{ command: null }]
+    : [{ command: null, agent: true }]
   const agents = panes.filter((pane) => pane.agent === true).length
   if (agents > 1) throw new CliError(`${file}: ${path} marks ${agents} panes as agent; at most one`, 2)
   const layout = optionalText(window["layout"], file, `${path}.layout`)
@@ -148,7 +152,7 @@ function parseWindow(raw: unknown, file: string, path: string): LayoutWindow {
 }
 
 function parsePane(raw: unknown, file: string, path: string): LayoutPane {
-  const pane = record(raw, file, path, ["command", "agent", "cwd", "source"])
+  const pane = record(raw, file, path, ["command", "agent", "title", "cwd", "source"])
   const command = pane["command"]
   if (command !== null && command !== undefined && (typeof command !== "string" || command === "")) {
     throw new CliError(`${file}: ${path}.command must be a non-empty string or null`, 2)
@@ -158,9 +162,12 @@ function parsePane(raw: unknown, file: string, path: string): LayoutPane {
   const source = pane["source"]
   if (source !== undefined && source !== "process") throw new CliError(`${file}: ${path}.source may only be "process"`, 2)
   const cwd = optionalText(pane["cwd"], file, `${path}.cwd`)
+  const title = optionalText(pane["title"], file, `${path}.title`)
+  if (title !== undefined && agent === true) throw new CliError(`${file}: ${path} is the agent pane and cannot carry a title`, 2)
   return {
     command: command ?? null,
     ...(agent !== undefined ? { agent } : {}),
+    ...(title !== undefined ? { title } : {}),
     ...(cwd !== undefined ? { cwd } : {}),
     ...(source !== undefined ? { source } : {}),
   }

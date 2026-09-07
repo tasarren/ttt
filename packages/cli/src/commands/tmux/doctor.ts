@@ -98,6 +98,12 @@ function windowFindings(window: TreeWindow, historyLimit: number): Finding[] {
   if (!window.panes.some((pane) => pane.agent === window.name)) {
     findings.push({ severity: Severity.Ok, subject, detail: `furniture: no agent pane, messages to ${window.name} are refused until something there runs ttt`, fix: `ttt tmux open --window ${window.name} --harness NAME` })
   }
+  // A stamp for another window's name cannot happen through ttt; a hand-edited option or a rename outside ttt leaves one.
+  for (const pane of window.panes) {
+    if (pane.agent !== undefined && pane.agent !== window.name) {
+      findings.push({ severity: Severity.Warn, subject, detail: `pane ${pane.pane} is stamped @ttt_agent=${pane.agent}, which is not this window's name; ttt ignores it`, fix: `run ttt inside that pane to claim it for ${window.name}, or: tmux set-option -p -t ${pane.pane} -u @ttt_agent` })
+    }
+  }
   for (const pane of window.panes) {
     if (pane.dead) findings.push({ severity: Severity.Warn, subject, detail: `pane ${pane.pane} is dead`, fix: `ttt tmux respawn ${window.name}` })
     if (pane.historyLimit < historyLimit) findings.push({ severity: Severity.Warn, subject, detail: `pane ${pane.pane} keeps only ${pane.historyLimit} lines of history` })

@@ -459,17 +459,20 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
       "cwd": "${tmpDir}",
       "windows": [
         { "name": "CODER", "harness": "sh", "layout": "b046,160x40,0,0{111x40,0,0,1,48x40,112,0,5}",
-          "panes": [ { "command": "sh", "agent": true }, { "command": "sleep 300", "cwd": "/" } ] },
+          "panes": [ { "command": "sh", "agent": true }, { "command": "sleep 300", "cwd": "/", "title": "tests" } ] },
         { "name": "LEAD" },
+        { "name": "W-1", "panes": [ { "command": null } ] },
       ],
     }`)
     assert.equal(await outside("tmux", "layouts"), "duo")
     const built = await outside("tmux", "setup", "--name", "duo", "--layout", "duo")
-    assert.match(built, /^layout duo: 2 windows created\.$/m)
+    assert.match(built, /^layout duo: 3 windows created\.$/m)
     const duo = JSON.parse(await outside("--session", "duo", "tmux", "tree", "--json")) as {
       windows: Array<{ name: string; panes: Array<{ pane: string; agent: string | undefined; harness: string | undefined; startCommand: string | undefined; cwd: string }> }>
     }
-    assert.deepEqual(duo.windows.map((window) => window.name), ["CODER", "LEAD"], "placeholder window is gone, order preserved")
+    assert.deepEqual(duo.windows.map((window) => window.name), ["CODER", "LEAD", "W-1"], "placeholder window is gone, order preserved")
+    assert.equal(duo.windows[2]!.panes[0]!.agent, undefined, "a panes list with no agent: true builds furniture")
+    assert.equal((await server("display-message", "-p", "-t", duo.windows[0]!.panes[1]!.pane, "#{@ttt_title}")).trim(), "tests", "helper titles are built")
     const [coderAgent, helper] = duo.windows[0]!.panes
     assert.equal(coderAgent!.agent, "CODER")
     assert.equal(coderAgent!.harness, "sh")
@@ -477,24 +480,25 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
     assert.equal(helper!.agent, undefined, "the helper pane is not the agent pane")
     assert.equal(helper!.startCommand, "sleep 300")
     assert.equal(helper!.cwd, "/")
-    assert.equal(duo.windows[1]!.panes[0]!.agent, "LEAD", "single-pane windows stamp their only pane")
+    assert.equal(duo.windows[1]!.panes[0]!.agent, "LEAD", "a window without a panes list is one agent pane")
     const geometry = (await server("display-message", "-p", "-t", "duo:CODER", "#{window_layout}")).trim()
     assert.match(geometry, /^[0-9a-f]{4},160x40,0,0\{111x40,0,0,\d+,48x40,112,0,\d+\}$/, "saved geometry replayed exactly")
     const coderWindow = (await server("display-message", "-p", "-t", "duo:CODER", "#{window_id}")).trim()
     assert.equal((await server("show-options", "-wA", "-v", "-t", coderWindow, "allow-rename")).trim(), "off", "layout windows are normalized too")
 
     const saved = await outside("--session", "duo", "tmux", "save", "duo-copy")
-    assert.match(saved, /^saved 2 windows to .*\/layouts\/duo-copy\.jsonc$/m)
-    const copy = JSON.parse(await readFile(join(home, "layouts", "duo-copy.jsonc"), "utf8")) as { windows: Array<{ name: string; harness?: string; layout?: string; panes: Array<{ command: string | null; agent?: boolean; cwd?: string; source?: string }> }> }
+    assert.match(saved, /^saved 3 windows to .*\/layouts\/duo-copy\.jsonc$/m)
+    const copy = JSON.parse(await readFile(join(home, "layouts", "duo-copy.jsonc"), "utf8")) as { windows: Array<{ name: string; harness?: string; layout?: string; panes: Array<{ command: string | null; agent?: boolean; title?: string; cwd?: string; source?: string }> }> }
     assert.equal(copy.windows[0]!.harness, "sh")
     assert.equal(copy.windows[0]!.layout, geometry)
-    assert.deepEqual(copy.windows[0]!.panes.map((pane) => [pane.command, pane.agent ?? false]), [["sh", true], ["sleep 300", false]])
+    assert.deepEqual(copy.windows[0]!.panes.map((pane) => [pane.command, pane.agent ?? false, pane.title]), [["sh", true, undefined], ["sleep 300", false, "tests"]], "save keeps the title")
+    assert.equal(copy.windows[2]!.panes[0]!.agent, undefined, "save keeps furniture unstamped")
     assert.equal(copy.windows[1]!.layout, undefined, "single panes save no geometry")
     assert.equal(copy.windows[1]!.panes[0]!.command, null, "an idle shell saves as null")
     await assert.rejects(outside("--session", "duo", "tmux", "save", "duo-copy"), /already exists; pass --force/)
 
-    assert.match(await outside("tmux", "restore", "duo-copy", "--as", "duo2"), /^layout duo-copy: 2 windows created\.$/m)
-    assert.deepEqual((JSON.parse(await outside("--session", "duo2", "tmux", "tree", "--json")) as { windows: Array<{ name: string }> }).windows.map((window) => window.name), ["CODER", "LEAD"])
+    assert.match(await outside("tmux", "restore", "duo-copy", "--as", "duo2"), /^layout duo-copy: 3 windows created\.$/m)
+    assert.deepEqual((JSON.parse(await outside("--session", "duo2", "tmux", "tree", "--json")) as { windows: Array<{ name: string }> }).windows.map((window) => window.name), ["CODER", "LEAD", "W-1"])
     assert.deepEqual(JSON.parse(await outside("tmux", "layouts", "--json")), ["duo", "duo-copy"])
 
     // Lifecycle and typing verbs, all against the agent pane, never the active one.
