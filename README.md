@@ -280,7 +280,10 @@ allowed before the command; `--from` is rejected; running outside tmux is fine.
 `doctor` checks: tmux version, socket, config files; attached clients; session group; the
 `@ttt_setup` marker and session record; every profile option (assert-only ones warn, pinned ones
 FAIL with a `tmux set-option ...` fix); the hook; the hook binary path; run-shell failures from
-`tmux show-messages`; per window: furniture (`ok window W-1: furniture: no agent pane, messages to W-1 are refused until something there runs ttt`, fix `ttt tmux open --window W-1 --harness NAME`), dead panes (warn), history
+`tmux show-messages`; per window: furniture (`ok window W-1: furniture: no agent pane, messages to W-1 are refused until something there runs ttt`, fix `ttt tmux open --window W-1 --harness NAME`), stale stamps
+(`warn window X: pane %id is stamped @ttt_agent=OLD, which is not this window's name; ttt ignores it`,
+fix `run ttt inside that pane to claim it for X, or: tmux set-option -p -t %id -u @ttt_agent` — what
+a rename done with plain tmux leaves behind), dead panes (warn), history
 below the profile (warn); and skill installs, read-only: `ok   skill <harness>: symlink -> <target>, vX`
 (or `copy, vX`), `warn skill <harness>: ... vX but ttt is vY` (fix: `npx skills update ttt` for
 copies, update the checkout for symlinks), `warn skill <harness>: symlink -> ... (target missing)`,
@@ -346,9 +349,9 @@ error names the file and the path, exit 2.
       "name": "CODER",                  // required; same charset as window names; unique
       "harness": "claude",              // optional; stamped as @ttt_harness on the agent pane
       "layout": "a3b2,160x40,0,0{111x40,0,0[111x29,0,0,0,111x10,0,30,2],48x40,112,0,1}",
-      "panes": [                        // pane_index order; omitted = one plain shell
-        { "command": "claude", "agent": true, "cwd": "." },   // at most one agent: true; default first pane
-        { "command": "pnpm test --watch", "cwd": "app" },
+      "panes": [                        // built in file order; omitted = one shell agent
+        { "command": "claude", "agent": true, "cwd": "." },   // at most one agent: true; the only stamp
+        { "command": "pnpm test --watch", "title": "tests", "cwd": "app" },
         { "command": null }             // plain shell
       ]
     }
@@ -362,17 +365,26 @@ error names the file and the path, exit 2.
   nested layouts included, and a layout saved at 160x40 restores at any size (tmux rescales on
   attach).
 - `command` is the process each pane starts with. `agent: true` (at most one per window) marks the
-  pane a messaging agent targets.
-- `ttt tmux restore` / `setup --layout` builds the windows: panes in index order, then the layout
-  applied, then every layout window gets the profile's window options and the stamps — `@ttt_agent`
-  and `@ttt_harness` on the agent pane, `@ttt_command` on every pane with a command. Windows
+  pane a messaging agent targets — it is the only thing that stamps a pane. A window whose `panes`
+  marks none is built as furniture (unstamped, tab `W-1·`); that is what `save` writes for a `W-N`
+  window. The shorthand `{ "name": "LEAD" }` (no `panes` key) still means one shell pane that is
+  the agent and parses as `[{ "command": null, "agent": true }]`.
+- `title` (optional string) is a helper-pane title: stamped `@ttt_title`, shown in the border.
+  Refused together with `agent: true`: exit 2,
+  `<file>: windows[i].panes[j] is the agent pane and cannot carry a title`.
+- `ttt tmux restore` / `setup --layout` builds the windows: panes in file order — each extra pane is
+  split from the pane created last, so `pane_index` 1..N follows the file and the saved `layout`
+  string binds cells correctly — then the layout applied, then every layout window gets the
+  profile's window options and the stamps: `@ttt_agent` and `@ttt_harness` on the agent pane,
+  `@ttt_command` on every pane with a command, `@ttt_title` on every pane with a title. Windows
   already present by name are skipped, never duplicated, so reruns are idempotent. A failed build
   kills the session.
 - Restoring under the same session name reconnects to the same board (boards are keyed by session
   name), so unread messages survive; `restore NAME --as OTHER` starts with a fresh board. A missing
   layout exits 2 with `no layout named X (run: ttt tmux layouts)`.
 - `ttt tmux save` captures each window's name, harness (from the agent pane), geometry (only for
-  multi-pane windows), and panes in index order with cwd and command. The command is `@ttt_command`
+  multi-pane windows), and panes in index order with cwd, command, and the helper-pane title
+  (`@ttt_title`) when stamped. The command is `@ttt_command`
   when ttt started the pane; otherwise the foreground process name, saved with `"source": "process"`
   and a warning to check them before restoring (a `claude` shim shows as `node`, so a human edits
   it). Idle shells (`sh`, `bash`, `zsh`, `fish`, ...) save as `null`. `pane_start_command` is never

@@ -37,10 +37,15 @@ Ownership rules:
 - Session records (`~/.ttt/sessions/<S>/session.json`, written by setup, read by doctor) live in
   `packages/cli/src/session-record.ts`, outside the boards on purpose.
 - Layouts live in `packages/cli/src/layout.ts` (schema, parser, file io — every error names file
-  and path). `commands/tmux/build.ts` builds a layout into a session (open, split, `applyLayout`,
-  stamp); `save.ts` captures, `restore.ts` restores and lists. `createSession` in
-  `commands/tmux/setup.ts` is the shared flow; the placeholder window `ttt-setup` exists only until
-  the layout's windows are up. Layout parsing is covered by `packages/cli/tests/layout.test.ts`.
+  and path). `LayoutPane.title` is a helper-pane title, refused together with `agent: true`.
+  `commands/tmux/build.ts` builds a layout into a session: panes in file order, each extra pane
+  split from the pane created last so `pane_index` follows the file (the saved `layout` string binds
+  cells by index); only `agent: true` stamps — a window whose panes mark none is built as furniture;
+  `title` stamps `@ttt_title`; the shorthand `{ "name": "X" }` parses as one shell agent pane.
+  `save.ts` captures (`savePane` emits `@ttt_title` as `title`), `restore.ts` restores and lists.
+  `createSession` in `commands/tmux/setup.ts` is the shared flow; the placeholder window
+  `ttt-setup` exists only until the layout's windows are up. Layout parsing is covered by
+  `packages/cli/tests/layout.test.ts`.
 - One operation lives in one file. `commands/send.ts` holds `send`, `broadcast`, and `reply` because they
   share the same `deliver` flow; `commands/inbox.ts` holds the read side and its formatters.
 
@@ -184,7 +189,10 @@ inside a pane (`TMUX`, `TMUX_PANE`, plus a temp `TTT_HOME` with `notifySeconds: 
   `mailboxNames`. Harness presets live in `packages/tmux/src/harness.ts` (`Harness`, `HarnessPreset`
   `{command, ready, note?}`, `HARNESS_PRESETS`, `harnessPreset`); only presets verified on a real
   start ship, each with the version and date in a comment.
-- `doctor` also reports skill installs, read-only (`skill-status.ts` walks `~/.agents/skills`,
+- `doctor`'s window findings (`windowFindings`) report furniture, stale stamps (`warn window X:
+  pane %id is stamped @ttt_agent=OLD, which is not this window's name; ttt ignores it` — a rename
+  done with plain tmux; fix: claim by running ttt inside the pane, or clear the option), dead panes,
+  and thin history. It also reports skill installs, read-only (`skill-status.ts` walks `~/.agents/skills`,
   `~/.claude/skills`, `~/.codex/skills`, `~/.config/opencode/skills`, `~/.cursor/skills`,
   `~/.gemini/skills`, `~/.copilot/skills`): ok when a copy or symlink matches the binary version,
   warn on stale versions (fix: `npx skills update ttt` for copies, update the checkout for
