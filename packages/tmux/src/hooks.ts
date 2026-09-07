@@ -23,6 +23,15 @@ export class Hooks {
     await this.run(["set-hook", "-u", "-t", session, name])
   }
 
+  /**
+   * Server message log lines mentioning `needle`, newest last. A `run-shell` hook that failed
+   * leaves `'<command>' returned <code>` here; that is the only trace tmux keeps.
+   */
+  async failures(needle: string): Promise<string[]> {
+    const stdout = await this.run(["show-messages"])
+    return stdout.split("\n").filter((line) => line.includes(needle) && / returned \d+$/.test(line))
+  }
+
   /** Hooks explicitly set on the session; `show-hooks` prints `name[index] command` per line. */
   async list(session: string): Promise<SessionHook[]> {
     const stdout = await this.run(["show-hooks", "-t", session])

@@ -345,3 +345,71 @@ test("read --wait times out honestly and refuses a mutual wait", async() => {
   assert.match(await ttt("A", "reply", id, "--", "done"), /\(B waiting: delivered directly\)$/)
   assert.match(await bAsks, /done/)
 })
+
+test("tmux setup creates a normalized session, the hook normalizes new windows, doctor reads it back", async() => {
+  // Outside tmux: no TMUX/TMUX_PANE, private server through TMUX_TMPDIR so nothing touches the developer's.
+  const tmpDir = await mkdtemp(join(tmpdir(), "ttt-e2e-tmuxdir-"))
+  const env: NodeJS.ProcessEnv = { ...process.env, TTT_HOME: home, TMUX_TMPDIR: tmpDir }
+  delete env["TMUX"]
+  delete env["TMUX_PANE"]
+  const outside = async(...args: string[]): Promise<string> => (await execFileAsync(process.execPath, [BIN, ...args], { env })).stdout.trim()
+  const server = async(...args: string[]): Promise<string> => (await execFileAsync("tmux", args, { env })).stdout
+  try {
+    const created = await outside("tmux", "setup", "--name", "team")
+    assert.match(created, /^ttt: session team set up with profile agents: \d+ options? pinned, hook after-new-window installed\.$/m)
+    assert.match(created, /attach with: tmux attach -t team/)
+    assert.equal((await server("show-options", "-v", "-t", "team", "@ttt_setup")).trim(), "agents")
+    // Effective values (-A): what the user's own config already satisfies is not pinned again.
+    assert.equal((await server("show-options", "-A", "-v", "-t", "team", "base-index")).trim(), "1")
+    assert.equal((await server("show-options", "-A", "-v", "-t", "team", "destroy-unattached")).trim(), "off")
+    assert.equal((await server("show-options", "-A", "-v", "-t", "team", "history-limit")).trim(), "10000")
+    const first = (await server("display-message", "-p", "-t", "team:1", "#{window_id}")).trim()
+    assert.equal((await server("show-options", "-wA", "-v", "-t", first, "remain-on-exit")).trim(), "on")
+    assert.equal((await server("show-options", "-wA", "-v", "-t", first, "allow-rename")).trim(), "off")
+    assert.match(await server("show-options", "-wA", "-v", "-t", first, "pane-border-format"), /@ttt_agent/)
+    assert.doesNotMatch(await server("show-options", "-g"), /@ttt_/, "nothing is written globally")
+
+    const record = JSON.parse(await readFile(join(home, "sessions", "team", "session.json"), "utf8")) as { profile: string; hookBin: string }
+    assert.equal(record.profile, "agents")
+    assert.equal(record.hookBin, BIN)
+
+    await assert.rejects(outside("tmux", "setup", "--name", "team"), /session already exists: team/)
+    await assert.rejects(outside("tmux", "setup", "--name", "bad name"), /session name may contain only/)
+    await assert.rejects(outside("tmux", "setup", "--name", "x", "--profile", "nope"), /unknown profile "nope"; available: agents/)
+
+    // A window the human opens by hand goes through the hook.
+    await server("new-window", "-t", "team", "-n", "HUMAN", "sh")
+    const human = (await server("display-message", "-p", "-t", "team:HUMAN", "#{window_id}")).trim()
+    const deadline = Date.now() + 5_000
+    for (;;) {
+      const status = (await server("show-options", "-wA", "-v", "-t", human, "pane-border-status")).trim()
+      if (status === "top") break
+      if (Date.now() > deadline) assert.fail(`hook never normalized ${human}: ${await server("show-messages")}`)
+      await sleep(100)
+    }
+    assert.equal((await server("show-options", "-wA", "-v", "-t", human, "remain-on-exit")).trim(), "on")
+
+    const shown = await outside("--session", "team", "tmux", "tree")
+    assert.match(shown, /^team \$\d+$/m)
+    assert.match(shown, /^ {2}\d+:HUMAN @\d+/m)
+    const asJson = JSON.parse(await outside("--session", "team", "tmux", "tree", "--json")) as { windows: Array<{ name: string; panes: Array<{ historyLimit: number }> }> }
+    assert.deepEqual(asJson.windows.map((window) => window.name).sort(), ["HUMAN", "tmux"].sort())
+    assert.equal(asJson.windows[0]!.panes[0]!.historyLimit, 10_000)
+
+    const report = await outside("--session", "team", "tmux", "doctor")
+    assert.match(report, /^ok {3}setup: profile agents, recorded /m)
+    assert.match(report, /^warn clients: no client attached/m)
+    assert.doesNotMatch(report, /^FAIL/m)
+    await assert.rejects(outside("--session", "team", "tmux", "doctor", "--strict"), /doctor found problems in team/)
+    // Someone breaks a pinned option by hand: doctor fails and names the fix.
+    await server("set-option", "-w", "-t", human, "allow-rename", "on")
+    const broken = await outside("--session", "team", "tmux", "doctor").catch((error: unknown) => (error as { stdout: string }).stdout)
+    assert.match(broken, new RegExp(`^FAIL window ${human} allow-rename: is on, wanted off`, "m"))
+    assert.match(broken, new RegExp(`fix: tmux set-option -w -t ${human} allow-rename "off"`))
+    await assert.rejects(outside("--session", "team", "tmux", "unknown"), /ttt tmux needs one of: setup, doctor, tree/)
+    await assert.rejects(outside("--session", "team", "--from", "A", "tmux", "tree"), /--from does not apply/)
+  } finally {
+    await server("kill-server").catch(() => undefined)
+    await rm(tmpDir, { recursive: true, force: true })
+  }
+})

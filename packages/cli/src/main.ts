@@ -6,6 +6,7 @@ import { migrate } from "./commands/migrate.ts"
 import { notify } from "./commands/notify.ts"
 import { prune } from "./commands/prune.ts"
 import { broadcast, reply, send } from "./commands/send.ts"
+import { TMUX_USAGE, runTmuxVerb } from "./commands/tmux/index.ts"
 import { windows } from "./commands/windows.ts"
 import { whoami } from "./commands/whoami.ts"
 import { createContext } from "./context.ts"
@@ -51,6 +52,8 @@ usage:
   ttt prune --days N [--dry-run]
   ttt migrate [--dry-run] [--all]
 
+${TMUX_USAGE}
+
 message options:
   --no-reply      the recipient does not need to reply
   --urgent        skip the batching window and paste into the target window now
@@ -64,7 +67,7 @@ message options:
 Normal messages are queued. A target gets one notification per burst and reads the batch with
 "ttt read". A recipient blocked in --wait gets no paste at all: the wait returns the mail itself. ACK is board state only; it sends nothing. Settings: ~/.ttt/settings.jsonc
 Shorthand "ttt TARGET -- MESSAGE" sends; a window named like a command (send, read, inbox,
-status, thread, capture, broadcast, reply, windows, whoami, prune, migrate) needs the explicit "ttt send" form.
+status, thread, capture, broadcast, reply, windows, whoami, prune, migrate, tmux) needs the explicit "ttt send" form.
 Identity is automatic (PID ancestry, then TMUX_PANE) and never uses the active window.
 Recovery overrides only come as a pair: --session NAME --from WINDOW; lone --from is rejected.
 Capture output is cleaned of TUI chrome (borders, spinners) unless --raw is passed.`
@@ -75,6 +78,13 @@ export async function main(argv: string[], binPath: string): Promise<void> {
   const first = rest[0]
   if (first === undefined || first === "-h" || first === "--help" || first === "help") {
     process.stdout.write(`${USAGE}\n`)
+    return
+  }
+
+  // `ttt tmux ...` has its own composition root: no board, no sender, works outside tmux.
+  if (first === "tmux") {
+    if (overrides.from !== undefined) throw usageError("--from does not apply to ttt tmux commands")
+    await runTmuxVerb(rest.slice(1), overrides.session, binPath)
     return
   }
 
@@ -97,8 +107,12 @@ function parseGlobals(argv: string[]): { overrides: GlobalOverrides; rest: strin
     overrides[flag === "--session" ? "session" : "from"] = value
     index += 2
   }
+  const rest = argv.slice(index)
   if (overrides.from !== undefined && overrides.session === undefined) {
     throw usageError("--from needs --session SESSION; overrides only come as a pair")
   }
-  return { overrides, rest: argv.slice(index) }
+  if (overrides.session !== undefined && overrides.from === undefined && rest[0] !== "tmux") {
+    throw usageError("--session needs --from NAME")
+  }
+  return { overrides, rest }
 }

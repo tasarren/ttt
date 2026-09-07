@@ -1,10 +1,20 @@
 import { UserOption } from "./options.ts"
+import { TmuxError, TmuxFailure } from "./runner.ts"
 import type { TmuxRunner } from "./runner.ts"
 
 export interface TmuxSession {
   id: string
   name: string
   attached: boolean
+  /** Session group name when the session shares windows with others (`new-session -t`). */
+  group: string | undefined
+}
+
+export interface ServerInfo {
+  version: string
+  socketPath: string
+  /** Config files the server loaded, comma-separated as tmux reports them; empty when none. */
+  configFiles: string
 }
 
 export interface TmuxWindow {
@@ -37,6 +47,8 @@ export interface TreePane extends LivePane {
   harness: string | undefined
   /** `@ttt_command`: the command line ttt started the pane with; never `pane_start_command`. */
   startCommand: string | undefined
+  /** `#{history_limit}` in effect for this pane. */
+  historyLimit: number
 }
 
 export interface TreeWindow extends TmuxWindow {
@@ -50,7 +62,8 @@ export interface TreeSession extends TmuxSession {
 }
 
 const PANE_FORMAT = `#{session_name}\t#{window_name}\t#{window_id}\t#{pane_id}\t#{pane_index}\t#{pane_pid}\t#{${UserOption.Agent}}`
-const TREE_PANE_FORMAT = `${PANE_FORMAT}\t#{pane_active}\t#{pane_dead}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_title}\t#{${UserOption.Harness}}\t#{${UserOption.Command}}`
+const TREE_PANE_FORMAT = `${PANE_FORMAT}\t#{pane_active}\t#{pane_dead}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_title}\t#{${UserOption.Harness}}\t#{${UserOption.Command}}\t#{history_limit}`
+const SESSION_FORMAT = "#{session_id}\t#{session_name}\t#{session_attached}\t#{session_group}"
 const PANE_FIELDS = 7
 
 /** Lists sessions, windows, and panes as typed rows; malformed lines are skipped, never thrown. */
@@ -61,15 +74,27 @@ export class Inventory {
     this.run = run
   }
 
+  /** Every session on the server; an absent server simply has none. */
   async listSessions(): Promise<TmuxSession[]> {
-    const stdout = await this.run(["list-sessions", "-F", "#{session_id}\t#{session_name}\t#{session_attached}"])
+    const stdout = await this.run(["list-sessions", "-F", SESSION_FORMAT]).catch((error: unknown) => {
+      if (error instanceof TmuxError && error.code === TmuxFailure.NoServer) return ""
+      throw error
+    })
     const sessions: TmuxSession[] = []
     for (const line of stdout.split("\n")) {
-      const [id, name, attached] = line.split("\t")
+      const [id, name, attached, group] = line.split("\t")
       if (!id || !name || attached === undefined) continue
-      sessions.push({ id, name, attached: attached !== "0" })
+      sessions.push({ id, name, attached: attached !== "0", group: group || undefined })
     }
     return sessions
+  }
+
+  /** Version, socket, and config files of the server we talk to; one `display-message`. */
+  async serverInfo(): Promise<ServerInfo> {
+    const line = (await this.run(["display-message", "-p", "#{version}\t#{socket_path}\t#{config_files}"])).trim()
+    const [version, socketPath, configFiles] = line.split("\t")
+    if (!version || !socketPath) throw new Error(`unexpected tmux server info: ${JSON.stringify(line)}`)
+    return { version, socketPath, configFiles: configFiles ?? "" }
   }
 
   async hasSession(name: string): Promise<boolean> {
@@ -146,7 +171,7 @@ function parseLivePane(parts: string[]): LivePane | undefined {
 function parseTreePane(parts: string[]): TreePane | undefined {
   const live = parseLivePane(parts)
   if (!live) return undefined
-  const [active, dead, cwd, command, title, harness, startCommand] = parts.slice(PANE_FIELDS)
+  const [active, dead, cwd, command, title, harness, startCommand, historyLimit] = parts.slice(PANE_FIELDS)
   return {
     ...live,
     active: active === "1",
@@ -156,5 +181,6 @@ function parseTreePane(parts: string[]): TreePane | undefined {
     title: title ?? "",
     harness: harness || undefined,
     startCommand: startCommand || undefined,
+    historyLimit: Number.isInteger(Number(historyLimit)) ? Number(historyLimit) : 0,
   }
 }

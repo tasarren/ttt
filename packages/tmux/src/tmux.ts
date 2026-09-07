@@ -9,6 +9,8 @@ import { Panes } from "./panes.ts"
 import { TmuxError, TmuxFailure, parseVersion, runTmux, versionAtLeast } from "./runner.ts"
 import type { TmuxRunner } from "./runner.ts"
 import { Screen } from "./screen.ts"
+import { Sessions } from "./sessions.ts"
+import { Setup } from "./setup.ts"
 import { Windows } from "./windows.ts"
 
 /** Oldest tmux the setup verbs support: pane user options and `display-popup` arrived in 3.2. */
@@ -20,6 +22,7 @@ export const MIN_TMUX_VERSION: readonly [number, number] = [3, 2]
  */
 export class Tmux {
   readonly inventory: Inventory
+  readonly sessions: Sessions
   readonly identity: Identity
   readonly windows: Windows
   readonly panes: Panes
@@ -27,12 +30,14 @@ export class Tmux {
   readonly screen: Screen
   readonly options: Options
   readonly hooks: Hooks
+  readonly setup: Setup
   private readonly run: TmuxRunner
   private version: Promise<readonly [number, number] | undefined> | undefined
 
   constructor(options: TmuxOptions, run: TmuxRunner = runTmux, ancestors: AncestorResolver = procAncestors) {
     this.run = run
     this.inventory = new Inventory(run)
+    this.sessions = new Sessions(run)
     this.identity = new Identity(run, this.inventory, ancestors)
     this.windows = new Windows(run, this.inventory)
     this.options = new Options(run)
@@ -40,6 +45,7 @@ export class Tmux {
     this.input = new Input(run, options)
     this.screen = new Screen(run)
     this.hooks = new Hooks(run)
+    this.setup = new Setup(this.options, this.hooks, this.inventory)
   }
 
   /** Once per instance; throws `unsupported_version` style `TmuxError` below `MIN_TMUX_VERSION`. */

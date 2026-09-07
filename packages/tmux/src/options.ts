@@ -100,7 +100,9 @@ export class Options {
   async pin(ref: OptionRef, value: string): Promise<void> {
     const saved: OptionRef = { ...ref, key: previousKey(ref.key) }
     if (await this.get(saved) === undefined) {
-      const current = await this.get(ref)
+      // Session/window/pane options inherit, so "unset here" is a faithful original and restoring
+      // it means unsetting. Server options have no parent: the effective value is the original.
+      const current = ref.scope === OptionScope.Server ? await this.getEffective(ref) : await this.get(ref)
       await this.set(saved, current === undefined ? UNSET_MARKER : current)
     }
     await this.set(ref, value)
