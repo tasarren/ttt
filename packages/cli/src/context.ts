@@ -79,9 +79,10 @@ export async function createContext(overrides: GlobalOverrides, binPath: string)
     via = overrides.from === undefined ? detected.via : "override"
     actor = { window: detected.windowName, session: detected.session }
     // Only a PID walk proves which pane the agent's own process lives in; the env hint
-    // can be inherited by a stray shell. Best-effort: a failed stamp never fails the command.
+    // can be inherited by a stray shell. Awaited so a short command cannot exit before
+    // the stamp lands; best-effort so a failed stamp never fails the command.
     if (detected.via === DetectionSource.PidWalk) {
-      void tmux.inventory.listAllPanes()
+      await tmux.inventory.listAllPanes()
         .then((live) => tmux.panes.stamp(detected.paneId, live, { agent: detected.windowName }))
         .catch(() => undefined)
     }
