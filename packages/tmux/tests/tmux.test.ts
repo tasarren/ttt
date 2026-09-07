@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { Tmux, resolveAgentPane } from "../src/index.ts"
+import { Tmux, parsePaneAddress, resolveAgentPane } from "../src/index.ts"
 import type { LivePane, TmuxOptions } from "../src/index.ts"
 
 const NO_WAIT: TmuxOptions = { inputSettleMs: 0, postPasteMs: 0, enterPresses: 2, postSendMs: 0 }
@@ -43,16 +43,25 @@ test("listAllPanes parses live panes and skips malformed rows", async() => {
   ])
 })
 
-test("resolveAgentPane prefers the stamped pane, else the lowest index, else the window", () => {
+test("resolveAgentPane returns the stamped pane only; an unstamped window is furniture", () => {
   const live: LivePane[] = [
     { session: "s", window: "A", windowId: "@1", pane: "%10", index: 2, pid: 1, agent: "A" },
     { session: "s", window: "A", windowId: "@1", pane: "%11", index: 1, pid: 2, agent: undefined },
     { session: "s", window: "B", windowId: "@2", pane: "%12", index: 1, pid: 3, agent: "A" },
   ]
   assert.equal(resolveAgentPane(live, "@1", "A"), "%10", "the stamp wins over a lower index")
-  assert.equal(resolveAgentPane(live, "@1", "Z"), "%11", "a stamp for another name is ignored")
-  assert.equal(resolveAgentPane(live, "@2", "B"), "%12", "a stale stamp in another window never leaks")
-  assert.equal(resolveAgentPane([], "@1", "A"), "@1")
+  assert.equal(resolveAgentPane(live, "@1", "Z"), undefined, "a stamp for another name is ignored, and no index fallback")
+  assert.equal(resolveAgentPane(live, "@2", "B"), undefined, "a stale stamp from another window is not an agent")
+  assert.equal(resolveAgentPane([], "@1", "A"), undefined)
+})
+
+test("parsePaneAddress: NAME, NAME.N, %id; anything else is undefined", () => {
+  assert.deepEqual(parsePaneAddress("CODER"), { kind: "agent", window: "CODER" })
+  assert.deepEqual(parsePaneAddress("CODER.2"), { kind: "index", window: "CODER", index: 2 })
+  assert.deepEqual(parsePaneAddress("%14"), { kind: "id", pane: "%14" })
+  assert.equal(parsePaneAddress(""), undefined)
+  assert.equal(parsePaneAddress("a.b"), undefined)
+  assert.equal(parsePaneAddress(".1"), undefined)
 })
 
 test("detectContext rejects an incomplete line", async() => {

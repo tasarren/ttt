@@ -64,6 +64,10 @@ export class Windows {
     await this.run(["kill-window", "-t", windowId])
   }
 
+  async rename(windowId: string, name: string): Promise<void> {
+    await this.run(["rename-window", "-t", windowId, name])
+  }
+
   /** The window's `#{window_layout}` string: pane geometry that `applyLayout` can replay exactly. */
   async layout(windowId: string): Promise<string> {
     return (await this.run(["display-message", "-p", "-t", windowId, "#{window_layout}"])).trim()

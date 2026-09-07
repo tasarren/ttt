@@ -3,19 +3,19 @@ import { WaitOutcome } from "@ttt/tmux"
 import { boundedInt, parseCommandArgs, splitAtTerminator } from "../../args.ts"
 import { CliError, usageError } from "../../cli-error.ts"
 import type { TmuxVerb } from "../../tmux-context.ts"
-import { requireSession, resolveAgentTarget } from "./target.ts"
+import { requireSession, resolvePaneTarget } from "./target.ts"
 
 const WAIT_OPTIONS = { for: { type: "string" }, timeout: { type: "string" } } as const
 
 /**
- * `ttt tmux wait NAME --for PATTERN [--timeout SECONDS]`: blocks until a line on the agent's
+ * `ttt tmux wait TARGET --for PATTERN [--timeout SECONDS]`: blocks until a line on the pane's
  * screen matches the regular expression. Exit 0 with the line on a match; exit 1 on timeout,
  * so scripts can branch. Bounded by `wait.maxSeconds` like message waits.
  */
 export const wait: TmuxVerb = async(argv, ctx) => {
   const { values, positionals } = parseCommandArgs(argv, WAIT_OPTIONS)
   const [name, ...extra] = positionals
-  if (name === undefined || extra.length > 0 || values.for === undefined) throw usageError("usage: ttt tmux wait NAME --for PATTERN [--timeout SECONDS]")
+  if (name === undefined || extra.length > 0 || values.for === undefined) throw usageError("usage: ttt tmux wait TARGET --for PATTERN [--timeout SECONDS]")
   let pattern: RegExp
   try {
     pattern = new RegExp(values.for)
@@ -23,7 +23,7 @@ export const wait: TmuxVerb = async(argv, ctx) => {
     throw usageError(`--for is not a valid regular expression: ${error instanceof Error ? error.message : String(error)}`)
   }
   const seconds = boundedInt(values.timeout, "--timeout", ctx.settings.wait.seconds, ctx.settings.wait.maxSeconds)
-  const target = await resolveAgentTarget(ctx, name)
+  const target = await resolvePaneTarget(ctx, name)
   const controller = new AbortController()
   const stop = (): void => {
     controller.abort()

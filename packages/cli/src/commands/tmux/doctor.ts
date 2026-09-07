@@ -96,7 +96,7 @@ function windowFindings(window: TreeWindow, historyLimit: number): Finding[] {
   const subject = `window ${window.name}`
   const findings: Finding[] = []
   if (!window.panes.some((pane) => pane.agent === window.name)) {
-    findings.push({ severity: Severity.Ok, subject, detail: "no stamped pane yet; delivery uses the lowest-index pane until the agent runs ttt" })
+    findings.push({ severity: Severity.Ok, subject, detail: `furniture: no agent pane, messages to ${window.name} are refused until something there runs ttt`, fix: `ttt tmux open --window ${window.name} --harness NAME` })
   }
   for (const pane of window.panes) {
     if (pane.dead) findings.push({ severity: Severity.Warn, subject, detail: `pane ${pane.pane} is dead`, fix: `ttt tmux respawn ${window.name}` })

@@ -23,8 +23,11 @@ export interface SetupProfile {
   options: readonly ProfileOption[]
 }
 
-/** How a pane border names its owner: agent, harness, cwd, and a dead marker. */
-export const PANE_BORDER_FORMAT = `#{?${UserOption.Agent},#{${UserOption.Agent}},#{?${UserOption.Title},#{${UserOption.Title}},#{window_name}}}#{?${UserOption.Harness}, #{${UserOption.Harness}},} #{s|$HOME|~|:pane_current_path}#{?pane_dead, [dead],}`
+/**
+ * How a pane border names its owner: the stamped agent (plus harness), a helper's title, or for
+ * anything unstamped `pane N · command`, so exactly one pane per window carries the agent's name.
+ */
+export const PANE_BORDER_FORMAT = `#{?${UserOption.Agent},#{${UserOption.Agent}}#{?${UserOption.Harness}, #{${UserOption.Harness}},},#{?${UserOption.Title},#{${UserOption.Title}},pane #{pane_index} · #{pane_current_command}}} #{s|$HOME|~|:pane_current_path}#{?pane_dead, [dead],}`
 
 /** Window tabs render the unread badge from `@ttt_unread` (unset when zero). */
 export const WINDOW_STATUS_FORMAT = `#I:#W#{?${UserOption.Unread},[#{${UserOption.Unread}}],}#{?window_flags,#{window_flags}, }`

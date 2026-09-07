@@ -21,7 +21,11 @@ export type Harness = (typeof Harness)[keyof typeof Harness]
 
 export const HARNESS_PRESETS: Readonly<Record<Harness, HarnessPreset>> = {
   // verified on Claude Code 2.1.260, 2026-09-07: the mode line under the input box.
-  [Harness.Claude]: { command: "claude", ready: /auto mode on|plan mode on|accept edits on|bypass permissions on/ },
+  [Harness.Claude]: {
+    command: "claude",
+    ready: /auto mode on|plan mode on|accept edits on|bypass permissions on/,
+    note: "a folder with pre-approved permissions asks 'Only proceed if you trust this configuration' first; answer with `ttt tmux press NAME Down` then `Enter`, or start it in a trusted --cwd",
+  },
   // verified on opencode v0.0.0-beta-17823, 2026-09-07: the input placeholder.
   [Harness.OpenCode]: { command: "opencode", ready: /Ask anything\.\.\./ },
   // verified on codex-cli 0.153.4, 2026-09-07: the input placeholder, shown after the trust prompt.

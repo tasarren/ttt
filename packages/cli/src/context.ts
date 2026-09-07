@@ -2,8 +2,8 @@ import { join } from "node:path"
 
 import { Board, assertName } from "@ttt/board"
 import type { Actor } from "@ttt/board"
-import { DetectionSource, Tmux } from "@ttt/tmux"
-import type { TmuxWindow } from "@ttt/tmux"
+import { Tmux, resolveAgentPane } from "@ttt/tmux"
+import type { DetectionSource, TmuxWindow } from "@ttt/tmux"
 
 import { CliError, usageError } from "./cli-error.ts"
 import { resolveSettings } from "./settings.ts"
@@ -78,14 +78,13 @@ export async function createContext(overrides: GlobalOverrides, binPath: string)
     }
     via = overrides.from === undefined ? detected.via : "override"
     actor = { window: detected.windowName, session: detected.session }
-    // Only a PID walk proves which pane the agent's own process lives in; the env hint
-    // can be inherited by a stray shell. Awaited so a short command cannot exit before
-    // the stamp lands; best-effort so a failed stamp never fails the command.
-    if (detected.via === DetectionSource.PidWalk) {
-      await tmux.inventory.listAllPanes()
-        .then((live) => tmux.panes.stamp(detected.paneId, live, { agent: detected.windowName }))
-        .catch(() => undefined)
-    }
+    // Running ttt from a pane claims it: that pane is where this window's agent lives. Both
+    // detection sources name the exact pane (the env hint is `$TMUX_PANE` of this process's
+    // shell, never the active pane). Awaited so a short command cannot exit before the
+    // stamp lands; best-effort so a failed stamp never fails the command.
+    await tmux.inventory.listAllPanes()
+      .then((live) => tmux.panes.stamp(detected.paneId, live, { agent: detected.windowName }))
+      .catch(() => undefined)
   }
 
   try {
@@ -109,6 +108,23 @@ export async function requireWindow(ctx: Context, name: string): Promise<TmuxWin
   const window = await ctx.tmux.windows.find(ctx.session, name)
   if (!window) throw new CliError(`tmux window does not exist: ${ctx.session}:${name}`)
   return window
+}
+
+/**
+ * The window and the pane its agent runs in. A window without a stamped pane is furniture:
+ * nothing there reads a mailbox, so messaging it would only queue for nobody.
+ */
+export interface Teammate {
+  window: TmuxWindow
+  paneId: string
+}
+
+export async function requireTeammate(ctx: Context, name: string): Promise<Teammate> {
+  const window = await requireWindow(ctx, name)
+  const live = await ctx.tmux.inventory.listAllPanes()
+  const paneId = resolveAgentPane(live, window.id, window.name)
+  if (paneId === undefined) throw new CliError(`${name} has no agent pane (nothing there runs ttt); start one with: ttt tmux open --window ${name} --harness NAME, or drive it with ttt tmux type ${name}.1`)
+  return { window, paneId }
 }
 
 export function isSelf(ctx: Context, window: TmuxWindow): boolean {

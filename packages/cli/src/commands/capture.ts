@@ -1,8 +1,6 @@
-import { resolveAgentPane } from "@ttt/tmux"
-
 import { boundedInt, parseCommandArgs } from "../args.ts"
 import { usageError } from "../cli-error.ts"
-import { requireWindow } from "../context.ts"
+import { requireTeammate } from "../context.ts"
 import type { Handler } from "../context.ts"
 
 const CAPTURE_OPTIONS = {
@@ -25,11 +23,10 @@ export const capture: Handler = async(argv, ctx) => {
     throw usageError("--grep and --around cannot be combined")
   }
   const lines = boundedInt(values.lines, "--lines", ctx.settings.capture.lines, ctx.settings.capture.maxLines)
-  const window = await requireWindow(ctx, target)
   // Same pane truth as notify delivery: the agent's stamped pane, never the window's
-  // active pane (which is whoever touched it last).
-  const live = await ctx.tmux.inventory.listAllPanes().catch(() => [])
-  const raw = await ctx.tmux.screen.capture(resolveAgentPane(live, window.id, window.name), lines, !values.raw)
+  // active pane (which is whoever touched it last). Furniture panes: `ttt tmux capture`.
+  const { paneId } = await requireTeammate(ctx, target)
+  const raw = await ctx.tmux.screen.capture(paneId, lines, !values.raw)
   const text = values.raw ? raw : normalizePane(raw)
   if (values.around !== undefined) {
     const context = boundedInt(values.context, "--context", 3, ctx.settings.capture.maxLines)

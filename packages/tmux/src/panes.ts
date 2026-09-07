@@ -4,17 +4,30 @@ import type { Options } from "./options.ts"
 import type { TmuxRunner } from "./runner.ts"
 
 /**
- * One pane truth for notify and capture: the pane stamped `@ttt_agent=<window name>`
- * inside that window, else the window's lowest-index pane (the agent's original
- * pane — never the active pane, which is whoever touched it last), else the window
- * id when nothing live is known. Pure: unit-tests run on fake arrays, no tmux server.
+ * One pane truth for notify, capture and typing: the pane stamped `@ttt_agent=<window name>`
+ * inside that window. Nothing else counts: not the lowest index, not the active pane. A window
+ * without a stamp is furniture (a `W-N` scratch window, a human's `prefix c`), and no message
+ * may land there. Pure: unit-tests run on fake arrays, no tmux server.
  */
-export function resolveAgentPane(live: LivePane[], windowId: string, windowName: string): string {
-  const inWindow = live.filter((pane) => pane.windowId === windowId).sort((a, b) => a.index - b.index)
-  const tagged = inWindow.find((pane) => pane.agent === windowName)
-  if (tagged) return tagged.pane
-  const first = inWindow[0]
-  return first ? first.pane : windowId
+export function resolveAgentPane(live: LivePane[], windowId: string, windowName: string): string | undefined {
+  return live.find((pane) => pane.windowId === windowId && pane.agent === windowName)?.pane
+}
+
+/**
+ * How a `ttt tmux` verb names a pane: `NAME` is the window's agent pane, `NAME.N` its pane with
+ * index N (`pane_index`, base-index aware), `%id` a pane id anywhere in the session.
+ */
+export type PaneAddress =
+  | { kind: "agent"; window: string }
+  | { kind: "index"; window: string; index: number }
+  | { kind: "id"; pane: string }
+
+export function parsePaneAddress(text: string): PaneAddress | undefined {
+  if (/^%\d+$/.test(text)) return { kind: "id", pane: text }
+  const dotted = /^(?<window>[^.]+)\.(?<index>\d+)$/.exec(text)
+  if (dotted?.groups) return { kind: "index", window: dotted.groups["window"]!, index: Number(dotted.groups["index"]) }
+  if (text.length > 0 && !text.includes(".")) return { kind: "agent", window: text }
+  return undefined
 }
 
 /** What ttt stamps on a pane it starts or identifies; each field maps to one `@ttt_*` option. */
@@ -107,8 +120,9 @@ export class Panes {
   }
 
   /** Restarts a pane's command; `-k` kills a still-running one first so the verb is idempotent. */
-  async respawn(paneId: string, command?: string): Promise<void> {
+  async respawn(paneId: string, command?: string, cwd?: string): Promise<void> {
     const args = ["respawn-pane", "-k", "-t", paneId]
+    if (cwd !== undefined) args.push("-c", cwd)
     if (command !== undefined) args.push(command)
     await this.run(args)
   }

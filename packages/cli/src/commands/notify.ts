@@ -1,12 +1,11 @@
 import { spawn } from "node:child_process"
 
 import type { BoardMessage, NotificationMarker, NotificationSummary } from "@ttt/board"
-import { resolveAgentPane, type TmuxWindow } from "@ttt/tmux"
 
 import { parseCommandArgs } from "../args.ts"
 import { CliError, usageError } from "../cli-error.ts"
-import { NOTIFIER_NAME, requireWindow } from "../context.ts"
-import type { Context, Handler } from "../context.ts"
+import { NOTIFIER_NAME, requireTeammate } from "../context.ts"
+import type { Context, Handler, Teammate } from "../context.ts"
 
 /**
  * Starts a detached copy of this CLI that waits out the batching window and then pastes one summary line
@@ -46,8 +45,8 @@ export const notify: Handler = async(argv, ctx) => {
   try {
     await ctx.board.deliverNotification(target, token, async(summary) => {
       try {
-        const window = await requireWindow(ctx, target)
-        await pasteToTeammate(ctx, window, formatNotification(summary))
+        const { paneId } = await requireTeammate(ctx, target)
+        await pasteToTeammate(ctx, paneId, formatNotification(summary))
       } catch(error) {
         process.stderr.write(`ttt: notification paste to ${target} failed: ${error instanceof Error ? error.message : String(error)}\n`)
         throw new CancelledNotification(target)
@@ -75,14 +74,9 @@ export function formatNotification(summary: NotificationSummary): string {
   return `ttt: ${summary.newCount} new from ${senders}; ${summary.unreadTotal} unread. Run: ttt read`
 }
 
-/**
- * Pastes into the target's agent pane (see `resolveAgentPane`); dead bindings
- * are pruned. Failures propagate so the notifier re-arms and urgent falls
- * back, as before.
- */
-async function pasteToTeammate(ctx: Context, window: TmuxWindow, text: string): Promise<void> {
-  const live = await ctx.tmux.inventory.listAllPanes().catch(() => [])
-  await ctx.tmux.input.sendText(resolveAgentPane(live, window.id, window.name), text)
+/** Pastes into the agent pane resolved by `requireTeammate`. Failures propagate so the notifier re-arms and urgent falls back. */
+async function pasteToTeammate(ctx: Context, paneId: string, text: string): Promise<void> {
+  await ctx.tmux.input.sendText(paneId, text)
 }
 
 export function formatUrgent(message: BoardMessage): string {
@@ -93,11 +87,11 @@ export function formatUrgent(message: BoardMessage): string {
 }
 
 /** Pastes an urgent message into every recipient now; a failed paste falls back to a batched notification. */
-export async function pushUrgent(ctx: Context, message: BoardMessage, windows: Map<string, TmuxWindow>): Promise<void> {
+export async function pushUrgent(ctx: Context, message: BoardMessage, windows: Map<string, Teammate>): Promise<void> {
   const failures: string[] = []
-  for (const [name, window] of windows) {
+  for (const [name, teammate] of windows) {
     try {
-      await ctx.board.deliverUrgent(message, name, (urgent) => pasteToTeammate(ctx, window, formatUrgent(urgent)))
+      await ctx.board.deliverUrgent(message, name, (urgent) => pasteToTeammate(ctx, teammate.paneId, formatUrgent(urgent)))
     } catch(error) {
       failures.push(name)
       process.stderr.write(`ttt: urgent delivery to ${name} failed: ${error instanceof Error ? error.message : String(error)}\n`)
