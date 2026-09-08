@@ -13,7 +13,7 @@ export interface BuildReport {
 /**
  * Materializes a layout inside an existing session: every window not already present by name
  * is opened with its first pane's command, split once per extra pane, given the saved layout
- * string, and stamped (`@ttt_agent` only where the file says `agent: true`; `@ttt_harness`,
+ * string, and stamped (`@ttt_agent` where the file says `agent: true` or names one; `@ttt_harness`,
  * `@ttt_command`, `@ttt_title`). Windows that exist are skipped, never duplicated, so a rerun
  * is safe.
  */
@@ -51,7 +51,7 @@ async function buildWindow(tmux: Tmux, session: string, window: LayoutWindow, ro
   const live: LivePane[] = await tmux.inventory.listAllPanes()
   for (const [index, pane] of window.panes.entries()) {
     await tmux.panes.stamp(paneIds[index]!, live, {
-      ...(pane.agent === true ? { agent: window.name } : {}),
+      ...(pane.agent === true ? { agent: window.name } : typeof pane.agent === "string" ? { agent: pane.agent } : {}),
       ...(pane.harness !== undefined ? { harness: pane.harness } : {}),
       ...(pane.command !== null ? { command: pane.command } : {}),
       ...(pane.title !== undefined ? { title: pane.title } : {}),

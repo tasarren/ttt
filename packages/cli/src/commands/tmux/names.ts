@@ -18,12 +18,20 @@ export function checkWindowName(name: string): void {
 }
 
 /**
- * `STEM-N` with the lowest free N. "Free" means no live window has the name and no mailbox
- * directory exists for it: a reused name would silently inherit an old inbox.
+ * `STEM-N` with the lowest free N. "Free" means no live window or stamp has the name and no
+ * mailbox directory exists for it: a reused name would silently inherit an old inbox.
  */
 export function generateWindowName(stem: string, taken: ReadonlySet<string>): string {
-  const cleaned = stem.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, MAX_WINDOW_NAME - 3) || "W"
-  for (let n = 1; ; n += 1) {
+  return generateName(stem.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, MAX_WINDOW_NAME - 3) || "W", taken, 1)
+}
+
+/** `WINDOW-N` for a second agent in WINDOW, counting from 2: the window's own name is seat 1. */
+export function generateSeatName(windowName: string, taken: ReadonlySet<string>): string {
+  return generateName(windowName, taken, 2)
+}
+
+function generateName(cleaned: string, taken: ReadonlySet<string>, first: number): string {
+  for (let n = first; ; n += 1) {
     const candidate = `${cleaned}-${n}`
     if (!taken.has(candidate)) return candidate
   }

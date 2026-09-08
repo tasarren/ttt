@@ -4,6 +4,7 @@ import { capture } from "./commands/capture.ts"
 import { ack, inbox, read, status, thread } from "./commands/inbox.ts"
 import { migrate } from "./commands/migrate.ts"
 import { notify } from "./commands/notify.ts"
+import { panes } from "./commands/panes.ts"
 import { prune } from "./commands/prune.ts"
 import { broadcast, reply, send } from "./commands/send.ts"
 import { TMUX_USAGE, runTmuxVerb } from "./commands/tmux/index.ts"
@@ -13,7 +14,7 @@ import { createContext } from "./context.ts"
 import type { GlobalOverrides, Handler } from "./context.ts"
 
 /** Commands that only read: no receipt changes, so no badge to refresh. */
-const READ_ONLY = new Set(["inbox", "status", "thread", "capture", "windows", "whoami", "migrate", "prune"])
+const READ_ONLY = new Set(["inbox", "status", "thread", "capture", "windows", "panes", "whoami", "migrate", "prune"])
 
 const COMMANDS: Record<string, Handler> = {
   send,
@@ -26,6 +27,7 @@ const COMMANDS: Record<string, Handler> = {
   thread,
   capture,
   windows,
+  panes,
   whoami,
   prune,
   migrate,
@@ -47,7 +49,8 @@ usage:
   ttt status MESSAGE_ID
   ttt thread MESSAGE_ID [--headers-only]
   ttt capture TARGET [--lines COUNT] [--raw] [--grep PATTERN] [--around PATTERN] [--context COUNT]
-  ttt windows
+  ttt windows                                   one line per window (its main agent)
+  ttt panes [--window NAME] [--json]            the panes of one window: index, %id, agent, what runs
   ttt whoami
   ttt prune --days N [--dry-run]
   ttt migrate [--dry-run] [--all]

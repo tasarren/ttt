@@ -1,6 +1,6 @@
 import { boundedInt, parseCommandArgs } from "../args.ts"
 import { usageError } from "../cli-error.ts"
-import { requireTeammate } from "../context.ts"
+import { requireAgent } from "../context.ts"
 import type { Handler } from "../context.ts"
 
 const CAPTURE_OPTIONS = {
@@ -23,9 +23,10 @@ export const capture: Handler = async(argv, ctx) => {
     throw usageError("--grep and --around cannot be combined")
   }
   const lines = boundedInt(values.lines, "--lines", ctx.settings.capture.lines, ctx.settings.capture.maxLines)
-  // Same pane truth as notify delivery: the agent's stamped pane, never the window's
-  // active pane (which is whoever touched it last). Furniture panes: `ttt tmux capture`.
-  const { paneId } = await requireTeammate(ctx, target)
+  // Same pane truth as notify delivery: the agent's seat, never the window's active pane
+  // (which is whoever touched it last). Any other pane: `ttt tmux capture NAME.N`.
+  const { seat } = await requireAgent(ctx, target)
+  const paneId = seat.paneId
   const raw = await ctx.tmux.screen.capture(paneId, lines, !values.raw)
   const text = values.raw ? raw : normalizePane(raw)
   if (values.around !== undefined) {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { Tmux, parsePaneAddress, resolveAgentPane } from "../src/index.ts"
+import { Tmux, parsePaneAddress, resolveAgent } from "../src/index.ts"
 import type { LivePane, TmuxOptions } from "../src/index.ts"
 
 const NO_WAIT: TmuxOptions = { inputSettleMs: 0, postPasteMs: 0, enterPresses: 2, postSendMs: 0 }
@@ -43,16 +43,20 @@ test("listAllPanes parses live panes and skips malformed rows", async() => {
   ])
 })
 
-test("resolveAgentPane returns the stamped pane only; an unstamped window is furniture", () => {
+test("resolveAgent: a stamp anywhere in the session wins; an unregistered window seats its lowest pane", () => {
   const live: LivePane[] = [
     { session: "s", window: "A", windowId: "@1", pane: "%10", index: 2, pid: 1, agent: "A" },
-    { session: "s", window: "A", windowId: "@1", pane: "%11", index: 1, pid: 2, agent: undefined },
-    { session: "s", window: "B", windowId: "@2", pane: "%12", index: 1, pid: 3, agent: "A" },
+    { session: "s", window: "A", windowId: "@1", pane: "%11", index: 1, pid: 2, agent: "A-2" },
+    { session: "s", window: "B", windowId: "@2", pane: "%13", index: 2, pid: 3, agent: undefined },
+    { session: "s", window: "B", windowId: "@2", pane: "%12", index: 1, pid: 4, agent: undefined },
+    { session: "s", window: "C", windowId: "@3", pane: "%14", index: 1, pid: 5, agent: "B" },
   ]
-  assert.equal(resolveAgentPane(live, "@1", "A"), "%10", "the stamp wins over a lower index")
-  assert.equal(resolveAgentPane(live, "@1", "Z"), undefined, "a stamp for another name is ignored, and no index fallback")
-  assert.equal(resolveAgentPane(live, "@2", "B"), undefined, "a stale stamp from another window is not an agent")
-  assert.equal(resolveAgentPane([], "@1", "A"), undefined)
+  assert.deepEqual(resolveAgent(live, { id: "@1", name: "A" }, "A"), { windowId: "@1", windowName: "A", paneId: "%10", registered: true }, "the stamp wins over a lower index")
+  assert.deepEqual(resolveAgent(live, undefined, "A-2"), { windowId: "@1", windowName: "A", paneId: "%11", registered: true }, "a second agent is found by its stamp without a window")
+  assert.deepEqual(resolveAgent(live, { id: "@3", name: "C" }, "C"), { windowId: "@3", windowName: "C", paneId: "%14", registered: false }, "one pane stamped otherwise still seats the window's main agent")
+  assert.deepEqual(resolveAgent(live, { id: "@2", name: "B" }, "B"), { windowId: "@3", windowName: "C", paneId: "%14", registered: true }, "a stamp in another window beats the window called B")
+  assert.equal(resolveAgent(live, undefined, "Z"), undefined, "no stamp and no window")
+  assert.equal(resolveAgent([], { id: "@1", name: "A" }, "A"), undefined, "a window without panes seats nobody")
 })
 
 test("parsePaneAddress: NAME, NAME.N, %id; anything else is undefined", () => {

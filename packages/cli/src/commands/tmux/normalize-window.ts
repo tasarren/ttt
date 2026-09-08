@@ -5,14 +5,18 @@ import { usageError } from "../../cli-error.ts"
 import type { TmuxVerb } from "../../tmux-context.ts"
 import { generateWindowName, mailboxNames } from "./names.ts"
 
-/** Stem of the name a hand-made window gets: `W-1`, `W-2`; visibly not a harness, not a teammate. */
+/** Stem of the name a hand-made window gets: `W-1`, `W-2`; visibly not a harness, nobody's chosen name. */
 export const FURNITURE_STEM = "W"
+
+/** `W-N`: a window named by the hook, not by a person; the one kind `broadcast --all` leaves out. */
+export function isScratchName(name: string): boolean {
+  return new RegExp(`^${FURNITURE_STEM}-\\d+$`).test(name)
+}
 
 /**
  * Hook entry (`after-new-window`): applies the session's profile to one new window and, when
  * tmux named the window itself (a human's `prefix c`), renames it `W-N` so nobody mistakes
- * `bash` for a teammate. No stamp: a window becomes a teammate only when an agent runs ttt in
- * it or `ttt tmux open --window` adopts it. Silent on success; a failure line lands in tmux's
+ * `bash` for a chosen name. No stamp: the first ttt run inside registers the seat. Silent on success; a failure line lands in tmux's
  * `show-messages`, where `doctor` finds it. Idempotent.
  */
 export const normalizeWindow: TmuxVerb = async(argv, ctx) => {
@@ -30,6 +34,7 @@ export const normalizeWindow: TmuxVerb = async(argv, ctx) => {
   await ctx.tmux.setup.applyWindow(windowId, profile)
   if (namedByCaller) return
   const windows = await ctx.tmux.inventory.listWindows(session)
-  const taken = new Set([...windows.map((window) => window.name), ...await mailboxNames(ctx.settings.boardRoot, session)])
+  const live = (await ctx.tmux.inventory.listAllPanes()).filter((pane) => pane.session === session)
+  const taken = new Set([...windows.map((window) => window.name), ...live.flatMap((pane) => (pane.agent === undefined ? [] : [pane.agent])), ...await mailboxNames(ctx.settings.boardRoot, session)])
   await ctx.tmux.windows.rename(windowId, generateWindowName(FURNITURE_STEM, taken))
 }

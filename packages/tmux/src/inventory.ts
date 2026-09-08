@@ -31,7 +31,7 @@ export interface LivePane {
   /** Positional index within the window; the lowest is the original pane. */
   index: number
   pid: number
-  /** `@ttt_agent`: the window name of the agent that owns this pane, when stamped. */
+  /** `@ttt_agent`: the name of the agent seated in this pane, when stamped. */
   agent: string | undefined
 }
 

@@ -4,8 +4,8 @@ import type { BoardMessage, NotificationMarker, NotificationSummary } from "@ttt
 
 import { parseCommandArgs } from "../args.ts"
 import { CliError, usageError } from "../cli-error.ts"
-import { NOTIFIER_NAME, requireTeammate } from "../context.ts"
-import type { Context, Handler, Teammate } from "../context.ts"
+import { NOTIFIER_NAME, requireAgent } from "../context.ts"
+import type { Context, Handler, Agent } from "../context.ts"
 
 /**
  * Starts a detached copy of this CLI that waits out the batching window and then pastes one summary line
@@ -45,8 +45,8 @@ export const notify: Handler = async(argv, ctx) => {
   try {
     await ctx.board.deliverNotification(target, token, async(summary) => {
       try {
-        const { paneId } = await requireTeammate(ctx, target)
-        await pasteToTeammate(ctx, paneId, formatNotification(summary))
+        const { seat } = await requireAgent(ctx, target)
+        await pasteToAgent(ctx, seat.paneId, formatNotification(summary))
       } catch(error) {
         process.stderr.write(`ttt: notification paste to ${target} failed: ${error instanceof Error ? error.message : String(error)}\n`)
         throw new CancelledNotification(target)
@@ -74,8 +74,8 @@ export function formatNotification(summary: NotificationSummary): string {
   return `ttt: ${summary.newCount} new from ${senders}; ${summary.unreadTotal} unread. Run: ttt read`
 }
 
-/** Pastes into the agent pane resolved by `requireTeammate`. Failures propagate so the notifier re-arms and urgent falls back. */
-async function pasteToTeammate(ctx: Context, paneId: string, text: string): Promise<void> {
+/** Pastes into the seat resolved by `requireAgent`. Failures propagate so the notifier re-arms and urgent falls back. */
+async function pasteToAgent(ctx: Context, paneId: string, text: string): Promise<void> {
   await ctx.tmux.input.sendText(paneId, text)
 }
 
@@ -87,11 +87,11 @@ export function formatUrgent(message: BoardMessage): string {
 }
 
 /** Pastes an urgent message into every recipient now; a failed paste falls back to a batched notification. */
-export async function pushUrgent(ctx: Context, message: BoardMessage, windows: Map<string, Teammate>): Promise<void> {
+export async function pushUrgent(ctx: Context, message: BoardMessage, windows: Map<string, Agent>): Promise<void> {
   const failures: string[] = []
-  for (const [name, teammate] of windows) {
+  for (const [name, agent] of windows) {
     try {
-      await ctx.board.deliverUrgent(message, name, (urgent) => pasteToTeammate(ctx, teammate.paneId, formatUrgent(urgent)))
+      await ctx.board.deliverUrgent(message, name, (urgent) => pasteToAgent(ctx, agent.seat.paneId, formatUrgent(urgent)))
     } catch(error) {
       failures.push(name)
       process.stderr.write(`ttt: urgent delivery to ${name} failed: ${error instanceof Error ? error.message : String(error)}\n`)

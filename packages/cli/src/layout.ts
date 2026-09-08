@@ -28,8 +28,11 @@ export interface LayoutWindow {
 export interface LayoutPane {
   /** Shell command line; `null` is a plain shell. */
   command: string | null
-  /** The agent's pane: at most one per window. A window with none is furniture and stays unstamped. */
-  agent?: boolean
+  /**
+   * `true`: the window's main agent sits here (at most one per window). A name: a second agent
+   * registered under it. A window with neither is built unregistered: its first pane receives.
+   */
+  agent?: boolean | string
   /** Helper-pane title (`@ttt_title`); never together with `agent`. */
   title?: string
   /** The harness ttt started here (`@ttt_harness`); validated against the declared harnesses. */
@@ -134,13 +137,16 @@ function parseWindow(raw: unknown, file: string, path: string): LayoutWindow {
     throw new CliError(`${file}: ${error instanceof Error ? error.message : String(error)}`, 2)
   }
   const panesRaw = window["panes"]
-  // `{ "name": "LEAD" }` is the teammate shorthand: one shell pane that is the agent. A window that
-  // lists panes and marks none is furniture and is built unstamped (what `save` writes for W-N).
+  // `{ "name": "LEAD" }` is the one-agent shorthand: one shell pane that is the main agent. A window
+  // that lists panes and marks none is built unregistered (what `save` writes for a fresh W-N).
   const panes = Array.isArray(panesRaw) && panesRaw.length > 0
     ? panesRaw.map((pane, index) => parsePane(pane, file, `${path}.panes[${index}]`))
     : [{ command: null, agent: true }]
   const agents = panes.filter((pane) => pane.agent === true).length
-  if (agents > 1) throw new CliError(`${file}: ${path} marks ${agents} panes as agent; at most one`, 2)
+  if (agents > 1) throw new CliError(`${file}: ${path} marks ${agents} panes as the main agent; at most one`, 2)
+  const named = panes.flatMap((pane) => (typeof pane.agent === "string" ? [pane.agent] : []))
+  const twice = named.find((agent, index) => named.indexOf(agent) !== index || agent === name)
+  if (twice !== undefined) throw new CliError(`${file}: ${path} seats agent ${JSON.stringify(twice)} twice${twice === name ? " (the window's own name is \"agent\": true)" : ""}`, 2)
   const layout = optionalText(window["layout"], file, `${path}.layout`)
   if (layout !== undefined) {
     const cells = layoutCellCount(layout)
@@ -159,12 +165,19 @@ function parsePane(raw: unknown, file: string, path: string): LayoutPane {
     throw new CliError(`${file}: ${path}.command must be a non-empty string or null`, 2)
   }
   const agent = pane["agent"]
-  if (agent !== undefined && typeof agent !== "boolean") throw new CliError(`${file}: ${path}.agent must be true or false`, 2)
+  if (agent !== undefined && typeof agent !== "boolean" && (typeof agent !== "string" || agent === "")) throw new CliError(`${file}: ${path}.agent must be true, false, or an agent name`, 2)
+  if (typeof agent === "string") {
+    try {
+      assertName(agent, `${path}.agent`)
+    } catch(error) {
+      throw new CliError(`${file}: ${error instanceof Error ? error.message : String(error)}`, 2)
+    }
+  }
   const source = pane["source"]
   if (source !== undefined && source !== "process") throw new CliError(`${file}: ${path}.source may only be "process"`, 2)
   const cwd = optionalText(pane["cwd"], file, `${path}.cwd`)
   const title = optionalText(pane["title"], file, `${path}.title`)
-  if (title !== undefined && agent === true) throw new CliError(`${file}: ${path} is the agent pane and cannot carry a title`, 2)
+  if (title !== undefined && agent !== undefined && agent !== false) throw new CliError(`${file}: ${path} is an agent pane and cannot carry a title`, 2)
   const harness = optionalText(pane["harness"], file, `${path}.harness`)
   return {
     command: command ?? null,

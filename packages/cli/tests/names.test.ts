@@ -3,15 +3,17 @@ import { test } from "node:test"
 
 import { HARNESS_PRESETS, harnessPreset } from "@ttt/tmux"
 
-import { MAX_WINDOW_NAME, checkWindowName, generateWindowName } from "../src/commands/tmux/names.ts"
-import { withBareHarness } from "../src/commands/tmux/lifecycle.ts"
+import { MAX_WINDOW_NAME, checkWindowName, generateSeatName, generateWindowName } from "../src/commands/tmux/names.ts"
+import { withBareValues } from "../src/commands/tmux/lifecycle.ts"
 import { parseHarnesses, shippedHarnesses } from "../src/harnesses.ts"
 
 test("generateWindowName picks the lowest free HARNESS-N and never a taken name", () => {
   assert.equal(generateWindowName("claude", new Set()), "CLAUDE-1")
   assert.equal(generateWindowName("claude", new Set(["CLAUDE-1", "CLAUDE-2"])), "CLAUDE-3")
   assert.equal(generateWindowName("claude", new Set(["CLAUDE-2"])), "CLAUDE-1", "gaps are reused")
-  assert.equal(generateWindowName("W", new Set()), "W-1", "a shell window is furniture: W-N")
+  assert.equal(generateWindowName("W", new Set()), "W-1", "a shell window is scratch: W-N")
+  assert.equal(generateSeatName("REVIEWER", new Set()), "REVIEWER-2", "the window's own name is seat 1")
+  assert.equal(generateSeatName("REVIEWER", new Set(["REVIEWER-2", "REVIEWER-3"])), "REVIEWER-4")
   assert.equal(generateWindowName("open-code!", new Set()), "OPENCODE-1", "stems are letters and digits only")
   const long = generateWindowName("averyveryverylongharness", new Set())
   assert.ok(long.length <= MAX_WINDOW_NAME, long)
@@ -37,11 +39,13 @@ test("every shipped harness preset has a command and a readiness pattern; a shel
   assert.equal(harnessPreset("constructor"), undefined, "no prototype leakage")
 })
 
-test("withBareHarness spells a valueless --harness as --harness= and leaves everything else alone", () => {
-  assert.deepEqual(withBareHarness(["--window", "X", "--harness"]), ["--window", "X", "--harness="])
-  assert.deepEqual(withBareHarness(["--harness", "--cwd", "/tmp"]), ["--harness=", "--cwd", "/tmp"])
-  assert.deepEqual(withBareHarness(["--harness", "codex"]), ["--harness", "codex"])
-  assert.deepEqual(withBareHarness(["--harness=claude"]), ["--harness=claude"])
+test("withBareValues spells a valueless --harness as --harness= and leaves everything else alone", () => {
+  assert.deepEqual(withBareValues(["--window", "X", "--harness"]), ["--window", "X", "--harness="])
+  assert.deepEqual(withBareValues(["--harness", "--cwd", "/tmp"]), ["--harness=", "--cwd", "/tmp"])
+  assert.deepEqual(withBareValues(["--harness", "codex"]), ["--harness", "codex"])
+  assert.deepEqual(withBareValues(["--harness=claude"]), ["--harness=claude"])
+  assert.deepEqual(withBareValues(["--pane", "--in", "A", "--harness"]), ["--pane=", "--in", "A", "--harness="])
+  assert.deepEqual(withBareValues(["--pane", "AUX", "--in", "A"]), ["--pane", "AUX", "--in", "A"])
 })
 
 test("parseHarnesses: shipped presets without a section; declared entries merge over presets; exactly one default", () => {

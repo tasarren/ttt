@@ -1,15 +1,16 @@
 import { MessageKind, MessagePriority } from "@ttt/board"
 import type { BoardMessage } from "@ttt/board"
-import { resolveAgentPane, winnersByName } from "@ttt/tmux"
+import { winnersByName } from "@ttt/tmux"
 
 import { MESSAGE_OPTIONS, boundedInt, parseCommandArgs, readMessagePayload, splitAtTerminator } from "../args.ts"
 import type { Parsed } from "../args.ts"
 import { CliError, usageError } from "../cli-error.ts"
-import { isSelf } from "../context.ts"
-import type { Context, Handler, Teammate } from "../context.ts"
+import { agentIn, isSelf } from "../context.ts"
+import type { Agent, Context, Handler } from "../context.ts"
 import { WaitOutcome, waitForMail } from "../wait.ts"
 import { formatBatch, formatHeaders } from "./inbox.ts"
 import { pushUrgent, spawnNotifier } from "./notify.ts"
+import { isScratchName } from "./tmux/normalize-window.ts"
 
 export const send: Handler = async(argv, ctx) => {
   const { head, body } = splitAtTerminator(argv)
@@ -27,17 +28,17 @@ export const broadcast: Handler = async(argv, ctx) => {
   let targets = positionals
   if (values.all) {
     if (positionals.length > 0) throw usageError("--all cannot be combined with target names")
-    // Furniture windows (no stamped pane) have nobody to read a mailbox; they are left out.
+    // Every window's main agent except the caller's own window; secondary agents hear it from
+    // their main agent. Scratch windows (hook-named W-N) are the one kind nobody named on purpose.
     const winners = winnersByName(await ctx.tmux.inventory.listWindows(ctx.session))
-    const live = await ctx.tmux.inventory.listAllPanes()
     const skipped: string[] = []
     targets = []
     for (const window of winners.values()) {
-      if (isSelf(ctx, window)) continue
-      if (resolveAgentPane(live, window.id, window.name) === undefined) skipped.push(window.name)
+      if (isSelf(ctx, window.name) || window.name === ctx.windowName) continue
+      if (isScratchName(window.name)) skipped.push(window.name)
       else targets.push(window.name)
     }
-    if (skipped.length > 0) process.stderr.write(`ttt: skipping ${skipped.join(", ")}: no agent pane\n`)
+    if (skipped.length > 0) process.stderr.write(`ttt: skipping ${skipped.join(", ")}: scratch window\n`)
   }
   if (targets.length === 0) throw usageError("broadcast has no recipients")
   await deliver(ctx, { targets, kind: MessageKind.Broadcast }, values, body)
@@ -147,17 +148,13 @@ async function awaitReply(ctx: Context, message: BoardMessage, seconds: number):
 }
 
 /** Every recipient must be a teammate: a window whose pane is stamped, so someone reads the mailbox. */
-async function resolveTargets(ctx: Context, names: string[]): Promise<Map<string, Teammate>> {
+async function resolveTargets(ctx: Context, names: string[]): Promise<Map<string, Agent>> {
   const winners = winnersByName(await ctx.tmux.inventory.listWindows(ctx.session))
   const live = await ctx.tmux.inventory.listAllPanes()
-  const targets = new Map<string, Teammate>()
+  const targets = new Map<string, Agent>()
   for (const name of names) {
-    const window = winners.get(name)
-    if (!window) throw new CliError(`tmux window does not exist: ${ctx.session}:${name}`)
-    if (isSelf(ctx, window)) throw new CliError("refusing to send a message to the current window")
-    const paneId = resolveAgentPane(live, window.id, window.name)
-    if (paneId === undefined) throw new CliError(`${name} has no agent pane (nothing there runs ttt); start one with: ttt tmux open --window ${name} --harness NAME, or drive it with ttt tmux type ${name}.1`)
-    targets.set(name, { window, paneId })
+    if (isSelf(ctx, name)) throw new CliError("refusing to send a message to yourself")
+    targets.set(name, agentIn(ctx, live, winners, name))
   }
   return targets
 }

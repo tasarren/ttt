@@ -1,16 +1,31 @@
-import type { LivePane } from "./inventory.ts"
+import type { LivePane, TmuxWindow } from "./inventory.ts"
 import { OptionScope, UserOption } from "./options.ts"
 import type { Options } from "./options.ts"
 import type { TmuxRunner } from "./runner.ts"
 
+/** Where an agent's messages land: its window and pane, and whether a stamp says so. */
+export interface AgentSeat {
+  windowId: string
+  windowName: string
+  paneId: string
+  /** True when a pane is stamped `@ttt_agent=NAME`; false when the window's lowest pane stands in. */
+  registered: boolean
+}
+
 /**
- * One pane truth for notify, capture and typing: the pane stamped `@ttt_agent=<window name>`
- * inside that window. Nothing else counts: not the lowest index, not the active pane. A window
- * without a stamp is furniture (a `W-N` scratch window, a human's `prefix c`), and no message
- * may land there. Pure: unit-tests run on fake arrays, no tmux server.
+ * One pane truth for notify, capture and typing. A pane stamped `@ttt_agent=NAME` anywhere in
+ * the session is NAME's seat (a secondary agent lives in another agent's window). Without a
+ * stamp, the window called NAME seats its main agent in its lowest-index pane: a teammate is
+ * reachable before it has ever run ttt. Never the active pane. Pure: unit-tests run on fake
+ * arrays, no tmux server.
  */
-export function resolveAgentPane(live: LivePane[], windowId: string, windowName: string): string | undefined {
-  return live.find((pane) => pane.windowId === windowId && pane.agent === windowName)?.pane
+export function resolveAgent(live: LivePane[], window: TmuxWindow | undefined, name: string): AgentSeat | undefined {
+  const stamped = live.find((pane) => pane.agent === name)
+  if (stamped) return { windowId: stamped.windowId, windowName: stamped.window, paneId: stamped.pane, registered: true }
+  if (!window) return undefined
+  const lowest = live.filter((pane) => pane.windowId === window.id).sort((a, b) => a.index - b.index)[0]
+  if (!lowest) return undefined
+  return { windowId: window.id, windowName: window.name, paneId: lowest.pane, registered: false }
 }
 
 /**
@@ -32,7 +47,7 @@ export function parsePaneAddress(text: string): PaneAddress | undefined {
 
 /** What ttt stamps on a pane it starts or identifies; each field maps to one `@ttt_*` option. */
 export interface PaneStamp {
-  /** The owning window name; absent for helper panes (a test watcher next to the agent). */
+  /** The agent seated here: the window name for its main agent, `WINDOW-N` or a given name otherwise. */
   agent?: string
   harness?: string
   command?: string
@@ -69,9 +84,9 @@ export class Panes {
   }
 
   /**
-   * Stamps ttt's pane options. With `agent`, marks `paneId` as the agent pane of its window
-   * and clears the mark from every sibling in `live`, so at most one pane per window carries
-   * `@ttt_agent`. Only writes what differs; a pane already stamped costs nothing.
+   * Stamps ttt's pane options. With `agent`, marks `paneId` as NAME's seat and clears that same
+   * name from every other pane in `live`, so one name sits in one pane; other agents' stamps in
+   * the window are untouched. Only writes what differs; a pane already stamped costs nothing.
    */
   async stamp(paneId: string, live: LivePane[], stamp: PaneStamp): Promise<void> {
     const me = live.find((pane) => pane.pane === paneId)
@@ -88,10 +103,10 @@ export class Panes {
     if (stamp.title !== undefined) {
       writes.push(this.options.set({ scope: OptionScope.Pane, target: paneId, key: UserOption.Title }, stamp.title))
     }
-    if (me && stamp.agent !== undefined) {
-      for (const sibling of live) {
-        if (sibling.windowId !== me.windowId || sibling.pane === paneId || sibling.agent === undefined) continue
-        writes.push(this.options.unset({ scope: OptionScope.Pane, target: sibling.pane, key: UserOption.Agent }))
+    if (stamp.agent !== undefined) {
+      for (const other of live) {
+        if (other.pane === paneId || other.agent !== stamp.agent) continue
+        writes.push(this.options.unset({ scope: OptionScope.Pane, target: other.pane, key: UserOption.Agent }))
       }
     }
     await Promise.all(writes)

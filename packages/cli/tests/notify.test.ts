@@ -42,6 +42,7 @@ test("a failed paste re-arms a live marker instead of stranding the burst", asyn
     settings: defaultSettings(home),
     session: "work",
     senderName: "ttt",
+    windowName: "ttt",
     senderId: "",
     senderPane: "",
     claimed: false,

@@ -2,7 +2,7 @@ import { access } from "node:fs/promises"
 import { delimiter, isAbsolute, join } from "node:path"
 
 import { CheckState, MIN_TMUX_VERSION, OptionScope, PROFILES, UserOption } from "@ttt/tmux"
-import type { OptionCheck, SetupProfile, TreeSession, TreeWindow } from "@ttt/tmux"
+import type { OptionCheck, SetupProfile, TreePane, TreeSession, TreeWindow } from "@ttt/tmux"
 
 import { parseCommandArgs } from "../../args.ts"
 import { CliError, usageError } from "../../cli-error.ts"
@@ -122,24 +122,27 @@ async function profileFindings(ctx: TmuxVerbContext, session: string, profile: S
   if (!report.hookInstalled) findings.push({ severity: Severity.Warn, subject: "hook", detail: "after-new-window hook missing; windows opened by hand are not normalized" })
   for (const line of await ctx.tmux.hooks.failures("_normalize-window")) findings.push({ severity: Severity.Warn, subject: "hook", detail: line.trim() })
   const historyLimit = Number(profile.options.find((option) => option.key === "history-limit")?.value ?? 0)
-  for (const window of tree.windows) findings.push(...windowFindings(window, historyLimit))
+  const live = tree.windows.flatMap((window) => window.panes)
+  for (const window of tree.windows) findings.push(...windowFindings(window, historyLimit, live))
   return findings
 }
 
-function windowFindings(window: TreeWindow, historyLimit: number): Finding[] {
+function windowFindings(window: TreeWindow, historyLimit: number, live: TreePane[]): Finding[] {
   const subject = `window ${window.name}`
   const findings: Finding[] = []
   if (!window.panes.some((pane) => pane.agent === window.name)) {
-    findings.push({ severity: Severity.Ok, subject, detail: `furniture: no agent pane, messages to ${window.name} are refused until something there runs ttt`, fix: `ttt tmux open --window ${window.name} --harness NAME` })
-  }
-  // A stamp for another window's name cannot happen through ttt; a hand-edited option or a rename outside ttt leaves one.
-  for (const pane of window.panes) {
-    if (pane.agent !== undefined && pane.agent !== window.name) {
-      findings.push({ severity: Severity.Warn, subject, detail: `pane ${pane.pane} is stamped @ttt_agent=${pane.agent}, which is not this window's name; ttt ignores it`, fix: `run ttt inside that pane to claim it for ${window.name}, or: tmux set-option -p -t ${pane.pane} -u @ttt_agent` })
-    }
+    findings.push({ severity: Severity.Ok, subject, detail: `unregistered: pane ${window.panes[0]?.index ?? 1} receives until something there runs ttt` })
   }
   for (const pane of window.panes) {
-    if (pane.dead) findings.push({ severity: Severity.Warn, subject, detail: `pane ${pane.pane} is dead`, fix: `ttt tmux respawn ${window.name}` })
+    if (pane.agent === undefined || pane.agent === window.name) continue
+    // A second agent's name must not be a window's name too: the stamp would win and the window's main agent go unreachable.
+    const collides = live.find((other) => other.window === pane.agent && other.windowId !== window.id)
+    if (collides) findings.push({ severity: Severity.Warn, subject, detail: `pane ${pane.pane} is stamped @ttt_agent=${pane.agent}, also the name of window ${collides.windowId}; messages to ${pane.agent} land here, not there`, fix: `tmux set-option -p -t ${pane.pane} -u @ttt_agent, then run ttt in that pane to register it as ${window.name}-N` })
+    const twin = live.find((other) => other.agent === pane.agent && other.pane !== pane.pane)
+    if (twin && twin.pane > pane.pane) findings.push({ severity: Severity.Warn, subject, detail: `panes ${pane.pane} and ${twin.pane} are both stamped @ttt_agent=${pane.agent}; the first wins`, fix: `tmux set-option -p -t ${twin.pane} -u @ttt_agent` })
+  }
+  for (const pane of window.panes) {
+    if (pane.dead) findings.push({ severity: Severity.Warn, subject, detail: `pane ${pane.pane} is dead`, fix: `ttt tmux respawn ${pane.agent ?? window.name}` })
     if (pane.historyLimit < historyLimit) findings.push({ severity: Severity.Warn, subject, detail: `pane ${pane.pane} keeps only ${pane.historyLimit} lines of history` })
   }
   return findings

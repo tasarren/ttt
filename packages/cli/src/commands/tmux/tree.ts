@@ -1,3 +1,4 @@
+import { resolveAgent } from "@ttt/tmux"
 import type { TreeSession } from "@ttt/tmux"
 
 import { parseCommandArgs } from "../../args.ts"
@@ -19,9 +20,10 @@ export function formatTree(session: TreeSession): string {
   const lines = [`${session.name} ${session.id}${session.attached ? " (attached)" : ""}`]
   for (const window of session.windows) {
     lines.push(`  ${window.index}:${window.name} ${window.id}${window.active ? " *" : ""}`)
+    const seat = resolveAgent(window.panes, window, window.name)
     for (const pane of window.panes) {
       const tags = [
-        ...(pane.agent !== undefined ? [`agent=${pane.agent}`] : []),
+        ...(pane.agent !== undefined ? [`agent=${pane.agent}`] : seat?.paneId === pane.pane ? ["seat (unregistered)"] : []),
         ...(pane.paneTitle !== undefined ? [`title=${pane.paneTitle}`] : []),
         ...(pane.harness !== undefined ? [`harness=${pane.harness}`] : []),
         ...(pane.dead ? ["dead"] : []),
