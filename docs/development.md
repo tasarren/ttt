@@ -37,10 +37,13 @@ Ownership rules:
 - Session records (`~/.ttt/sessions/<S>/session.json`, written by setup, read by doctor) live in
   `packages/cli/src/session-record.ts`, outside the boards on purpose.
 - Layouts live in `packages/cli/src/layout.ts` (schema, parser, file io — every error names file
-  and path). `LayoutPane.title` is a helper-pane title, refused together with `agent: true`.
+  and path). `LayoutPane.agent` is `true` (the window's main agent, at most one) or a string (a
+  second agent's name, checked with `assertName`, never a window's name — `seats agent "X" twice`);
+  `title` is a helper-pane title, refused on an agent pane.
   `commands/tmux/build.ts` builds a layout into a session: panes in file order, each extra pane
   split from the pane created last so `pane_index` follows the file (the saved `layout` string binds
-  cells by index); only `agent: true` stamps — a window whose panes mark none is built as furniture;
+  cells by index); the `agent` panes are stamped (main agent, or the named second agent) — a window
+  whose panes mark none is built unregistered;
   `title` stamps `@ttt_title`; `setup.ts` validates each pane's `harness` against the declared
   harnesses before building (exit 2 naming the pane); the shorthand `{ "name": "X" }` parses as one
   shell agent pane.
@@ -77,15 +80,16 @@ that runs the current source. Edit, save, run: no build. `publishConfig.bin` swa
 (`packages/cli/tsdown.config.ts`, `deps.alwaysBundle`).
 
 Verify inside your own session with `ttt`, not with ad-hoc tmux servers: `.orchestrator/scripts/`
-holds `verify-open.sh`, `verify-teammate-flow.sh`, and `verify-furniture.sh`, run from inside the
-live ttt session (`sh .orchestrator/scripts/verify-furniture.sh`). They exercise the real verbs end
+holds `verify-seats.sh`, `verify-open.sh`, `verify-teammate-flow.sh`, and `verify-furniture.sh`, run
+from inside the
+live ttt session (`sh .orchestrator/scripts/verify-seats.sh`). They exercise the real verbs end
 to end, take an optional harness name (default: the settings' default), prefix their
 windows with `V-`, and clean up after themselves via a trap.
 
 ## How a normal send flows
 
-1. `commands/send.ts` resolves the target windows (lowest id wins on duplicate names, must not be the
-   caller), reads the body, and calls `board.send`.
+1. `commands/send.ts` resolves the target windows (lowest id wins on duplicate names; the caller's
+   own name is `refusing to send a message to yourself`), reads the body, and calls `board.send`.
 2. `board.send` writes `messages/<day>/<id>.json`, appends the thread index, then under each recipient's
    mailbox lock writes an `unread` receipt, bumps the unread counter, supersedes older messages with the
    same `--replace` key, and creates a notification marker (`state/<recipient>.notification.json`,
@@ -93,17 +97,20 @@ windows with `V-`, and clean up after themselves via a trap.
 3. For each marker the CLI spawns a detached copy of itself:
    `ttt --session S --from ttt _notify --target T --token K`.
 4. The child heartbeats the marker through the batching window, then (if the token still matches) pastes
-   the one-line summary into the target's agent pane -- resolved by `resolveAgentPane` in
-   `packages/tmux/src/panes.ts`: the pane stamped `@ttt_agent` with the window name, `undefined` on
-   furniture, which refuses the paste (exit 1) -- and marks the receipts notified. A newer marker means a
+   the one-line summary into the target's seat -- resolved by `resolveAgent` in
+   `packages/tmux/src/panes.ts`: the pane stamped `@ttt_agent=NAME` anywhere in the session, else the
+   first pane of the window called NAME, so an unregistered window still receives -- and marks the
+   receipts notified. A newer marker means a
    newer child owns the burst; the old one exits silently. A failed paste cancels the dead token and re-arms
    a live notifier.
 5. `main.ts` runs `syncBadges(ctx)` for every non-read-only command (`packages/cli/src/badges.ts`).
 
-Context creation stamps `@ttt_agent` with the caller's window name onto the caller's pane whenever
-identity came from the PID walk, and clears sibling stamps in that window (at most one agent pane
-per window). Best-effort: a failed stamp never fails the command. Commands identified via
-`pane-env` or `--session`/`--from` never stamp.
+Context creation registers the caller's pane on any `ttt` run from inside tmux (never under
+`--from`): `registerSeat` stamps `@ttt_agent=NAME` — the window name when
+this is the window's first pane and the name is free, else `WINDOW-N` from `generateSeatName`
+(lowest N avoiding live windows, live stamps, and mailboxes on disk) — and clears only the same
+name elsewhere. Best-effort: a failed stamp never fails the command. Commands under
+`--session`/`--from` never register.
 
 ## Blocking reads (`--wait`)
 
@@ -136,7 +143,8 @@ Two e2e suites, each on its own private tmux server socket: `packages/tmux/tests
 inside a pane (`TMUX`, `TMUX_PANE`, plus a temp `TTT_HOME` with `notifySeconds: 1`), asserting on
 `capture-pane` output and board files). Neither touches your own tmux session. The CLI e2e declares
 a `shell` harness in its settings file (`bin sh`, a prompt regex), so its opens never depend on the
-machine's `harnesses` section.
+machine's `harnesses` section, and covers the seat model end to end ("delivery targets the seat: a
+stamp, else the first pane; a second pane becomes WINDOW-N, never the window's name").
 
 ## Adding a setting
 
@@ -173,19 +181,27 @@ machine's `harnesses` section.
 
 ## tmux verb files
 
-- `packages/cli/src/context.ts` builds the `Context`; `Context.claimed` says whether identity
-  resolution moved the agent stamp to the caller's pane (the run that prints `(claimed now)` in
-  `whoami`). `requireTeammate(ctx, name)` resolves a messaging target to `{ window, paneId }` via
-  `resolveAgentPane` and throws the furniture refusal on `undefined`.
+- `packages/cli/src/context.ts` builds the `Context`. `registerSeat` (first `ttt` run from a pane,
+  any command) stamps the pane: already stamped -> keep the name; the window's first pane and a
+  free name -> the window's name; else `WINDOW-N`, lowest N not a live window, a live stamp, or a
+  mailbox on disk. `Context.windowName` is the caller's window, `Context.claimed` says whether this
+  run did the stamping (the `(registered now as NAME ...)` pane line in `whoami`). `requireAgent`
+  resolves a messaging target to `Agent = { window, seat }` via `agentIn` (`resolveAgent`: a stamp
+  anywhere in the session, else the window's first pane); `isSelf(ctx, name)` compares names, so a
+  second agent may message its window's main agent.
+- `commands/panes.ts` is `ttt panes [--window NAME] [--json]`: one `PaneRow` per pane (`index`,
+  `pane`, `agent` (the stamp, or the window name when the pane is the seat), `seat`, `registered`,
+  `runs` (harness, else title, else command), `dead`).
 - `commands/tmux/target.ts` holds the shared pane truth: `requireSession`, `resolveAgentTarget`
-  (the stamped agent pane only — furniture is refused with `furnitureMessage`), `resolvePaneTarget`
-  (`parsePaneAddress`: NAME -> agent pane, NAME.N -> `pane_index`, %id; bare NAME falls back to the
-  single pane of an unstamped window), and `requireTypable` (the two refusals: dead pane,
+  (any NAME: its seat via `resolveAgent`, so an unregistered window resolves to its first pane),
+  `resolvePaneTarget` (`parsePaneAddress`: NAME -> seat, NAME.N -> `pane_index`, %id; `agent` is
+  the agent seated there if any), and `requireTypable` (the two refusals: dead pane,
   `synchronize-panes` on).
 - `lifecycle.ts` is open/close/rename/split/respawn; `typing.ts` is type/press/interrupt; `screen.ts`
   is wait/popup/flash. The interactive setup wizard lives in `setup.ts`.
 - `normalize-window.ts` (the hook verb) pins the profile on a new window and, when tmux named the
-  window itself, renames it `W-N` — `FURNITURE_STEM` in `names.ts`, lowest free N against live
+  window itself, renames it `W-N` — `FURNITURE_STEM` in `names.ts` and `isScratchName`, the one
+  shape `broadcast --all` skips. Lowest free N against live
   windows and mailbox directories. It never stamps.
 - `packages/cli/src/harnesses.ts` owns the harness settings: `HarnessSettings` (`declared`,
   `defaultName`, `source`), `ResolvedHarness` (`name`, `bin`, `ready`, `note?`), `shippedHarnesses`
@@ -193,18 +209,24 @@ machine's `harnesses` section.
   names allowed; `bin`/`ready` required without a preset; exactly one `default: true`; overriding
   `ready` drops the preset's note). `settings.ts` parses the section into `Settings.harnesses` and
   carries `Settings.path` (the caller's `PATH`) so `doctor` can find binaries.
-- `lifecycle.ts` resolves what a pane runs: `withBareHarness` (a lone `--harness` is a flag, not a
-  value), `resolveProgram`/`pickHarness` (default or declared harness, the exact refusal lines),
-  and `awaitReady` (harness regex or `--ready`, visible screen only). A shell start stamps nothing;
-  only a harness or COMMAND stamps, and a harness helper pane gets `@ttt_harness` + `@ttt_command`
-  but never `@ttt_agent`.
+- `lifecycle.ts` resolves what a pane runs: `withBareValues` (a lone `--harness` or `--pane` is a
+  flag, not a value), `resolveProgram`/`pickHarness` (default or declared harness, the exact refusal
+  lines), `pickWindow`/`takenNames` (a new name avoids live windows, live stamps, and mailboxes), and
+  `awaitReady` (harness regex or `--ready`, visible screen only). `open --pane` with a harness seats
+  a second agent (`@ttt_agent=NAME` on its own pane); without one it is a titled helper. A shell
+  `--window` start stamps nothing; only a harness or COMMAND stamps, and the harness stamps
+  `@ttt_harness` + `@ttt_command` alongside the agent stamp.
 - `names.ts` owns window names: `MAX_WINDOW_NAME` (12, fits the bar), `checkWindowName` (charset
-  plus the length error), and `generateWindowName` (`<STEM>-N` from the resolved harness or `W`,
+  plus the length error), `generateWindowName` (`<STEM>-N` from the resolved harness or `W`,
   lowest N free of live windows *and* mailbox directories — a reused name would silently inherit an
-  old inbox) and `mailboxNames`.
-- `doctor`'s window findings (`windowFindings`) report furniture, stale stamps (`warn window X:
-  pane %id is stamped @ttt_agent=OLD, which is not this window's name; ttt ignores it` — a rename
-  done with plain tmux; fix: claim by running ttt inside the pane, or clear the option), dead panes,
+  old inbox), `generateSeatName` (second agents: `WINDOW-N` counting from 2 — the window's own name
+  is seat 1), and `mailboxNames`.
+- `doctor`'s window findings (`windowFindings(window, historyLimit, live)`) report unregistered
+  windows (`ok window X: unregistered: pane 1 receives until something there runs ttt` —
+  information, no fix), a second agent's stamp colliding with a window name (`warn window X: pane
+  %id is stamped @ttt_agent=Y, also the name of window @id; messages to Y land here, not there`),
+  twin stamps (`warn window X: panes %a and %b are both stamped @ttt_agent=Y; the first wins`),
+  dead panes (the fix names the seated agent, `ttt tmux respawn REVIEWER-2`),
   and thin history. `harnessFindings` lists the section and finds each `bin` on `Settings.path`
   (`findBinary`: absolute as is, else first PATH hit), warning when it is missing. It also reports
   skill installs, read-only (`skill-status.ts` walks `~/.agents/skills`,

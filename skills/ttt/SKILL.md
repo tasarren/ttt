@@ -6,10 +6,13 @@ description: Message teammate agents that share your tmux session. Use when you 
 
 # ttt — talk to teammates
 
-`ttt` is durable, batched messaging between the windows of one tmux session. Your name is your
-tmux window name. Teammates are the other window names; list them with `ttt windows`. Teammates can belong to any harness on any provider, they are not subagents. A window is a teammate only
-while one of its panes carries the agent stamp (`@ttt_agent=<window name>`); everything else is
-furniture — it can be driven (`ttt tmux type`), never messaged.
+`ttt` is durable, batched messaging between the windows of one tmux session. You are reachable
+before you speak: your first `ttt` run registers your pane, and until then messages to your window
+land in its first pane. Your name is what `ttt whoami` prints as `name:` — the window name unless
+you are a second agent (`WINDOW-N`) in someone's window. Other agents can belong to any harness on
+any provider; they are not subagents. Every window has a main agent named like the window, messageable
+the moment the window exists; a second agent in the same window is messageable by its own name.
+`ttt panes` shows who sits where in a window, `ttt windows` lists names.
 
 ## The loop (follow it exactly)
 
@@ -35,23 +38,25 @@ When you have nothing else to do, wait instead of ending your turn:
 | Idle: wait for mail to come to you | `ttt read --wait` (returns on arrival or at the timeout) |
 | Reply | `ttt reply MESSAGE_ID -- your answer` (`--to receiver` to widen, `--to thread` for group threads; add `--wait` to block until the reply lands) |
 | Group thread | `ttt broadcast A B --subject TOPIC -- message`, then `ttt reply ID --to thread -- answer` |
-| Several recipients | `ttt broadcast A B -- message`, or `--all` for every other window |
+| Several recipients | `ttt broadcast A B -- message`, or `--all` for one agent per window (scratch `W-N` windows are skipped; relay to your own second agents yourself) |
 | Triage a busy mailbox (stays unread) | `ttt inbox --detail`, `ttt read --headers-only`, `ttt inbox --detail --from NAME` |
 | Mark handled | `ttt ack MESSAGE_ID -- note`, or `ttt ack --all -- note` for the whole mailbox |
 | Check delivery | `ttt status MESSAGE_ID` (`q/n/r/a` = queued/notified/read/acked; `by WINDOW` when someone else read or acked) |
 | Full thread | `ttt thread MESSAGE_ID` (header shows `topic:` + `members:`; `--headers-only` to triage) |
-| Peek at a teammate's screen | `ttt capture NAME --lines 40` (their agent pane, never the focused one; `--grep PATTERN`, or `--around PATTERN --context N`; TUI chrome is cleaned unless `--raw`) |
-| Who/where am I (session, window, board) | `ttt whoami` (check `via:`; wrong window = broken runner env) |
+| Peek at another agent's screen | `ttt capture NAME --lines 40` (their seat, never the focused one; `--grep PATTERN`, or `--around PATTERN --context N`; TUI chrome is cleaned unless `--raw`) |
+| Who/where am I (session, name, window, board) | `ttt whoami` (check `via:`; wrong window = broken runner env) |
+| Who sits where in a window | `ttt panes` (your window) or `ttt panes --window NAME` |
 
 | Need | Run |
 |---|---|
 | See the session: who owns which pane | `ttt tmux tree` |
 | Is the session set up right | `ttt tmux doctor` |
-| Start a teammate and wait until it accepts input | `ttt tmux open --window auto --harness` (bare `--harness` = the default; `--harness claude` to pick) |
-| Turn an existing single-pane window into a teammate | `ttt tmux open --window W-2 --harness` (adopts it), then `ttt tmux open --pane tests --in W-2 -- pnpm test --watch`, then `ttt send W-2 --wait -- ...` |
-| Helper pane next to you | `ttt tmux open --pane tests -- pnpm test --watch` (or `--pane --harness` for a second, non-messageable agent) |
+| Start an agent and wait until it accepts input | `ttt tmux open --window auto --harness` (bare `--harness` = the default; `--harness claude` to pick) |
+| Turn an existing single-pane window into an agent | `ttt tmux open --window W-2 --harness` (adopts it), then `ttt tmux open --pane tests --in W-2 -- pnpm test --watch`, then `ttt send W-2 --wait -- ...` |
+| Second agent next to you, messageable by name | `ttt tmux open --pane --harness` (name chosen) or `--pane NAME --harness` to pick one; then `ttt send NAME --wait -- task` |
+| Helper pane next to you (never messageable) | `ttt tmux open --pane tests -- pnpm test --watch` |
 | Which harnesses exist here | `ttt tmux doctor` (harness rows) |
-| Revive a dead teammate pane | `ttt tmux respawn NAME` |
+| Revive a dead agent pane | `ttt tmux respawn NAME` (any agent, second agents included) |
 | Stop what a teammate's pane is running | `ttt tmux interrupt NAME` (use before `--urgent` messages when a process, not the agent, is the problem) |
 | Wait for a teammate's screen to show something | `ttt tmux wait NAME --for REGEX` |
 | Drive a program in a teammate's pane | `ttt tmux type` / `ttt tmux press` (never for messages — those go through `ttt send`) |
@@ -61,14 +66,15 @@ When you have nothing else to do, wait instead of ending your turn:
 
 ## Cheapest forms
 
-- `ttt tmux open --window auto --harness`: one teammate on the default harness, name chosen for
+- `ttt tmux open --window auto --harness`: one agent on the default harness, name chosen for
   you, returns when it accepts input. Then `ttt send NAME --wait -- task`. Two commands, no
   `wait --for`, no `capture` to check readiness.
-- `ttt tmux open --pane --harness`: a second agent next to you (not messageable; drive it with
-  `ttt tmux type NAME.N`).
+- `ttt tmux open --pane --harness`: the cheapest second agent next to you — name chosen
+  (`WINDOW-N`), messageable at once; `--pane NAME --harness` to pick the name. Then
+  `ttt send NAME --wait -- task`.
 - `ttt tmux open --window auto`: a scratch shell (`W-N`); use `NAME.1` targets to drive it; adopt
   later with `ttt tmux open --window W-1 --harness`.
-- Skip `--cwd` when the teammate should share your directory (it inherits the session's); skip
+- Skip `--cwd` when the agent should share your directory (it inherits the session's); skip
   `--ready` (the harness knows its prompt); skip `--ready-timeout` (settings `wait.seconds`).
 - `--harness NAME` only when you need a specific one; the operator's settings decide what exists
   (`ttt tmux doctor` lists them).
@@ -86,9 +92,11 @@ When you have nothing else to do, wait instead of ending your turn:
 - Name the thread when it matters: `ttt send NAME --subject TEXT -- your message`.
 - Expiring notes: `ttt send NAME --ttl SECONDS -- FYI only`.
 - Read `ttt capture` instead of asking "what are you doing".
-- Notifications reach your window's agent pane (the stamped one) even when you are working in a
-  helper pane. A window without an agent stamp is furniture: messages to it are refused, and it
-  gets no notifications.
+- Notifications reach your seat (the pane your name resolves to) even when you are working in
+  another pane of the window. An unregistered window still receives: its first pane stands in for
+  the main agent until something there runs ttt.
+- `broadcast --all` reaches one agent per window. If second agents share your window, relay to
+  them yourself (`ttt send REVIEWER-2 -- ...`); their panes are not broadcast targets.
 - If `ttt whoami` shows the wrong window, prefix every command with `--session SESSION --from YOUR-WINDOW` until the runner is fixed.
 - Bodies are plain text read by a model: request first, context second, keep them short.
 - A window named like a command needs the explicit form: `ttt send NAME -- message`.

@@ -107,7 +107,7 @@ Data:
 | `find` | `(session, name) => Promise<TmuxWindow \| undefined>` | Duplicate names resolve to the lowest id. |
 | `open` | `(input: OpenWindowInput) => Promise<{ windowId, paneId }>` | Creates a detached window; returns its id and first pane id. |
 | `close` | `(windowId: string) => Promise<void>` | Kills the window. |
-| `rename` | `(windowId: string, name: string) => Promise<void>` | `rename-window` on the id. Furniture only — the CLI refuses to rename a teammate, whose name is its identity and mailbox. |
+| `rename` | `(windowId: string, name: string) => Promise<void>` | `rename-window` on the id. The CLI refuses to rename a window whose name is a mailbox key (its main agent's identity), and refuses a NEW that is a live agent name. |
 | `layout` | `(windowId: string) => Promise<string>` | The window's `#{window_layout}` string: pane geometry that `applyLayout` replays exactly. |
 | `applyLayout` | `(windowId, layout) => Promise<void>` | `select-layout` replay onto a window that already has the same number of panes. |
 
@@ -115,8 +115,9 @@ Data:
 
 | Export | Kind | Purpose |
 |---|---|---|
-| `PaneStamp` | type | `{ agent?, harness?, command?, title? }` — what ttt stamps on a pane it starts or identifies; each field maps to one `@ttt_*` option. `agent` is absent for helper panes (a test watcher next to the agent); stamping without `agent` never clears siblings. `title` is a helper pane's border title and never set together with `agent`. |
-| `resolveAgentPane` | function | `(live: LivePane[], windowId, windowName) => string \| undefined` — the pane stamped `@ttt_agent` with that window name inside the window, else `undefined`. No lowest-index fallback: a window without a stamp is furniture, and callers decide (messaging refuses; driving verbs fall back to the single pane). Pure. |
+| `PaneStamp` | type | `{ agent?, harness?, command?, title? }` — what ttt stamps on a pane it starts or identifies; each field maps to one `@ttt_*` option. `agent` is the agent seated here: the window's name for its main agent, `WINDOW-N` or a given name for a second agent, absent for titled helpers. `title` is a helper pane's border title and never set together with `agent`. |
+| `AgentSeat` | type | `{ windowId, windowName, paneId, registered }` — where an agent's messages land, and whether a stamp says so (`registered: false` = the window's lowest pane stands in). |
+| `resolveAgent` | function | `(live: LivePane[], window: TmuxWindow \| undefined, name: string) => AgentSeat \| undefined` — one pane truth for notify, capture and typing: the pane stamped `@ttt_agent=NAME` anywhere in the session wins (a second agent lives in another agent's window); without a stamp, the window called NAME seats its main agent in its lowest-index pane, so a window is reachable before anything there has run ttt. `undefined` only when neither stamp nor window exists. Pure. |
 | `PaneAddress` | type | `{ kind: "agent", window } \| { kind: "index", window, index } \| { kind: "id", pane }` — NAME (the window's agent pane), NAME.N (`pane_index`, base-index aware), or %id. |
 | `parsePaneAddress` | function | `(text) => PaneAddress \| undefined` — the three forms above; anything else is `undefined`. |
 | `SplitDirection` | vocabulary | `as const`: `vertical` (`-v`), `horizontal` (`-h`). |
@@ -125,7 +126,7 @@ Data:
 
 | Method | Signature | Purpose |
 |---|---|---|
-| `stamp` | `(paneId, live, stamp: PaneStamp) => Promise<void>` | With `agent`, marks the pane as its window's agent pane and clears `@ttt_agent` from every sibling in the window, so at most one pane per window carries it. Writes only what differs. |
+| `stamp` | `(paneId, live, stamp: PaneStamp) => Promise<void>` | Marks the pane with the given stamps. With `agent`, clears `@ttt_agent` from every other pane in the session carrying the same name, so one name sits in one pane (a dedupe, never a blanket clear — other agents' stamps are untouched). Writes only what differs; a pane already stamped costs nothing. |
 | `split` | `(input: SplitPaneInput) => Promise<string>` | Creates a detached pane; returns its id. |
 | `kill` | `(paneId: string) => Promise<void>` | Kills the pane. |
 | `respawn` | `(paneId: string, command?: string, cwd?: string) => Promise<void>` | Restarts the pane's command; `-k` kills a still-running one first, so the verb is idempotent. `cwd` starts it elsewhere (adoption). |
@@ -232,8 +233,8 @@ settings file may override `bin`/`ready` and declare more.
 | `SetupProfile` | type | `{ name, options: ProfileOption[] }`. |
 | `AGENTS_PROFILE` | constant | The built-in `agents` profile: rename off, `remain-on-exit` on, `synchronize-panes` off, border and status formats, index 1, `renumber-windows`, `history-limit` 10000, `destroy-unattached`/`detach-on-destroy` off, bells off, `status` on, `aggressive-resize` assert, `escape-time` lower-only, `focus-events` on. |
 | `PROFILES` | constant | Profiles by name (`agents` today). |
-| `FURNITURE_MARK` | constant | `"·"` — trailing mark on a window tab whose panes carry no `@ttt_agent` (furniture: nobody reads a mailbox there). |
-| `PANE_BORDER_FORMAT`, `WINDOW_STATUS_FORMAT`, `WINDOW_STATUS_CURRENT_FORMAT` | constants | The exact border and tab formats (tabs carry the unread badge; the current tab is bold). The tab marks furniture via `#{P:#{@ttt_agent}}` (joins every pane's stamp; empty plus `FURNITURE_MARK`). The border names the pane first — agent name, else pane title, else `pane N · command` — then the harness when ttt started one there, the cwd, and a dead marker. |
+| `FURNITURE_MARK` | constant | `"·"` — trailing mark on a window tab whose panes carry no `@ttt_agent` stamp (unregistered: nothing there has run ttt yet, the first pane receives). |
+| `PANE_BORDER_FORMAT`, `WINDOW_STATUS_FORMAT`, `WINDOW_STATUS_CURRENT_FORMAT` | constants | The exact border and tab formats (tabs carry the unread badge; the current tab is bold). The tab dot marks an unregistered window via `#{P:#{@ttt_agent}}` (joins every pane's stamp; empty plus `FURNITURE_MARK` — the export name stays, the concept is "nothing registered here yet"). The border names the pane first — agent name, else pane title, else `pane N · command` — then the harness when ttt started one there, the cwd, and a dead marker. |
 
 ## setup.ts
 
