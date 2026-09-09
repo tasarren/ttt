@@ -24,7 +24,8 @@ the moment the window exists; a second agent in the same window is messageable b
 
 When you have nothing else to do, wait instead of ending your turn:
 
-- Idle: run `ttt read --wait`. It returns when mail arrives or after the timeout; either way handle what it prints, then decide again. Do not loop it blindly; one call per idle period.
+- Idle: run `ttt read --wait`. It returns when mail arrives or after the timeout; either way handle what it prints, then decide again. One wait per idle period; empty waits lengthen on their own (120s, 180s, 240s, 300s) and any arrival resets — do not re-poll on your own timer, and do not pass `--timeout` to defeat the ramp.
+- While you wait, no prompts land on your input: the wait is the notification, and the batch it prints is the delivery. A bare `ttt read --wait` with no `--timeout` is the cheapest idle.
 - Need an answer to continue: `ttt send NAME --wait -- question` (or `ttt reply ID --wait -- ...`). The reply is printed in the same tool result; ack it as usual. Anything else that arrived is listed as headers below it: triage, do not ignore.
 - Otherwise: send and move on. `--no-reply` where no answer is needed.
 - A notification line `ttt: N new ...` still appears when you were not waiting; the loop for it is unchanged.
@@ -81,7 +82,9 @@ When you have nothing else to do, wait instead of ending your turn:
 
 ## Rules
 
-- Never poll. Do not run `ttt read` or `ttt inbox` in a loop; when idle, `ttt read --wait` is the one call per idle period, otherwise you will be notified.
+- Never poll. Do not run `ttt read` or `ttt inbox` in a loop; an empty `read --wait` already waits
+  longer next time, and you will be notified the moment mail arrives — the wait itself is the
+  notification, so while you wait nothing is pasted into your window.
 - Use `ttt tmux` verbs, never raw `tmux`, so identity and setup stay consistent.
 - Keep teammate window names short: at most 12 characters, so they fit the status bar.
 - `ttt capture` to look, `ttt tmux wait` to wait for the screen, `ttt send --wait` to wait for an answer.

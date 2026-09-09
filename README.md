@@ -172,7 +172,7 @@ Message options (for `send`, `reply`, `broadcast`):
 | Option | Effect |
 |---|---|
 | `--no-reply` | Tell the recipient no reply is needed. |
-| `--urgent` | Skip the batching window: paste the message into the target window now. |
+| `--urgent` | Skip the batching window: paste the message into the target window now (unless they are waiting — then the wait delivers it). |
 | `--replace KEY` | Supersede your own older *unread* messages to that recipient that carry the same KEY. Use it for status updates. |
 | `--subject TEXT` | Thread subject, set once on the root message. `--subject` on a reply is rejected. |
 | `--ttl SECONDS` | Self-expiring message: unread receipts lapse to `superseded` after SECONDS (max 30 days). History is kept. Expiry settles on next mailbox access. |
@@ -522,18 +522,26 @@ given on the command line skip their question. `--non-interactive` or a non-TTY 
 | `ttt send B --wait [--timeout SECONDS] -- question` | Print the usual `queued ...` line, then block until a message lands in this thread. That message prints in full (same format as `ttt read`) and only it is marked read, followed by `1 message shown, N unread messages still unread.` and a headers block for the rest, which stay unread. |
 | `ttt reply MESSAGE_ID --wait [--timeout SECONDS] -- answer` | Same, in-thread. |
 | `ttt broadcast ... --wait` | Same; wakes on the first reply in the thread. |
-| `ttt read --wait [--timeout SECONDS]` | Block until anything is unread, then print the batch exactly like `ttt read` (marks read). The recommended idle state. Cannot combine with `--peek`, `--latest`, or `--headers-only`. |
+| `ttt read --wait [--timeout SECONDS]` | Block until anything is unread, then print the batch exactly like `ttt read` (marks read). The recommended idle state: one wait per idle period. Without `--timeout` the wait ramps: consecutive empty waits last `wait.seconds + 60 * streak`, capped at `wait.maxSeconds` (120, 180, 240, 300 with defaults — the third empty wait hits the cap), and any arrival resets the streak. Ramped waits announce it on stderr: `ttt: waiting 180s after 1 empty wait; any arrival resets it`. Cannot combine with `--peek`, `--latest`, or `--headers-only`. |
 
 `--timeout` is an integer between 1 and `wait.maxSeconds` (default `wait.seconds`, 120; cap 300); out
-of range exits 2. A timeout is not an error: exit 0 with `ttt: no reply within Ns; M unread.`
-(send/reply) or `ttt: nothing arrived within Ns; M unread.` (read). An interrupted wait (SIGINT/
-SIGTERM) is also exit 0. `--wait` with `--no-reply` is a usage error, and so is `--timeout` without
-`--wait`.
+of range exits 2. An explicit `--timeout` skips the ramp and keeps the range check; `--timeout`
+without `--wait` is a usage error, and so is `--wait` with `--no-reply`. A timeout is not an error:
+exit 0 with `ttt: no reply within Ns; M unread.`
+(send/reply) or `ttt: nothing arrived within Ns; M unread.` (read — N is the effective length). An
+interrupted wait (SIGINT/SIGTERM) is also exit 0, and resets the streak. `send --wait` and
+`reply --wait` never touch the streak: they await one thread, not idleness.
 
-While a recipient is blocked in `--wait`, its message is delivered directly: no batching window, no
-paste into the window. The queued line shows it: `queued ttt-2026... -> B (B waiting: delivered
-directly)`. With several recipients only the waiting ones are listed; the others get the normal
-batch or paste.
+While you wait, nothing is pasted — the wait is the notification. Starting a wait cancels that
+agent's pending batch marker (a sleeping notifier exits silently), and mail that arrives during the
+wait is delivered by the wait itself: it stays unread and unnotified, the marker is dropped, and the
+next send re-arms if the waiter leaves without reading. The queued line shows direct delivery:
+`queued ttt-2026... -> B (B waiting: delivered directly)`; with several recipients only the waiting
+ones are listed, the others get the normal batch or paste. This holds for `--urgent` too: an urgent to
+an all-waiting audience lands via the waits instead of pasting (it used to error). A bare `read
+--wait` wakes on anything; a thread-scoped `send --wait` wakes on its thread only — other-thread
+mail during a thread wait stays silent, and the wait's timeout line reports the unread count (the
+old `send --wait` behavior, not a bug). Long waits re-announce presence past half its TTL.
 
 One of you must go first: `send --wait`/`reply --wait` to a teammate who is already waiting on a
 thread you participate in fails with exit 1, `B is already waiting on a reply from you (thread

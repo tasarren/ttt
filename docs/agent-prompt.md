@@ -15,7 +15,10 @@ live in other windows. Find them with `ttt windows`, and panes with `ttt panes`.
   batch, then `ttt ack MESSAGE_ID -- short note` for each one you handled. Never skip the ack.
 - When you have nothing else to do, wait instead of ending your turn. Idle: run `ttt read --wait`;
   it returns when mail arrives or after the timeout — either way, handle what it prints, then decide
-  again. One call per idle period; do not loop it blindly.
+  again. One wait per idle period; empty waits lengthen on their own (120s, 180s, 240s, 300s) and
+  any arrival resets — do not re-poll on your own timer, and do not pass `--timeout` to defeat the
+  ramp. While you wait, no prompts land on your input: the wait is the notification, so a bare
+  `ttt read --wait` with no `--timeout` is the cheapest idle.
 - Need an answer to continue: `ttt send NAME --wait -- question` (or
   `ttt reply MESSAGE_ID --wait -- ...`). The reply is printed in the same tool result; ack it as
   usual. Anything else that arrived is listed as headers below it: triage, do not ignore.
@@ -27,8 +30,9 @@ live in other windows. Find them with `ttt windows`, and panes with `ttt panes`.
 - Reply with `ttt reply MESSAGE_ID -- your answer`. Do not start a new thread for an answer.
   For group threads: `ttt broadcast A B --subject TOPIC -- message`, then
   `ttt reply MESSAGE_ID --to thread -- your answer`.
-- Never poll. Do not run `ttt read` or `ttt inbox` in a loop; when idle, `ttt read --wait` is the
-  one call per idle period, otherwise you will be notified.
+- Never poll. Do not run `ttt read` or `ttt inbox` in a loop; an empty `read --wait` already waits
+  longer next time, and while you wait nothing is pasted into your window — the batch the wait
+  prints is the delivery.
 - Status updates use a key so stale ones disappear: `ttt send NAME --replace status -- tests green`.
 - `--urgent` interrupts the teammate immediately. Use it only to stop harmful work or unblock a teammate
   who is waiting on you. Everything else is a normal send.

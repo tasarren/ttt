@@ -80,9 +80,10 @@ that runs the current source. Edit, save, run: no build. `publishConfig.bin` swa
 (`packages/cli/tsdown.config.ts`, `deps.alwaysBundle`).
 
 Verify inside your own session with `ttt`, not with ad-hoc tmux servers: `.orchestrator/scripts/`
-holds `verify-seats.sh`, `verify-open.sh`, `verify-teammate-flow.sh`, and `verify-furniture.sh`, run
+holds `verify-wait.sh`, `verify-seats.sh`, `verify-open.sh`, `verify-teammate-flow.sh`, and
+`verify-furniture.sh`, run
 from inside the
-live ttt session (`sh .orchestrator/scripts/verify-seats.sh`). They exercise the real verbs end
+live ttt session (`sh .orchestrator/scripts/verify-wait.sh`). They exercise the real verbs end
 to end, take an optional harness name (default: the settings' default), prefix their
 windows with `V-`, and clean up after themselves via a trap.
 
@@ -120,19 +121,38 @@ plumbing (`awaitReply`, `refuseMutualWait`) in `commands/send.ts`, presence in `
 (`announcePresence`, `presence`, `presenceUnlocked`).
 
 - The waiter arms `fs.watch` on `mailboxes/<name>/` first, then writes its presence file
-  `state/<name>.waiting.json` (`{ pid, since, expect: "any" | { threadId } }`), then scans the
+  `state/<name>.waiting.json` (`{ pid, since, expect: "any" | { threadId } }`) — under the mailbox
+  lock, cancelling any pending batch marker, so a sleeping notifier exits silently — then scans the
   mailbox once — no lost-wake-up window. A 2 s poll is the inotify safety net; the file is
-  withdrawn in `finally`, and SIGINT/SIGTERM share the timeout's abort path.
+  withdrawn in `finally`, and SIGINT/SIGTERM share the timeout's abort path. A wait longer than
+  half the presence TTL re-announces (`PRESENCE_STALE_AFTER_MS`, exported for the loop in `wait.ts`).
 - `board.send` checks presence under the recipient's mailbox lock: a live pid (`kill(0)`) younger
   than 10 minutes means direct delivery — no notification marker, no paste, and the receipt notes
   `(NAME waiting: delivered directly)`. Otherwise the stale presence file is removed and the normal
   path runs, so a crashed waiter's mail is still delivered by the notifier; nothing is lost.
+- Delivery time re-checks presence, both for batches (`deliverNotification`) and urgent pastes
+  (`deliverUrgent`): when a live waiter sees the fresh mail (`waiterSees` — any wait sees any mail,
+  a thread wait only its thread), the paste is skipped, the marker is dropped, and the receipts
+  stay unread and unnotified; the next send re-arms if the waiter leaves without reading. A
+  mismatched waiter (waiting on another thread) still gets the paste. At announce time the marker
+  is already cancelled, so this catches mail sent between announce and delivery.
 - `board.send` returns `waiting: string[]` for the queued-line suffix; `refuseMutualWait` turns a
-  mutual wait (target waiting on a thread you participate in) into exit 1. `ReadOptions.only`
+  mutual wait (target waiting on a thread you participate in) into exit 1 — and an urgent to an
+  all-waiting audience simply has nobody to paste to (`send.ts` skips `pushUrgent`). `ReadOptions.only`
   restricts a read to given ids, so only the awaited reply is marked read.
+- Empty `read --wait` calls ramp up. Without an explicit `--timeout`, `Board.waitTimeout` reads the
+  streak file `state/<name>.wait.json` (`WaitStreak`: `{ emptyStreak, updatedAt }`, refreshed under
+  the mailbox lock) and returns `min(wait.seconds + WAIT_RAMP_STEP_S * emptyStreak, wait.maxSeconds)`
+  (60 s per step, so 120, 180, 240, 300 with defaults); a streak older than the cap starts over at
+  base. After the wait, `noteWait(senderName, timedOut)` deletes the streak on arrival, extends it
+  on a timeout, and resets it on interrupt; corrupt files count as no streak. `inbox.ts` prints the
+  stderr line `ttt: waiting 180s after 1 empty wait; any arrival resets it` on ramped waits only.
+  `send --wait`/`reply --wait` (`awaitReply`) never touch the streak: they await one thread, not
+  idleness.
 
 `--urgent` skips the marker: the CLI pastes the formatted message right away through
-`board.deliverUrgent`, which marks the receipt notified but leaves it unread.
+`board.deliverUrgent` (unless the recipient waits and sees it — then the wait delivers), which marks
+the receipt notified but leaves it unread.
 
 ## Tests
 
