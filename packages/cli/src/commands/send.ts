@@ -103,7 +103,9 @@ async function deliver(
   const thread = route.kind === MessageKind.Reply ? ` (thread ${message.threadId})` : ""
   const listening = waiting.length > 0 ? ` (${waiting.join(", ")} waiting: delivered directly)` : ""
   if (payload.priority === MessagePriority.Urgent) {
-    await pushUrgent(ctx, message, new Map([...windows].filter(([name]) => !waiting.includes(name))))
+    // Everyone waiting means direct delivery already happened; there is nobody to paste to.
+    const unwaiting = new Map([...windows].filter(([name]) => !waiting.includes(name)))
+    if (unwaiting.size > 0) await pushUrgent(ctx, message, unwaiting)
     process.stdout.write(`sent URGENT ${message.messageId} -> ${to}${thread}${listening}\n`)
   } else if (notifications.length === 0) {
     const how = waiting.length === message.recipients.length ? "" : " (joins pending batch)"

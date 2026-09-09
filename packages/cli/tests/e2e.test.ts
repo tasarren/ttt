@@ -399,6 +399,109 @@ test("read --wait times out honestly and refuses a mutual wait", async() => {
   assert.match(await bAsks, /done/)
 })
 
+/** Runs the CLI as if typed inside window `as`, keeping stderr for prompt assertions. */
+async function tttBoth(as: string, ...args: string[]): Promise<{ stdout: string; stderr: string }> {
+  const env = { ...process.env, TTT_HOME: home, TMUX: `${socketPath},0,0`, TMUX_PANE: panes[as]! }
+  const { stdout, stderr } = await execFileAsync(process.execPath, [BIN, ...args], { env })
+  return { stdout: stdout.trim(), stderr: stderr.trim() }
+}
+
+/** Drains both mailboxes and deletes A's wait streak, so each wait test starts un-ramped. */
+async function calmDown(): Promise<void> {
+  await ttt("A", "ack", "--all").catch(() => undefined)
+  await ttt("B", "ack", "--all").catch(() => undefined)
+  await ttt("B", "send", "A", "--no-reply", "--", "reset probe")
+  await ttt("A", "read", "--wait", "--timeout", "2")
+  assert.equal(existsSync(join(home, "boards", SESSION, "state", "A.wait.json")), false)
+}
+
+test("read --wait is never pasted: direct, pre-armed, and urgent mail all arrive via the wait", async() => {
+  await calmDown()
+  for (const pane of [panes["A"]!, panes["B"]!]) {
+    await tmux("clear-history", "-t", pane)
+    await tmux("send-keys", "-t", pane, "clear", "Enter")
+  }
+
+  // A blocks with nothing pending. A normal send and an urgent one both land in the wait's
+  // output; neither is pasted into the pane.
+  let waiting = ttt("A", "read", "--wait", "--timeout", "8")
+  const presencePath = join(home, "boards", SESSION, "state", "A.waiting.json")
+  const deadline = Date.now() + 5_000
+  while (!existsSync(presencePath)) {
+    if (Date.now() > deadline) assert.fail("A never announced its presence")
+    await sleep(50)
+  }
+  assert.match(await ttt("B", "send", "A", "--no-reply", "--", "quiet probe"), /\(A waiting: delivered directly\)$/)
+  assert.match(await waiting, /quiet probe/, "the wait prints the batch")
+  waiting = ttt("A", "read", "--wait", "--timeout", "8")
+  const deadline2 = Date.now() + 5_000
+  while (!existsSync(presencePath)) {
+    if (Date.now() > deadline2) assert.fail("A never re-announced its presence")
+    await sleep(50)
+  }
+  assert.match(await ttt("B", "send", "A", "--no-reply", "--urgent", "--", "urgent probe"), /\(A waiting: delivered directly\)$/)
+  assert.match(await waiting, /urgent probe/, "an urgent waiter wakes on the receipt itself")
+  await sleep(2_500)
+  const screen = await tmux("capture-pane", "-p", "-t", panes["A"]!)
+  assert.doesNotMatch(screen, /Run: ttt read/, "no batched prompt reached the waiting pane")
+  assert.doesNotMatch(screen, /URGENT/, "no urgent paste either")
+  assert.equal(existsSync(join(home, "boards", SESSION, "state", "A.notification.json")), false)
+  await ttt("A", "ack", "--all")
+
+  // Pre-armed: the marker for an idle mailbox dies when the wait starts, so a thread waiter's
+  // other-thread mail never prompts either.
+  const settings = join(home, "settings.jsonc")
+  const original = await readFile(settings, "utf8")
+  await writeFile(settings, original.replace("\"notifySeconds\": 1,", "\"notifySeconds\": 6,"))
+  try {
+    await ttt("B", "send", "A", "--no-reply", "--", "background note")
+    const asking = ttt("A", "send", "B", "--wait", "--timeout", "7", "--", "question?")
+    const aPresence = join(home, "boards", SESSION, "state", "A.waiting.json")
+    const aDeadline = Date.now() + 5_000
+    while (!existsSync(aPresence)) {
+      if (Date.now() > aDeadline) assert.fail("A never announced its thread wait")
+      await sleep(50)
+    }
+    const batch = await ttt("B", "read")
+    const id = /\[1\/1\] A (ttt-\S+)/.exec(batch)?.[1]
+    assert.ok(id, batch)
+    assert.match(await ttt("B", "reply", id, "--", "answer"), /\(A waiting: delivered directly\)$/)
+    assert.match(await asking, /answer/)
+    await sleep(7_000)
+    const settled = await tmux("capture-pane", "-p", "-t", panes["A"]!)
+    assert.doesNotMatch(settled, /Run: ttt read/, "the cancelled marker never fired")
+    assert.equal(existsSync(join(home, "boards", SESSION, "state", "A.wait.json")), false, "thread waits leave the streak alone")
+  } finally {
+    await writeFile(settings, original)
+  }
+  await ttt("A", "ack", "--all")
+  await ttt("B", "ack", "--all")
+})
+
+test("empty read --waits ramp the next wait to the cap; arrival resets", async() => {
+  const settings = join(home, "settings.jsonc")
+  const original = await readFile(settings, "utf8")
+  await writeFile(settings, "{\"notifySeconds\": 1, \"wait\": {\"seconds\": 2, \"maxSeconds\": 4}}")
+  try {
+    await calmDown()
+    const first = await tttBoth("A", "read", "--wait")
+    assert.equal(first.stdout, "ttt: nothing arrived within 2s; 0 unread.")
+    assert.doesNotMatch(first.stderr, /waiting \ds/, "the base wait explains nothing")
+    const second = await tttBoth("A", "read", "--wait")
+    assert.equal(second.stdout, "ttt: nothing arrived within 4s; 0 unread.")
+    assert.match(second.stderr, /ttt: waiting 4s after 1 empty wait; any arrival resets it/)
+    const streak = JSON.parse(await readFile(join(home, "boards", SESSION, "state", "A.wait.json"), "utf8")) as { emptyStreak: number }
+    assert.equal(streak.emptyStreak, 2)
+    await ttt("B", "send", "A", "--no-reply", "--", "reset probe")
+    assert.match(await ttt("A", "read", "--wait"), /reset probe/, "arrival is still immediate")
+    assert.equal(existsSync(join(home, "boards", SESSION, "state", "A.wait.json")), false, "arrival deletes the streak")
+  } finally {
+    await writeFile(settings, original)
+  }
+  await ttt("A", "ack", "--all")
+  await ttt("B", "ack", "--all")
+})
+
 test("tmux setup creates a normalized session, the hook normalizes new windows, doctor reads it back", async() => {
   // Outside tmux: no TMUX/TMUX_PANE, private server through TMUX_TMPDIR so nothing touches the developer's.
   const tmpDir = await mkdtemp(join(tmpdir(), "ttt-e2e-tmuxdir-"))

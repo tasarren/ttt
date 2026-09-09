@@ -350,3 +350,93 @@ test("read with `only` flips just those receipts and reports the rest as remaini
   assert.equal(shown.remaining, 1)
   assert.equal(await board.unreadCount("B"), 1)
 })
+
+test("announcing a wait cancels a pending marker; its notifier then exits silently", async() => {
+  const board = await freshBoard()
+  const sent = await board.send("A", ["B"], "before the wait", NORMAL)
+  const token = sent.notifications[0]!.token
+  const withdraw = await board.announcePresence("B", "any")
+  assert.equal(await board.deliverNotification("B", token, async() => assert.fail("must not deliver")), false)
+  await withdraw()
+})
+
+test("a notifier that fires mid-wait delivers nothing and drops the marker", async() => {
+  const board = await freshBoard()
+  const sent = await board.send("A", ["B"], "hello", NORMAL)
+  const token = sent.notifications[0]!.token
+  const withdraw = await board.announcePresence("B", "any")
+  const delivered: NotificationSummary[] = []
+  assert.equal(await board.deliverNotification("B", token, async(summary) => { delivered.push(summary) }), false)
+  assert.equal(delivered.length, 0)
+  assert.equal(await board.unreadCount("B"), 1, "the waiter reads the receipt itself")
+  assert.equal((await board.messageStatus(sent.message.messageId)).receipts[0]!.notifiedAt, undefined)
+  await withdraw()
+  // The waiter left without reading: the next burst re-arms and delivers as before.
+  const rearmed = await board.scheduleNotification("B")
+  assert.ok(rearmed)
+  assert.equal(await board.deliverNotification("B", rearmed.token, async(summary) => { delivered.push(summary) }), true)
+  assert.equal(delivered.length, 1)
+})
+
+test("a thread-scoped wait skips only its own thread's mail", async() => {
+  const board = await freshBoard()
+  const first = await board.send("A", ["B"], "thread one", NORMAL)
+  const second = await board.send("C", ["B"], "other thread", NORMAL)
+  assert.notEqual(first.message.threadId, second.message.threadId)
+  const token = first.notifications[0]!.token
+  const withdraw = await board.announcePresence("B", { threadId: first.message.threadId })
+  assert.equal(await board.deliverNotification("B", token, async() => assert.fail("its own thread arrives via the wait")), false)
+  await withdraw()
+  const withdrawOther = await board.announcePresence("B", { threadId: "ttt-20000101-000000-00000000" })
+  const rearmed = await board.scheduleNotification("B")
+  assert.ok(rearmed)
+  let pasted = 0
+  assert.equal(await board.deliverNotification("B", rearmed.token, async() => { pasted += 1 }), true)
+  assert.equal(pasted, 1, "mail no waiter wakes for still gets pasted")
+  await withdrawOther()
+})
+
+test("urgent delivery skips a matching waiter and pastes otherwise", async() => {
+  const board = await freshBoard()
+  const first = await board.send("A", ["B"], "one", { ...NORMAL, priority: MessagePriority.Urgent })
+  const second = await board.send("A", ["B"], "two", { ...NORMAL, priority: MessagePriority.Urgent })
+  let pasted = 0
+  const withdraw = await board.announcePresence("B", "any")
+  await board.deliverUrgent(first.message, "B", async() => { pasted += 1 })
+  assert.equal(pasted, 0, "an `any` waiter wakes on the receipt itself")
+  assert.equal(await board.unreadCount("B"), 2)
+  await withdraw()
+  const withdrawThread = await board.announcePresence("B", { threadId: "ttt-20000101-000000-00000000" })
+  await board.deliverUrgent(second.message, "B", async() => { pasted += 1 })
+  assert.equal(pasted, 1, "a thread waiter never wakes for other-thread mail, so it gets pasted")
+  await withdrawThread()
+  await board.deliverUrgent(second.message, "B", async() => { pasted += 1 })
+  assert.equal(pasted, 2, "no waiter: pasted as before")
+})
+
+test("empty read-waits lengthen the next wait to the cap, then arrival resets", async() => {
+  const board = await freshBoard()
+  const input = { baseSeconds: 120, maxSeconds: 300 }
+  assert.deepEqual(await board.waitTimeout("B", input), { seconds: 120, emptyStreak: 0 })
+  await board.noteWait("B", true)
+  assert.deepEqual(await board.waitTimeout("B", input), { seconds: 180, emptyStreak: 1 })
+  await board.noteWait("B", true)
+  await board.noteWait("B", true)
+  assert.deepEqual(await board.waitTimeout("B", input), { seconds: 300, emptyStreak: 3 })
+  await board.noteWait("B", true)
+  assert.deepEqual(await board.waitTimeout("B", input), { seconds: 300, emptyStreak: 4 }, "past the cap the wait stays put")
+  await board.noteWait("B", false)
+  assert.deepEqual(await board.waitTimeout("B", input), { seconds: 120, emptyStreak: 0 }, "arrival restarts at base")
+})
+
+test("waitTimeout honors an explicit timeout, caps custom maxima, and forgets stale streaks", async() => {
+  const { board, sessionRoot } = await freshSession()
+  assert.deepEqual(await board.waitTimeout("B", { baseSeconds: 120, maxSeconds: 300, explicitSeconds: 45 }), { seconds: 45, emptyStreak: 0 })
+  assert.deepEqual(await board.waitTimeout("B", { baseSeconds: 2, maxSeconds: 4 }), { seconds: 2, emptyStreak: 0 })
+  await board.noteWait("B", true)
+  assert.deepEqual(await board.waitTimeout("B", { baseSeconds: 2, maxSeconds: 4 }), { seconds: 4, emptyStreak: 1 }, "the ramp caps at the max")
+  await writeFile(join(sessionRoot, "state", "B.wait.json"), JSON.stringify({ emptyStreak: 9, updatedAt: new Date(Date.now() - 10_000).toISOString() }))
+  assert.deepEqual(await board.waitTimeout("B", { baseSeconds: 2, maxSeconds: 4 }), { seconds: 2, emptyStreak: 0 }, "a streak older than the cap is a new idle period")
+  await writeFile(join(sessionRoot, "state", "B.wait.json"), JSON.stringify({ emptyStreak: "many", updatedAt: "yesterday" }))
+  assert.deepEqual(await board.waitTimeout("B", { baseSeconds: 2, maxSeconds: 4 }), { seconds: 2, emptyStreak: 0 }, "a corrupt file is no streak")
+})

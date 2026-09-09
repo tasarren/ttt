@@ -6,8 +6,10 @@ import { setTimeout as sleep } from "node:timers/promises"
 import {
   BOARD_VERSION,
   MessagePriority,
+  PRESENCE_STALE_AFTER_MS,
   RECEIPT_VERSION,
   ReceiptState,
+  WAIT_RAMP_STEP_S,
   assertName,
   makeMessageId,
   messageDay,
@@ -19,6 +21,7 @@ import type {
   MessageReceipt,
   NotificationMarker,
   Presence,
+  WaitStreak,
 } from "./model.ts"
 import { atomicWriteJson, isErrno, readJsonIfExists, readJsonTree, sweepTempFiles, withDirectoryLock } from "./store.ts"
 import type { LockOptions } from "./store.ts"
@@ -31,6 +34,21 @@ export interface BoardOptions {
   /** Per-window batching windows; a missing name falls back to `notifySeconds`. */
   notifyOverrides?: Record<string, number>
   lock: LockOptions
+}
+
+export interface WaitTimeoutInput {
+  /** The wait with no history behind it (`wait.seconds`). */
+  baseSeconds: number
+  /** The most any wait may last (`wait.maxSeconds`); also caps the streak's memory. */
+  maxSeconds: number
+  /** A `--timeout` value skips the ramp; validated by the caller. */
+  explicitSeconds?: number
+}
+
+export interface WaitTimeout {
+  seconds: number
+  /** Consecutive empty waits behind this timeout; 0 when explicit or fresh. */
+  emptyStreak: number
 }
 
 export interface SendOptions {
@@ -97,8 +115,6 @@ interface Unread {
 
 /** Notifier heartbeat: how often a waiting notifier refreshes its marker while the batch builds. */
 const HEARTBEAT_MS = 5_000
-/** A waiter that has not refreshed its presence in this long is treated as gone even if its pid lives on. */
-const PRESENCE_MAX_AGE_MS = 10 * 60_000
 
 /** `kill(pid, 0)` probes without signalling; EPERM still means the process exists. */
 function isProcessAlive(pid: number): boolean {
@@ -108,6 +124,16 @@ function isProcessAlive(pid: number): boolean {
   } catch(error) {
     return isErrno(error, "EPERM")
   }
+}
+
+/**
+ * Whether a live waiter picks up `fresh` itself: any wait sees any mail; a thread-scoped wait
+ * sees only its thread. A mismatch means the waiter never wakes for this mail, so it still gets
+ * pasted.
+ */
+function waiterSees(expect: Presence["expect"] | undefined, fresh: { message: BoardMessage }[]): boolean {
+  if (expect === undefined) return false
+  return expect === "any" || fresh.some(({ message }) => message.threadId === expect.threadId)
 }
 
 /**
@@ -198,12 +224,17 @@ export class Board {
 
   /**
    * Announces that `agent` is blocked waiting for mail. Written after the caller armed its
-   * watcher so no receipt can land unseen between the two. Returns the removal callback.
+   * watcher so no receipt can land unseen between the two. Cancels any pending notification
+   * marker first: a waiter delivers its own mail, so a sleeping notifier must not paste mid-wait
+   * (it exits silently on the missing token). Returns the removal callback.
    */
   async announcePresence(agent: string, expect: Presence["expect"]): Promise<() => Promise<void>> {
     assertName(agent, "agent name")
     const path = this.presencePath(agent)
-    await atomicWriteJson(path, { pid: process.pid, since: new Date().toISOString(), expect } satisfies Presence)
+    await this.withMailboxLock(agent, async() => {
+      await rm(this.markerPath(agent), { force: true })
+      await atomicWriteJson(path, { pid: process.pid, since: new Date().toISOString(), expect } satisfies Presence)
+    })
     return async() => {
       const current = await readJsonIfExists<Presence>(path).catch(() => undefined)
       if (current?.pid === process.pid) await rm(path, { force: true })
@@ -215,12 +246,62 @@ export class Board {
     return this.withMailboxLock(agent, () => this.presenceUnlocked(agent))
   }
 
+  /**
+   * How long the next `read --wait` lasts: the explicit `--timeout` when given, else the base plus
+   * one ramp step per consecutive empty wait, capped at the max. A streak older than the cap is a
+   * new idle period and starts over at base.
+   */
+  async waitTimeout(agent: string, input: WaitTimeoutInput): Promise<WaitTimeout> {
+    if (input.explicitSeconds !== undefined) return { seconds: input.explicitSeconds, emptyStreak: 0 }
+    return this.withMailboxLock(agent, async() => {
+      const streak = await this.streakUnlocked(agent)
+      const emptyStreak = streak && Date.now() - Date.parse(streak.updatedAt) <= input.maxSeconds * 1_000
+        ? streak.emptyStreak
+        : 0
+      return { seconds: Math.min(input.baseSeconds + WAIT_RAMP_STEP_S * emptyStreak, input.maxSeconds), emptyStreak }
+    })
+  }
+
+  /**
+   * Records a finished `read --wait`: arrival deletes the streak (anything heard restarts at base),
+   * anything else extends it by one. `send --wait` never calls this: it awaits one thread, not
+   * idleness.
+   */
+  async noteWait(agent: string, empty: boolean): Promise<void> {
+    await this.withMailboxLock(agent, async() => {
+      const path = this.streakPath(agent)
+      if (!empty) {
+        await rm(path, { force: true })
+        return
+      }
+      const streak = await this.streakUnlocked(agent)
+      await atomicWriteJson(path, {
+        emptyStreak: (streak?.emptyStreak ?? 0) + 1,
+        updatedAt: new Date().toISOString(),
+      } satisfies WaitStreak)
+    })
+  }
+
+  /** The live streak for `agent`, if any; corrupt files are treated as no streak. */
+  private async streakUnlocked(agent: string): Promise<WaitStreak | undefined> {
+    const found = await readJsonIfExists<unknown>(this.streakPath(agent)).catch(() => undefined)
+    if (typeof found !== "object" || found === null) return undefined
+    const { emptyStreak, updatedAt } = found as { emptyStreak?: unknown; updatedAt?: unknown }
+    if (!Number.isInteger(emptyStreak) || (emptyStreak as number) < 0) return undefined
+    if (typeof updatedAt !== "string" || !Number.isFinite(Date.parse(updatedAt))) return undefined
+    return { emptyStreak: emptyStreak as number, updatedAt }
+  }
+
+  private streakPath(agent: string): string {
+    return join(this.stateRoot, `${agent}.wait.json`)
+  }
+
   private async presenceUnlocked(agent: string): Promise<Presence | undefined> {
     const path = this.presencePath(agent)
     const found = await readJsonIfExists<Presence>(path).catch(() => undefined)
     if (!found || !Number.isInteger(found.pid)) return undefined
     const ageMs = Date.now() - Date.parse(found.since)
-    if (!isProcessAlive(found.pid) || !Number.isFinite(ageMs) || ageMs > PRESENCE_MAX_AGE_MS) {
+    if (!isProcessAlive(found.pid) || !Number.isFinite(ageMs) || ageMs > PRESENCE_STALE_AFTER_MS) {
       await rm(path, { force: true })
       return undefined
     }
@@ -547,6 +628,13 @@ export class Board {
         await rm(markerPath, { force: true })
         return false
       }
+      // A live waiter delivers its own mail; pasting now would interrupt a turn that is already
+      // listening. The marker goes, the receipts stay unread and unnotified, and the next send
+      // re-arms if the waiter leaves without reading.
+      if (waiterSees((await this.presenceUnlocked(target))?.expect, fresh)) {
+        await rm(markerPath, { force: true })
+        return false
+      }
 
       const counts = new Map<string, number>()
       for (const { message } of fresh) counts.set(message.from, (counts.get(message.from) ?? 0) + 1)
@@ -573,6 +661,8 @@ export class Board {
     await this.withMailboxLock(recipient, async() => {
       const receipt = await readJsonIfExists<MessageReceipt>(this.receiptPath(recipient, message.messageId))
       if (receipt?.state !== ReceiptState.Unread) return
+      // A matching waiter wakes on the receipt write itself; pasting would interrupt its turn.
+      if (waiterSees((await this.presenceUnlocked(recipient))?.expect, [{ message }])) return
       await deliver(message)
       await this.writeReceipt({ ...receipt, notifiedAt: new Date().toISOString() })
     })

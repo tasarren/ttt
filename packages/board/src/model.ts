@@ -88,6 +88,21 @@ export interface Presence {
   expect: { threadId: string } | "any"
 }
 
+/** A waiter older than this is treated as gone even if its pid lives on. */
+export const PRESENCE_STALE_AFTER_MS = 10 * 60_000
+
+/**
+ * Consecutive empty `read --wait` outcomes for one agent. Each one lengthens the next wait;
+ * deleted on arrival, so an agent that hears anything starts over at the base timeout.
+ */
+export interface WaitStreak {
+  emptyStreak: number
+  updatedAt: string
+}
+
+/** How many seconds longer each consecutive empty `read --wait` lasts, up to `wait.maxSeconds`. */
+export const WAIT_RAMP_STEP_S = 60
+
 /** Window, agent, and session names double as directory names, so keep them to a safe charset. */
 export const NAME_RE = /^[A-Za-z0-9_-]+$/
 

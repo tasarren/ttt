@@ -23,11 +23,24 @@ export const read: Handler = async(argv, ctx) => {
   if (values.timeout !== undefined && !values.wait) throw usageError("--timeout needs --wait")
   if (values.wait) {
     if (values.peek || values.latest || headersOnly) throw usageError("--wait cannot be combined with --peek, --latest, or --headers-only")
-    const seconds = boundedInt(values.timeout, "--timeout", ctx.settings.wait.seconds, ctx.settings.wait.maxSeconds)
-    const waited = await waitForMail(ctx, { expect: "any", timeoutMs: seconds * 1_000 })
+    // No explicit timeout: consecutive empty waits lengthen the wait (120, 180, 240, 300 …), so an
+    // idle agent burns fewer turns; any arrival restarts at the base.
+    const explicit = values.timeout === undefined
+      ? undefined
+      : boundedInt(values.timeout, "--timeout", ctx.settings.wait.seconds, ctx.settings.wait.maxSeconds)
+    const timeout = await ctx.board.waitTimeout(ctx.senderName, {
+      baseSeconds: ctx.settings.wait.seconds,
+      maxSeconds: ctx.settings.wait.maxSeconds,
+      ...(explicit !== undefined ? { explicitSeconds: explicit } : {}),
+    })
+    if (timeout.emptyStreak > 0) {
+      process.stderr.write(`ttt: waiting ${timeout.seconds}s after ${timeout.emptyStreak} empty wait${timeout.emptyStreak === 1 ? "" : "s"}; any arrival resets it\n`)
+    }
+    const waited = await waitForMail(ctx, { expect: "any", timeoutMs: timeout.seconds * 1_000 })
+    await ctx.board.noteWait(ctx.senderName, waited.outcome === WaitOutcome.TimedOut)
     if (waited.outcome !== WaitOutcome.Arrived) {
       const unread = await ctx.board.unreadCount(ctx.senderName)
-      process.stdout.write(`ttt: ${waited.outcome === WaitOutcome.TimedOut ? `nothing arrived within ${seconds}s` : "wait interrupted"}; ${unread} unread.\n`)
+      process.stdout.write(`ttt: ${waited.outcome === WaitOutcome.TimedOut ? `nothing arrived within ${timeout.seconds}s` : "wait interrupted"}; ${unread} unread.\n`)
       return
     }
   }

@@ -1,6 +1,7 @@
 import { watch } from "node:fs"
 import { setTimeout as sleep } from "node:timers/promises"
 
+import { PRESENCE_STALE_AFTER_MS } from "@ttt/board"
 import type { BoardMessage, Presence } from "@ttt/board"
 
 import type { Context } from "./context.ts"
@@ -45,6 +46,7 @@ export async function waitForMail(ctx: Context, input: WaitInput): Promise<WaitR
   const watcher = watch(mailbox, { persistent: false }, () => poke?.())
   watcher.on("error", () => undefined)
   const withdraw = await ctx.board.announcePresence(ctx.senderName, input.expect)
+  let announcedAt = Date.now()
   const deadline = Date.now() + input.timeoutMs
   try {
     for (;;) {
@@ -53,6 +55,12 @@ export async function waitForMail(ctx: Context, input: WaitInput): Promise<WaitR
       if (controller.signal.aborted) return { outcome: WaitOutcome.Interrupted, messages: [] }
       const left = deadline - Date.now()
       if (left <= 0) return { outcome: WaitOutcome.TimedOut, messages: [] }
+      if (Date.now() - announcedAt > PRESENCE_STALE_AFTER_MS / 2) {
+        // Long waits outlive the presence TTL; re-announce (same pid, idempotent — the discarded
+        // handle removes only on pid match, like the one withdrawn in `finally`).
+        await ctx.board.announcePresence(ctx.senderName, input.expect)
+        announcedAt = Date.now()
+      }
       await Promise.race([
         new Promise<void>((resolve) => { poke = resolve }),
         // An abort just ends the nap early; the loop head reports it.
