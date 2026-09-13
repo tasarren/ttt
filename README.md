@@ -200,7 +200,9 @@ errors.
   dead notifier. A failed paste re-arms a live notifier instead of stranding the burst.
   The paste lands in the recipient's seat -- the pane their name resolves to (a stamp anywhere in
   the session, else the window's first pane) -- never the active pane,
-  which is whoever touched it last.
+  which is whoever touched it last. Before clearing the input line the paste waits for 2 s of
+  screen quiet (a human typing or the agent streaming both defer it, silently, up to 15 s) --
+  no keystrokes are captured, only screen equality.
 - **Urgent.** `--urgent` pastes the full message immediately, with the reply instruction. If the paste
   fails, the message falls back to a batched notification, so nothing is lost. Pasting clears the target
   input line (`C-u`) before pasting, so it can clobber in-progress typing. Urgent broadcasts paste
@@ -425,10 +427,14 @@ error names the file and the path, exit 2.
   multi-pane windows), and panes in index order with cwd, command, the helper-pane title
   (`@ttt_title`), the agent (`@ttt_agent`: `true` for the main agent, the name the stamp says for a
   second agent), and the harness (`@ttt_harness`, agent or helper) when stamped. The command is `@ttt_command`
-  when ttt started the pane; otherwise the foreground process name, saved with `"source": "process"`
-  and a warning to check them before restoring (a `claude` shim shows as `node`, so a human edits
-  it). Idle shells (`sh`, `bash`, `zsh`, `fish`, ...) save as `null`. `pane_start_command` is never
-  read: it exposes the full argv, secrets included.
+  when ttt started the pane; otherwise the launch line from the pane's process tree (full argv,
+  so `codex resume X` restores with its session args), saved with `"source": "tree"` — or the
+  foreground process name with `"source": "process"` when the tree shows only the shell — plus
+  a warning to check them before restoring. The pane running the save itself is excluded, so a
+  bare terminal never saves as `node`. Idle shells (`sh`, `bash`, `zsh`, `fish`, ...) save as
+  `null`. `pane_start_command` is never read: it exposes the full argv, secrets included.
+  The layout also records its origin session (`session:`, informational). After a restore,
+  humans resume each harness session by hand.
 
 tmux-resurrect does generic save/restore; ttt's is a scoped subset with identity, stamps, badges,
 and hand-editable jsonc.

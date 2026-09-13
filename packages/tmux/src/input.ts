@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto"
 import { setTimeout as sleep } from "node:timers/promises"
 
 import type { TmuxRunner } from "./runner.ts"
+import type { Screen } from "./screen.ts"
 
 export interface TmuxOptions {
   /** Pause after clearing the target's input line, before pasting. */
@@ -36,14 +37,21 @@ export type Key = (typeof Key)[keyof typeof Key]
 export class Input {
   private readonly run: TmuxRunner
   private readonly options: TmuxOptions
+  private readonly screen: Screen
 
-  constructor(run: TmuxRunner, options: TmuxOptions) {
+  constructor(run: TmuxRunner, options: TmuxOptions, screen: Screen) {
     this.run = run
     this.options = options
+    this.screen = screen
   }
 
-  /** Clears the target's input line, pastes `text` through a private buffer, then presses Enter. */
-  async sendText(target: string, text: string): Promise<void> {
+  /**
+   * Clears the target's input line, pastes `text` through a private buffer, then presses Enter.
+   * Waits for 2 s of screen quiet first (a human typing or the agent streaming both defer the
+   * paste, silently); `quiet: false` skips the gate for urgent delivery.
+   */
+  async sendText(target: string, text: string, opts?: { quiet?: boolean }): Promise<void> {
+    if (opts?.quiet ?? true) await this.screen.waitForQuiet(target)
     const { inputSettleMs, postPasteMs, enterPresses, postSendMs } = this.options
     await this.run(["send-keys", "-t", target, Key.ClearLine])
     if (inputSettleMs > 0) await sleep(inputSettleMs)

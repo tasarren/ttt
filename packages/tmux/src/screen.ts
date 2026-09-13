@@ -37,12 +37,42 @@ export interface PopupInput {
   cwd?: string
 }
 
+/** How long one quiet sample lasts, how many steady samples open the gate, and the wait cap. */
+export const QUIET_SAMPLE_MS = 250
+export const QUIET_SAMPLES = 8
+export const QUIET_LINES = 60
+export const QUIET_CAP_MS = 15_000
+
 /** Reading and waiting on what a pane shows, plus client-facing notices. */
 export class Screen {
   private readonly run: TmuxRunner
 
   constructor(run: TmuxRunner) {
     this.run = run
+  }
+
+  /**
+   * Seat-quiet gate: resolves once the seat's screen stops changing (`samples` steady
+   * samples of `sampleMs`) or `capMs` passes. Never fails — a late paste beats a lost one,
+   * and no keystrokes are captured, only screen equality. Urgent callers skip the gate.
+   */
+  async waitForQuiet(target: string, timing?: { sampleMs?: number; samples?: number; capMs?: number }): Promise<void> {
+    const sampleMs = timing?.sampleMs ?? QUIET_SAMPLE_MS
+    const samples = timing?.samples ?? QUIET_SAMPLES
+    const deadline = Date.now() + (timing?.capMs ?? QUIET_CAP_MS)
+    let steady = 0
+    let previous: string | undefined
+    for (;;) {
+      const text = await this.capture(target, QUIET_LINES, true).catch(() => undefined)
+      if (text !== undefined && text === previous) steady += 1
+      else {
+        steady = 0
+        previous = text
+      }
+      if (steady >= samples) return
+      if (Date.now() >= deadline) return
+      await sleep(Math.min(sampleMs, Math.max(0, deadline - Date.now())))
+    }
   }
 
   /** Last `lines` lines of the resolved target (a pane id, else a window id

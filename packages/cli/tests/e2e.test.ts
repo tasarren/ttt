@@ -668,11 +668,20 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
     assert.equal(copy.windows[2]!.panes[1]!.agent, "SIDE", "save writes a second agent's name")
     assert.equal(copy.windows[1]!.layout, undefined, "single panes save no geometry")
     assert.equal(copy.windows[1]!.panes[0]!.command, null, "an idle shell saves as null")
+    assert.equal((copy as { session?: string }).session, "duo", "save records its session")
+    await server("send-keys", "-t", "duo:LEAD", "sleep 300", "Enter")
+    await sleep(300)
+    await outside("--session", "duo", "tmux", "save", "duo-tree")
+    const treeCopy = JSON.parse(await readFile(join(home, "layouts", "duo-tree.jsonc"), "utf8")) as { windows: Array<{ name: string; panes: Array<{ command: string | null; source?: string; harness?: string }> }> }
+    const lead = treeCopy.windows.find((window) => window.name === "LEAD")!.panes[0]!
+    assert.equal(lead.command, "sleep 300", "a hand-started process saves its full line")
+    assert.equal(lead.source, "tree")
+    assert.equal(lead.harness, undefined, "sleep matches no declared harness")
     await assert.rejects(outside("--session", "duo", "tmux", "save", "duo-copy"), /already exists; pass --force/)
 
     assert.match(await outside("tmux", "restore", "duo-copy", "--as", "duo2"), /^layout duo-copy: 3 windows created\.$/m)
     assert.deepEqual((JSON.parse(await outside("--session", "duo2", "tmux", "tree", "--json")) as { windows: Array<{ name: string }> }).windows.map((window) => window.name), ["CODER", "LEAD", "W-1"])
-    assert.deepEqual(JSON.parse(await outside("tmux", "layouts", "--json")), ["duo", "duo-copy"])
+    assert.deepEqual(JSON.parse(await outside("tmux", "layouts", "--json")), ["duo", "duo-copy", "duo-tree"])
 
     // Lifecycle and typing verbs, all against the agent pane, never the active one.
     // `open --window` with a declared harness waits for its ready line; a bare `--harness` is the default one.

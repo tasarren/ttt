@@ -47,7 +47,7 @@ Ownership rules:
   `title` stamps `@ttt_title`; `setup.ts` validates each pane's `harness` against the declared
   harnesses before building (exit 2 naming the pane); the shorthand `{ "name": "X" }` parses as one
   shell agent pane.
-  `save.ts` captures (`savePane` emits `@ttt_title` as `title`), `restore.ts` restores and lists.
+  `save.ts` captures (`savePane` emits `@ttt_title` as `title`; without `@ttt_command` the launch line comes from the process tree via `ps -e`, saver subtree excluded, `source: "tree"`), `restore.ts` restores and lists.
   `createSession` in `commands/tmux/setup.ts` is the shared flow; the placeholder window
   `ttt-setup` exists only until the layout's windows are up. Layout parsing is covered by
   `packages/cli/tests/layout.test.ts`.
@@ -223,7 +223,10 @@ stamp, else the first pane; a second pane becomes WINDOW-N, never the window's n
   the agent seated there if any), and `requireTypable` (the two refusals: dead pane,
   `synchronize-panes` on).
 - `lifecycle.ts` is open/close/rename/split/respawn; `typing.ts` is type/press/interrupt; `screen.ts`
-  is wait/popup/flash. The interactive setup wizard lives in `setup.ts`.
+  is wait/popup/flash. The interactive setup wizard lives in `setup.ts`. Pastes go through
+  `Input.sendText` (`@ttt/tmux`), which waits for 2 s of screen quiet first
+  (`Screen.waitForQuiet`, hashes only, 15 s cap, urgent skips it) so a notification never
+  clears a line a human is typing in.
 - `normalize-window.ts` (the hook verb) pins the profile on a new window and, when tmux named the
   window itself, renames it `W-N` — `FURNITURE_STEM` in `names.ts` and `isScratchName`, the one
   shape `broadcast --all` skips. Lowest free N against live

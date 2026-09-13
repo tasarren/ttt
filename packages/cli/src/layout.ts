@@ -11,6 +11,8 @@ import { CliError } from "./cli-error.ts"
 /** A stored session shape: `~/.ttt/layouts/<name>.jsonc`, hand-editable. */
 export interface Layout {
   version: 1
+  /** The session it was saved from; informational, ignored by restore. */
+  session?: string
   /** Default working directory; relative pane cwds resolve against it. */
   cwd?: string
   profile: string
@@ -39,7 +41,8 @@ export interface LayoutPane {
   harness?: string
   cwd?: string
   /** `process` when `save` could only read the foreground process name, so a human should check it. */
-  source?: "process"
+  /** The launch line came from the pane's process tree, not from ttt; check before restoring. */
+  source?: "process" | "tree"
 }
 
 export function layoutsRoot(home: string): string {
@@ -107,7 +110,7 @@ export function parseLayout(text: string, file: string): Layout {
   const errors: ParseError[] = []
   const raw: unknown = parse(text, errors, { allowTrailingComma: true })
   if (errors[0]) throw new CliError(`${file}: ${printParseErrorCode(errors[0].error)} at offset ${errors[0].offset}`, 2)
-  const root = record(raw, file, "layout", ["version", "cwd", "profile", "windows"])
+  const root = record(raw, file, "layout", ["version", "cwd", "profile", "session", "windows"])
   if (root["version"] !== 1) throw new CliError(`${file}: version must be 1`, 2)
   const windowsRaw = root["windows"]
   if (!Array.isArray(windowsRaw) || windowsRaw.length === 0) throw new CliError(`${file}: windows must be a non-empty array`, 2)
@@ -118,8 +121,10 @@ export function parseLayout(text: string, file: string): Layout {
     names.add(window.name)
   }
   const cwd = optionalText(root["cwd"], file, "cwd")
+  const session = optionalText(root["session"], file, "session")
   return {
     version: 1,
+    ...(session !== undefined ? { session } : {}),
     ...(cwd !== undefined ? { cwd: expandHome(cwd) } : {}),
     profile: optionalText(root["profile"], file, "profile") ?? "agents",
     windows,
@@ -174,7 +179,7 @@ function parsePane(raw: unknown, file: string, path: string): LayoutPane {
     }
   }
   const source = pane["source"]
-  if (source !== undefined && source !== "process") throw new CliError(`${file}: ${path}.source may only be "process"`, 2)
+  if (source !== undefined && source !== "process" && source !== "tree") throw new CliError(`${file}: ${path}.source may only be "process" or "tree"`, 2)
   const cwd = optionalText(pane["cwd"], file, `${path}.cwd`)
   const title = optionalText(pane["title"], file, `${path}.title`)
   if (title !== undefined && agent !== undefined && agent !== false) throw new CliError(`${file}: ${path} is an agent pane and cannot carry a title`, 2)

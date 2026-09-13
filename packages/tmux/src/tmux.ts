@@ -42,8 +42,8 @@ export class Tmux {
     this.windows = new Windows(run, this.inventory)
     this.options = new Options(run)
     this.panes = new Panes(run, this.options)
-    this.input = new Input(run, options)
     this.screen = new Screen(run)
+    this.input = new Input(run, options, this.screen)
     this.hooks = new Hooks(run)
     this.setup = new Setup(this.options, this.hooks, this.inventory)
   }

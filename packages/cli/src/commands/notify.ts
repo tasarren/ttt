@@ -74,9 +74,9 @@ export function formatNotification(summary: NotificationSummary): string {
   return `ttt: ${summary.newCount} new from ${senders}; ${summary.unreadTotal} unread. Run: ttt read`
 }
 
-/** Pastes into the seat resolved by `requireAgent`. Failures propagate so the notifier re-arms and urgent falls back. */
-async function pasteToAgent(ctx: Context, paneId: string, text: string): Promise<void> {
-  await ctx.tmux.input.sendText(paneId, text)
+/** Pastes into the seat resolved by `requireAgent`. Failures propagate so the notifier re-arms and urgent falls back. Urgent skips the quiet gate: stopping harmful work outranks politeness. */
+async function pasteToAgent(ctx: Context, paneId: string, text: string, urgent = false): Promise<void> {
+  await ctx.tmux.input.sendText(paneId, text, urgent ? { quiet: false } : undefined)
 }
 
 export function formatUrgent(message: BoardMessage): string {
@@ -91,7 +91,7 @@ export async function pushUrgent(ctx: Context, message: BoardMessage, windows: M
   const failures: string[] = []
   for (const [name, agent] of windows) {
     try {
-      await ctx.board.deliverUrgent(message, name, (urgent) => pasteToAgent(ctx, agent.seat.paneId, formatUrgent(urgent)))
+      await ctx.board.deliverUrgent(message, name, (urgent) => pasteToAgent(ctx, agent.seat.paneId, formatUrgent(urgent), true))
     } catch(error) {
       failures.push(name)
       process.stderr.write(`ttt: urgent delivery to ${name} failed: ${error instanceof Error ? error.message : String(error)}\n`)

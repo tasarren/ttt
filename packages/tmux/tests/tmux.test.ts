@@ -108,17 +108,26 @@ test("compareWindowIds orders numerically, not lexicographically", async() => {
   assert.equal(compareWindowIds("@2", "@2"), 0)
 })
 
-test("sendText clears, pastes through a private buffer, presses Enter N times, and cleans up", async() => {
+test("sendText waits for seat quiet, then clears, pastes through a private buffer, presses Enter N times, and cleans up", async() => {
   const { tmux, calls } = fakeTmux()
   await tmux.input.sendText("@2", "hello")
   const verbs = calls.map((args) => args[0])
-  assert.deepEqual(verbs, [
+  assert.deepEqual(verbs.slice(0, 9), Array(9).fill("capture-pane"), "one arming sample plus eight steady ones")
+  assert.deepEqual(verbs.slice(9), [
     "send-keys", "set-buffer", "paste-buffer", "send-keys", "send-keys", "delete-buffer",
   ])
-  const buffer = calls[1]![2]
-  assert.deepEqual(calls[1]!.slice(3), ["--", "hello"])
-  assert.deepEqual(calls[2], ["paste-buffer", "-b", buffer, "-d", "-t", "@2"])
-  assert.deepEqual(calls[3], ["send-keys", "-t", "@2", "Enter"])
+  const buffer = calls[10]![2]
+  assert.deepEqual(calls[10]!.slice(3), ["--", "hello"])
+  assert.deepEqual(calls[11], ["paste-buffer", "-b", buffer, "-d", "-t", "@2"])
+  assert.deepEqual(calls[12], ["send-keys", "-t", "@2", "Enter"])
+})
+
+test("sendText with quiet false skips the gate for urgent delivery", async() => {
+  const { tmux, calls } = fakeTmux()
+  await tmux.input.sendText("@2", "now", { quiet: false })
+  assert.deepEqual(calls.map((args) => args[0]), [
+    "send-keys", "set-buffer", "paste-buffer", "send-keys", "send-keys", "delete-buffer",
+  ])
 })
 
 test("capture asks for the last N lines and joins wrapped lines on request", async() => {
@@ -152,4 +161,41 @@ test("panes.stamp writes only what differs and clears sibling stamps in the same
   calls.length = 0
   await tmux.panes.stamp("%1", live, { agent: "A" })
   assert.deepEqual(calls, [], "an already-correct stamp costs nothing")
+})
+
+test("waitForQuiet proceeds after enough steady samples", async() => {
+  let captures = 0
+  const tmux = new Tmux(NO_WAIT, async(args) => {
+    if (args[0] === "capture-pane") {
+      captures += 1
+      return "idle screen"
+    }
+    return ""
+  })
+  await tmux.screen.waitForQuiet("%1", { sampleMs: 1, samples: 3 })
+  assert.equal(captures, 4, "first sample arms, three steady ones open the gate")
+})
+
+test("waitForQuiet restarts the run on change and gives up at the cap", async() => {
+  let captures = 0
+  const tmux = new Tmux(NO_WAIT, async(args) => {
+    if (args[0] === "capture-pane") {
+      captures += 1
+      return captures === 3 ? "changed" : "idle screen"
+    }
+    return ""
+  })
+  await tmux.screen.waitForQuiet("%1", { sampleMs: 1, samples: 3 })
+  assert.equal(captures, 7, "arming + two steady, change, re-arm + three steady")
+  let spinning = 0
+  const busy = new Tmux(NO_WAIT, async(args) => {
+    if (args[0] === "capture-pane") {
+      spinning += 1
+      return `frame ${spinning}`
+    }
+    return ""
+  })
+  const started = Date.now()
+  await busy.screen.waitForQuiet("%1", { sampleMs: 1, samples: 100, capMs: 30 })
+  assert.ok(Date.now() - started < 5_000, "the cap ends the wait")
 })

@@ -85,3 +85,45 @@ test("write/read/list round-trip, refuse overwrite without --force, and name mis
   await assert.rejects(readLayout(home, "nope"), /no layout named nope/)
   await assert.rejects(readLayout(home, "../etc"), /layout name may contain only/)
 })
+
+test("descendantCommand picks the harness child, never the saver, longest line otherwise", async() => {
+  const { descendantCommand, harnessName } = await import("../src/commands/tmux/save.ts")
+  const { shippedHarnesses } = await import("../src/harnesses.ts")
+  const harnesses = shippedHarnesses()
+  const rows = [
+    { pid: 100, ppid: 1, args: "bash" },
+    { pid: 200, ppid: 100, args: "bash /home/haze/.config/scripts/bin/codex resume PLANNER" },
+    { pid: 201, ppid: 200, args: "node /home/haze/.local/share/pnpm/global/v11/xxx/node_modules/@opencode-ai/cli/bin/opencode2.exe" },
+    { pid: 300, ppid: 100, args: "sleep 3600 --a-much-longer-argument-string-than-the-harness-line" },
+    { pid: 900, ppid: 100, args: "node /home/haze/.local/share/pnpm/global/v11/5/node_modules/@tasarren/ttt/src/ttt.ts tmux save harness" },
+    { pid: 901, ppid: 900, args: "ps -o pid=,ppid=,args=" },
+  ]
+  assert.equal(
+    descendantCommand(rows, 100, 900, harnesses),
+    "bash /home/haze/.config/scripts/bin/codex resume PLANNER",
+    "the harness child wins over a longer background line, the saver subtree excluded",
+  )
+  const bare = [
+    { pid: 100, ppid: 1, args: "bash" },
+    { pid: 900, ppid: 100, args: "node /home/haze/.local/share/pnpm/global/v11/5/node_modules/@tasarren/ttt/src/ttt.ts tmux save harness" },
+  ]
+  assert.equal(descendantCommand(bare, 100, 900, harnesses), undefined, "a shell running only the save is bare")
+  assert.equal(harnessName("bash /home/haze/.config/scripts/bin/codex resume PLANNER", harnesses), "codex")
+  assert.equal(harnessName("bash /home/haze/.config/scripts/bin/claudex --resume REVIEWER", harnesses), "claude", "prefix-tolerant wrapper match")
+  assert.equal(harnessName("sleep 3600", harnesses), undefined)
+})
+
+test("layout keeps the informational session field and the tree source", () => {
+  const layout = parseLayout(`{
+    "version": 1,
+    "session": "harness",
+    "profile": "agents",
+    "windows": [{ "name": "A", "panes": [{ "command": "codex resume X", "source": "tree", "agent": true }] }],
+  }`, "test.jsonc")
+  assert.equal(layout.session, "harness")
+  assert.equal(layout.windows[0]!.panes[0]!.source, "tree")
+  assert.throws(() => parseLayout(`{
+    "version": 1, "profile": "agents",
+    "windows": [{ "name": "A", "panes": [{ "command": "x", "source": "guessed" }] }],
+  }`, "test.jsonc"), /source may only be "process" or "tree"/)
+})
