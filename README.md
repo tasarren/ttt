@@ -532,7 +532,10 @@ without `--wait` is a usage error, and so is `--wait` with `--no-reply`. A timeo
 exit 0 with `ttt: no reply within Ns; M unread.`
 (send/reply) or `ttt: nothing arrived within Ns; M unread.` (read — N is the effective length). An
 interrupted wait (SIGINT/SIGTERM) is also exit 0, and resets the streak. `send --wait` and
-`reply --wait` never touch the streak: they await one thread, not idleness.
+`reply --wait` never touch the streak: they await one thread, not idleness. After `wait.maxIdle`
+(default 5) consecutive empty `read --wait`s without `--timeout`, the next one exits at once,
+exit 0, with `ttt: nothing arrived after 5 empty waits. End your turn here. ...` — end the turn
+instead of waiting again, unless mail is already unread (it then delivers immediately).
 
 While you wait, nothing is pasted — the wait is the notification. Starting a wait cancels that
 agent's pending batch marker (a sleeping notifier exits silently), and mail that arrives during the
