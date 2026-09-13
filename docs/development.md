@@ -148,7 +148,12 @@ plumbing (`awaitReply`, `refuseMutualWait`) in `commands/send.ts`, presence in `
   on a timeout, and resets it on interrupt; corrupt files count as no streak. `inbox.ts` prints the
   stderr line `ttt: waiting 180s after 1 empty wait; any arrival resets it` on ramped waits only.
   `send --wait`/`reply --wait` (`awaitReply`) never touch the streak: they await one thread, not
-  idleness.
+  idleness. After `wait.maxIdle` (default 5) consecutive empty waits, the next `read --wait`
+  without `--timeout` exits at once (exit 0) with an idle instruction addressed to the waiting
+  agent (`... End your turn here. Do not run ttt read --wait again. ...`) instead of waiting —
+  unless mail is already unread, which falls through to the wait and arrives immediately. The
+  streak stays on an idle exit, so a re-run exits at once too; explicit `--timeout` waits bypass
+  the cap but still extend the streak.
 
 `--urgent` skips the marker: the CLI pastes the formatted message right away through
 `board.deliverUrgent` (unless the recipient waits and sees it — then the wait delivers), which marks
@@ -224,10 +229,11 @@ stamp, else the first pane; a second pane becomes WINDOW-N, never the window's n
   shape `broadcast --all` skips. Lowest free N against live
   windows and mailbox directories. It never stamps.
 - `packages/cli/src/harnesses.ts` owns the harness settings: `HarnessSettings` (`declared`,
-  `defaultName`, `source`), `ResolvedHarness` (`name`, `bin`, `ready`, `note?`), `shippedHarnesses`
+  `defaultName`, `source`), `ResolvedHarness` (`name`, `bin`, `ready`, `limited?`, `note?`), `shippedHarnesses`
   (no `harnesses` section: every preset allowed, no default), and `parseHarnesses` (only declared
   names allowed; `bin`/`ready` required without a preset; exactly one `default: true`; overriding
-  `ready` drops the preset's note). `settings.ts` parses the section into `Settings.harnesses` and
+  `ready` drops the preset's note; `limited` is a placeholder — parsed and carried, matched nowhere
+  yet, until each harness's out-of-tokens screen line is captured from a real limited pane). `settings.ts` parses the section into `Settings.harnesses` and
   carries `Settings.path` (the caller's `PATH`) so `doctor` can find binaries.
 - `lifecycle.ts` resolves what a pane runs: `withBareValues` (a lone `--harness` or `--pane` is a
   flag, not a value), `resolveProgram`/`pickHarness` (default or declared harness, the exact refusal

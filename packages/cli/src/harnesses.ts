@@ -8,6 +8,8 @@ export interface ResolvedHarness {
   name: string
   bin: string
   ready: RegExp
+  /** Screen line meaning this harness is out of tokens; placeholder, matched nowhere yet. */
+  limited?: RegExp
   note?: string
 }
 
@@ -20,13 +22,19 @@ export interface HarnessSettings {
   source: string
 }
 
-const ENTRY_KEYS = ["bin", "ready", "default"]
+const ENTRY_KEYS = ["bin", "ready", "limited", "default"]
 
 /** Without a section: every shipped preset is allowed, none is the default. */
 export function shippedHarnesses(): HarnessSettings {
   const declared: Record<string, ResolvedHarness> = {}
   for (const [name, preset] of Object.entries(HARNESS_PRESETS)) {
-    declared[name] = { name, bin: preset.command, ready: preset.ready, ...(preset.note !== undefined ? { note: preset.note } : {}) }
+    declared[name] = {
+      name,
+      bin: preset.command,
+      ready: preset.ready,
+      ...(preset.limited !== undefined ? { limited: preset.limited } : {}),
+      ...(preset.note !== undefined ? { note: preset.note } : {}),
+    }
   }
   return { declared, defaultName: undefined, source: "shipped" }
 }
@@ -64,11 +72,26 @@ export function parseHarnesses(value: unknown, file: string): HarnessSettings {
       }
     }
     if (ready === undefined) throw new CliError(`${file}: ${path}.ready is required (no shipped preset for "${name}")`, 2)
+    const limitedText = optionalText(entry["limited"], file, `${path}.limited`)
+    let limited = preset?.limited
+    if (limitedText !== undefined) {
+      try {
+        limited = new RegExp(limitedText)
+      } catch(error) {
+        throw new CliError(`${file}: ${path}.limited is not a valid regular expression: ${error instanceof Error ? error.message : String(error)}`, 2)
+      }
+    }
     const isDefault = entry["default"]
     if (isDefault !== undefined && typeof isDefault !== "boolean") throw new CliError(`${file}: ${path}.default must be true or false`, 2)
     if (isDefault === true) defaults.push(name)
     // A note only makes sense when the preset's `ready` is still in use.
-    declared[name] = { name, bin, ready, ...(preset?.note !== undefined && readyText === undefined ? { note: preset.note } : {}) }
+    declared[name] = {
+      name,
+      bin,
+      ready,
+      ...(limited !== undefined ? { limited } : {}),
+      ...(preset?.note !== undefined && readyText === undefined ? { note: preset.note } : {}),
+    }
   }
   if (Object.keys(declared).length === 0) throw new CliError(`${file}: harnesses declares nothing; remove the section to allow the shipped presets`, 2)
   if (defaults.length !== 1) {

@@ -242,7 +242,8 @@ vocabulary (agent, seat, second agent, registered, scratch window) is stated in
   "lock": { "timeoutMs": 10000, "staleMs": 60000 },
   "wait": {
     "seconds": 120,         // default --timeout for --wait
-    "maxSeconds": 300       // upper bound for --timeout
+    "maxSeconds": 300,      // upper bound for --timeout
+    "maxIdle": 5            // consecutive empty read --waits before the next one exits idle
   },
   "tmux": {
     "inputSettleMs": 800,   // after clearing the target's input line
@@ -272,12 +273,13 @@ vocabulary (agent, seat, second agent, registered, scratch window) is stated in
 | `lock.staleMs` | integer | `60000` | A lock older than this is treated as abandoned. |
 | `wait.seconds` | integer >= 1 | `120` | Default `--timeout` for `--wait`. |
 | `wait.maxSeconds` | integer >= 1 | `300` | Upper bound for `--timeout`; keeps an agent from freezing indefinitely. |
+| `wait.maxIdle` | integer >= 1 | `5` | Consecutive empty `read --wait`s before the next one exits idle instead of waiting. |
 | `tmux.inputSettleMs` | integer | `800` | See above. |
 | `tmux.postPasteMs` | integer | `500` | See above. |
 | `tmux.enterPresses` | integer | `3` | See above. |
 | `tmux.postSendMs` | integer | `300` | See above. |
 | `tmux.badges` | boolean | `true` | Mirror unread counts into the `@ttt_unread` window option after each command. |
-| `harnesses` | object | absent | The harnesses `open` may start. Absent: every shipped preset (`claude`, `opencode`, `codex`) is allowed and none is the default. Present: only declared names are allowed. Per entry: `bin` (string, default the preset's command; required without a preset), `ready` (string regex, default the preset's regex; required without a preset; invalid -> exit 2, `harnesses.NAME.ready is not a valid regular expression: ...`), `default` (boolean; exactly one true, else exit 2, `harnesses: 0 marked default; set harnesses.NAME.default to true on one of them` or `harnesses: 2 marked default: claude, codex; only one may be`). Unknown key -> `unknown setting "harnesses.claude.foo"`. Empty object -> `harnesses declares nothing; remove the section to allow the shipped presets`. Overriding `ready` drops the preset's note. |
+| `harnesses` | object | absent | The harnesses `open` may start. Absent: every shipped preset (`claude`, `opencode`, `codex`) is allowed and none is the default. Present: only declared names are allowed. Per entry: `bin` (string, default the preset's command; required without a preset), `ready` (string regex, default the preset's regex; required without a preset; invalid -> exit 2, `harnesses.NAME.ready is not a valid regular expression: ...`), `default` (boolean; exactly one true, else exit 2, `harnesses: 0 marked default; set harnesses.NAME.default to true on one of them` or `harnesses: 2 marked default: claude, codex; only one may be`), `limited` (string regex, placeholder: a screen line meaning the harness is out of tokens; no preset ships one yet and nothing matches against it). Unknown key -> `unknown setting "harnesses.claude.foo"`. Empty object -> `harnesses declares nothing; remove the section to allow the shipped presets`. Overriding `ready` drops the preset's note. |
 
 ## Tmux setup
 
@@ -522,7 +524,7 @@ given on the command line skip their question. `--non-interactive` or a non-TTY 
 | `ttt send B --wait [--timeout SECONDS] -- question` | Print the usual `queued ...` line, then block until a message lands in this thread. That message prints in full (same format as `ttt read`) and only it is marked read, followed by `1 message shown, N unread messages still unread.` and a headers block for the rest, which stay unread. |
 | `ttt reply MESSAGE_ID --wait [--timeout SECONDS] -- answer` | Same, in-thread. |
 | `ttt broadcast ... --wait` | Same; wakes on the first reply in the thread. |
-| `ttt read --wait [--timeout SECONDS]` | Block until anything is unread, then print the batch exactly like `ttt read` (marks read). The recommended idle state: one wait per idle period. Without `--timeout` the wait ramps: consecutive empty waits last `wait.seconds + 60 * streak`, capped at `wait.maxSeconds` (120, 180, 240, 300 with defaults — the third empty wait hits the cap), and any arrival resets the streak. Ramped waits announce it on stderr: `ttt: waiting 180s after 1 empty wait; any arrival resets it`. Cannot combine with `--peek`, `--latest`, or `--headers-only`. |
+| `ttt read --wait [--timeout SECONDS]` | Block until anything is unread, then print the batch exactly like `ttt read` (marks read). The recommended idle state: one wait per idle period. Without `--timeout` the wait ramps: consecutive empty waits last `wait.seconds + 60 * streak`, capped at `wait.maxSeconds` (120, 180, 240, 300 with defaults — the third empty wait hits the cap), and any arrival resets the streak. Ramped waits announce it on stderr: `ttt: waiting 180s after 1 empty wait; any arrival resets it`. After `wait.maxIdle` (default 5) consecutive empty waits the next wait exits at once with `ttt: nothing arrived after 5 empty waits. End your turn here. ...` — end the turn, do not loop waits; pending mail still delivers through a re-run. Cannot combine with `--peek`, `--latest`, or `--headers-only`. |
 
 `--timeout` is an integer between 1 and `wait.maxSeconds` (default `wait.seconds`, 120; cap 300); out
 of range exits 2. An explicit `--timeout` skips the ramp and keeps the range check; `--timeout`

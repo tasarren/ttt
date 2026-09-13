@@ -22,8 +22,11 @@ export interface Settings {
   /** Per-window batching windows; a missing name falls back to `notifySeconds`. */
   notifyOverrides: Record<string, number>
   readMax: number
-  /** `--wait` defaults: how long a wait lasts without `--timeout`, and the most any wait may last. */
-  wait: { seconds: number; maxSeconds: number }
+  /**
+   * `--wait` defaults: how long a wait lasts without `--timeout`, the most any wait may last,
+   * and after how many consecutive empty `read --wait`s the next wait exits at once.
+   */
+  wait: { seconds: number; maxSeconds: number; maxIdle: number }
   capture: { lines: number; maxLines: number }
   lock: LockOptions
   tmux: TmuxOptions & {
@@ -47,7 +50,7 @@ export function defaultSettings(home: string): Settings {
     notifySeconds: 20,
     notifyOverrides: {},
     readMax: 10,
-    wait: { seconds: 120, maxSeconds: 300 },
+    wait: { seconds: 120, maxSeconds: 300, maxIdle: 5 },
     capture: { lines: 40, maxLines: 500 },
     lock: { timeoutMs: 10_000, staleMs: 60_000 },
     tmux: { ...DEFAULT_TMUX_OPTIONS, badges: true },
@@ -85,7 +88,7 @@ function applySettings(defaults: Settings, file: string, text: string): Settings
     throw new CliError(`${file}: ${printParseErrorCode(errors[0].error)} at offset ${errors[0].offset}`, 2)
   }
   const root = section(raw, file, "settings", ["boardRoot", "notifySeconds", "notifyOverrides", "readMax", "wait", "capture", "lock", "tmux", "harnesses"])
-  const wait = section(root["wait"], file, "wait", ["seconds", "maxSeconds"])
+  const wait = section(root["wait"], file, "wait", ["seconds", "maxSeconds", "maxIdle"])
   const capture = section(root["capture"], file, "capture", ["lines", "maxLines"])
   const lock = section(root["lock"], file, "lock", ["timeoutMs", "staleMs"])
   const tmux = section(root["tmux"], file, "tmux", ["inputSettleMs", "postPasteMs", "enterPresses", "postSendMs", "badges"])
@@ -105,6 +108,7 @@ function applySettings(defaults: Settings, file: string, text: string): Settings
     wait: {
       seconds: atLeastOne(wait["seconds"], "wait.seconds", defaults.wait.seconds),
       maxSeconds: atLeastOne(wait["maxSeconds"], "wait.maxSeconds", defaults.wait.maxSeconds),
+      maxIdle: atLeastOne(wait["maxIdle"], "wait.maxIdle", defaults.wait.maxIdle),
     },
     capture: {
       lines: atLeastOne(capture["lines"], "capture.lines", defaults.capture.lines),

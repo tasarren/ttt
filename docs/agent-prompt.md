@@ -17,7 +17,8 @@ live in other windows. Find them with `ttt windows`, and panes with `ttt panes`.
   it returns when mail arrives or after the timeout — either way, handle what it prints, then decide
   again. One wait per idle period; empty waits lengthen on their own (120s, 180s, 240s, 300s) and
   any arrival resets — do not re-poll on your own timer, and do not pass `--timeout` to defeat the
-  ramp. While you wait, no prompts land on your input: the wait is the notification, so a bare
+  ramp. After 5 consecutive empty waits the wait exits at once telling you to end your turn —
+  obey it, do not run another wait; new mail wakes you with a notification. While you wait, no prompts land on your input: the wait is the notification, so a bare
   `ttt read --wait` with no `--timeout` is the cheapest idle.
 - Need an answer to continue: `ttt send NAME --wait -- question` (or
   `ttt reply MESSAGE_ID --wait -- ...`). The reply is printed in the same tool result; ack it as

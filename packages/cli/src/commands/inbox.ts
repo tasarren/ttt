@@ -36,6 +36,16 @@ export const read: Handler = async(argv, ctx) => {
     if (timeout.emptyStreak > 0) {
       process.stderr.write(`ttt: waiting ${timeout.seconds}s after ${timeout.emptyStreak} empty wait${timeout.emptyStreak === 1 ? "" : "s"}; any arrival resets it\n`)
     }
+    if (explicit === undefined && timeout.emptyStreak >= ctx.settings.wait.maxIdle) {
+      // Idle, not waiting — unless mail is already here, in which case the wait below
+      // returns at once and the arrival clears the streak. The streak stays on a true
+      // idle exit, so a prompt re-run exits at once too. The words below address the
+      // waiting agent itself.
+      if ((await ctx.board.unreadCount(ctx.senderName)) === 0) {
+        process.stdout.write(`ttt: nothing arrived after ${timeout.emptyStreak} empty waits. End your turn here. Do not run ttt read --wait again. New mail wakes you with a notification.\n`)
+        return
+      }
+    }
     const waited = await waitForMail(ctx, { expect: "any", timeoutMs: timeout.seconds * 1_000 })
     await ctx.board.noteWait(ctx.senderName, waited.outcome === WaitOutcome.TimedOut)
     if (waited.outcome !== WaitOutcome.Arrived) {

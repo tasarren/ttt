@@ -502,6 +502,30 @@ test("empty read --waits ramp the next wait to the cap; arrival resets", async()
   await ttt("B", "ack", "--all")
 })
 
+test("read --wait exits idle after maxIdle empty waits; pending mail still delivers", async() => {
+  const settings = join(home, "settings.jsonc")
+  const original = await readFile(settings, "utf8")
+  await writeFile(settings, "{\"notifySeconds\": 1, \"wait\": {\"seconds\": 2, \"maxSeconds\": 4, \"maxIdle\": 2}}")
+  try {
+    await calmDown()
+    assert.equal(await ttt("A", "read", "--wait"), "ttt: nothing arrived within 2s; 0 unread.")
+    assert.equal(await ttt("A", "read", "--wait"), "ttt: nothing arrived within 4s; 0 unread.")
+    const started = Date.now()
+    const idle = await ttt("A", "read", "--wait")
+    assert.equal(idle, "ttt: nothing arrived after 2 empty waits. End your turn here. Do not run ttt read --wait again. New mail wakes you with a notification.")
+    assert.ok(Date.now() - started < 2_000, "the idle exit waits for nothing")
+    const streak = JSON.parse(await readFile(join(home, "boards", SESSION, "state", "A.wait.json"), "utf8")) as { emptyStreak: number }
+    assert.equal(streak.emptyStreak, 2, "the idle exit keeps the streak, so a re-run exits at once too")
+    await ttt("B", "send", "A", "--no-reply", "--", "late probe")
+    assert.match(await ttt("A", "read", "--wait"), /late probe/, "pending mail falls through to the wait")
+    assert.equal(existsSync(join(home, "boards", SESSION, "state", "A.wait.json")), false, "the arrival clears the streak")
+  } finally {
+    await writeFile(settings, original)
+  }
+  await ttt("A", "ack", "--all")
+  await ttt("B", "ack", "--all")
+})
+
 test("tmux setup creates a normalized session, the hook normalizes new windows, doctor reads it back", async() => {
   // Outside tmux: no TMUX/TMUX_PANE, private server through TMUX_TMPDIR so nothing touches the developer's.
   const tmpDir = await mkdtemp(join(tmpdir(), "ttt-e2e-tmuxdir-"))

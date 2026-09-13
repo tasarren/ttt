@@ -51,6 +51,13 @@ test("settings.json is the fallback when settings.jsonc is absent", async() => {
   assert.equal((await resolveSettings({ TTT_HOME: dir })).readMax, 3)
 })
 
+test("wait.maxIdle defaults to 5 and parses like its sibling keys", async() => {
+  const bare = await home()
+  assert.equal((await resolveSettings({ TTT_HOME: bare })).wait.maxIdle, 5)
+  const tuned = await home({ "settings.jsonc": "{\"wait\": {\"seconds\": 2, \"maxSeconds\": 4, \"maxIdle\": 2}}" })
+  assert.deepEqual((await resolveSettings({ TTT_HOME: tuned })).wait, { seconds: 2, maxSeconds: 4, maxIdle: 2 })
+})
+
 test("bad values, unknown keys, and syntax errors are exit-2 errors naming the file", async() => {
   const bad = async(text: string, pattern: RegExp): Promise<void> => {
     const dir = await home({ "settings.jsonc": text })
@@ -69,6 +76,7 @@ test("bad values, unknown keys, and syntax errors are exit-2 errors naming the f
   await bad("{\"notifyOverrides\": 5}", /notifyOverrides must be an object/)
   await bad("{\"readMax\": 0}", /readMax must be an integer of at least 1/)
   await bad("{\"capture\": {\"lines\": 0}}", /capture\.lines must be an integer of at least 1/)
+  await bad("{\"wait\": {\"maxIdle\": 0}}", /wait\.maxIdle must be an integer of at least 1/)
   await bad("{\"capture\": {\"maxLines\": 0}}", /capture\.maxLines must be an integer of at least 1/)
   await bad("{\"tmux\": {\"enterPreses\": 1}}", /unknown setting "tmux\.enterPreses"/)
   await bad("{\"typo\": 1}", /unknown setting "typo"/)

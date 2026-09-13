@@ -8,6 +8,12 @@ export interface HarnessPreset {
   command: string
   /** Matches one screen line once the harness accepts input. */
   ready: RegExp
+  /**
+   * Matches one screen line when the harness is out of tokens and stops reacting.
+   * Placeholder: no preset ships one yet and nothing matches against it — the exact
+   * phrases per harness are still to be captured from a real limited pane.
+   */
+  limited?: RegExp
   /** Something an operator should know before trusting `ready` blindly. */
   note?: string
 }

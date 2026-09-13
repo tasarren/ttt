@@ -67,6 +67,10 @@ test("parseHarnesses: shipped presets without a section; declared entries merge 
   assert.equal(parsed.declared["codex"]!.ready.source, "custom prompt")
   assert.equal(parsed.declared["codex"]!.note, undefined, "a note about the preset's prompt is dropped with the preset regex")
   assert.equal(parsed.declared["gemini"]!.bin, "gemini")
+  assert.equal(parsed.declared["claude"]!.limited, undefined, "no preset ships a limited pattern yet")
+  const withLimited = parseHarnesses({ claude: { default: true, limited: "out of tokens" } }, file)
+  assert.equal(withLimited.declared["claude"]!.limited!.source, "out of tokens")
+  assert.ok(withLimited.declared["claude"]!.note, "a limited pattern does not drop the ready note")
   const bad = (value: unknown, pattern: RegExp): void => {
     assert.throws(() => { parseHarnesses(value, file) }, (error: unknown) => {
       assert.ok(error instanceof Error)
@@ -79,6 +83,7 @@ test("parseHarnesses: shipped presets without a section; declared entries merge 
   bad({ gemini: { default: true } }, /harnesses\.gemini\.bin is required \(no shipped preset for "gemini"; shipped: claude, opencode, codex\)/)
   bad({ gemini: { bin: "gemini", default: true } }, /harnesses\.gemini\.ready is required/)
   bad({ claude: { default: true, ready: "(" } }, /harnesses\.claude\.ready is not a valid regular expression/)
+  bad({ claude: { default: true, limited: "(" } }, /harnesses\.claude\.limited is not a valid regular expression/)
   bad({ claude: { default: true, foo: 1 } }, /unknown setting "harnesses\.claude\.foo"/)
   bad({ "bad name": { default: true } }, /harness name/)
   bad({}, /harnesses declares nothing/)

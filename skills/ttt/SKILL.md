@@ -24,7 +24,7 @@ the moment the window exists; a second agent in the same window is messageable b
 
 When you have nothing else to do, wait instead of ending your turn:
 
-- Idle: run `ttt read --wait`. It returns when mail arrives or after the timeout; either way handle what it prints, then decide again. One wait per idle period; empty waits lengthen on their own (120s, 180s, 240s, 300s) and any arrival resets — do not re-poll on your own timer, and do not pass `--timeout` to defeat the ramp.
+- Idle: run `ttt read --wait`. It returns when mail arrives or after the timeout; either way handle what it prints, then decide again. One wait per idle period; empty waits lengthen on their own (120s, 180s, 240s, 300s) and any arrival resets — do not re-poll on your own timer, and do not pass `--timeout` to defeat the ramp. After 5 consecutive empty waits the wait exits at once telling you to end your turn — obey it, do not run another wait; new mail wakes you with a notification.
 - While you wait, no prompts land on your input: the wait is the notification, and the batch it prints is the delivery. A bare `ttt read --wait` with no `--timeout` is the cheapest idle.
 - Need an answer to continue: `ttt send NAME --wait -- question` (or `ttt reply ID --wait -- ...`). The reply is printed in the same tool result; ack it as usual. Anything else that arrived is listed as headers below it: triage, do not ignore.
 - Otherwise: send and move on. `--no-reply` where no answer is needed.
