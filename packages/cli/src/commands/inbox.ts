@@ -54,8 +54,9 @@ export const read: Handler = async(argv, ctx) => {
       return
     }
   }
-  const { messages, remaining } = await ctx.board.read(ctx.senderName, { max, peek: values.peek || headersOnly, latest: values.latest, ...(ctx.actor ? { actor: ctx.actor } : {}) })
-  process.stdout.write(`${headersOnly ? formatHeaders(messages, remaining) : formatBatch(messages, remaining, values.peek)}\n`)
+  const { messages, remaining, cancelled } = await ctx.board.read(ctx.senderName, { max, peek: values.peek || headersOnly, latest: values.latest, ...(ctx.actor ? { actor: ctx.actor } : {}) })
+  const note = cancelledNote(cancelled)
+  process.stdout.write(`${headersOnly ? formatHeaders(messages, remaining, note) : formatBatch(messages, remaining, values.peek, note)}\n`)
 }
 
 const INBOX_OPTIONS = {
@@ -87,16 +88,16 @@ export const inbox: Handler = async(argv, ctx) => {
   }
   if (values.detail) {
     const max = boundedInt(values.max, "--max", ctx.settings.readMax, 1_000)
-    const { messages, remaining } = await ctx.board.read(ctx.senderName, { max, peek: true, latest: false, ...(ctx.actor ? { actor: ctx.actor } : {}) })
+    const { messages, remaining, cancelled } = await ctx.board.read(ctx.senderName, { max, peek: true, latest: false, ...(ctx.actor ? { actor: ctx.actor } : {}) })
     const filtered = values.from === undefined
       ? messages
       : messages.filter((message) => message.from === values.from)
-    process.stdout.write(`${formatHeaders(filtered, remaining)}\n`)
+    process.stdout.write(`${formatHeaders(filtered, remaining, cancelledNote(cancelled))}\n`)
     return
   }
   if (values.max !== undefined) throw usageError("--max needs --detail")
   const summary = await ctx.board.inboxSummary(ctx.senderName)
-  process.stdout.write(`ttt inbox for ${ctx.senderName}: unread ${summary.unread}, read ${summary.read}, acked ${summary.acked}, superseded ${summary.superseded}\n`)
+  process.stdout.write(`ttt inbox for ${ctx.senderName}: unread ${summary.unread}, read ${summary.read}, acked ${summary.acked}, superseded ${summary.superseded}, cancelled ${summary.cancelled}\n`)
 }
 
 const ACK_OPTIONS = {
@@ -175,9 +176,19 @@ function messageTags(message: BoardMessage, includeReplyExpected: boolean): stri
   ]
 }
 
+/** "no unread messages", plus an optional note explaining what vanished before it could be read. */
+function emptyLine(extraInfo?: string): string {
+  return extraInfo ? `ttt: no unread messages (${extraInfo}).` : "ttt: no unread messages."
+}
+
+/** Note for an empty read: mail a sender retracted before it was read. */
+export function cancelledNote(cancelled: number): string | undefined {
+  return cancelled > 0 ? `${cancelled} cancelled` : undefined
+}
+
 /** Headers + one-line previews, without bodies and without marking anything read. */
-export function formatHeaders(messages: BoardMessage[], remaining: number): string {
-  if (messages.length === 0) return "ttt: no unread messages."
+export function formatHeaders(messages: BoardMessage[], remaining: number, extraInfo?: string): string {
+  if (messages.length === 0) return emptyLine(extraInfo)
   const lines = [`ttt: ${plural(messages.length, "message")} (headers; still unread)`]
   messages.forEach((message, index) => {
     const tags = messageTags(message, true)
@@ -202,8 +213,8 @@ function remainingLine(shown: number, remaining: number, peek: boolean): string 
   return `${plural(remaining, "unread message")} remain${remaining === 1 ? "s" : ""}.`
 }
 
-export function formatBatch(messages: BoardMessage[], remaining: number, peek: boolean): string {
-  if (messages.length === 0) return "ttt: no unread messages."
+export function formatBatch(messages: BoardMessage[], remaining: number, peek: boolean, extraInfo?: string): string {
+  if (messages.length === 0) return emptyLine(extraInfo)
   const lines = [`ttt: ${plural(messages.length, "message")}${peek ? " (peek; still unread)" : ""}`]
   messages.forEach((message, index) => {
     const reply = message.replyExpected ? `reply: ttt reply ${message.messageId} -- MESSAGE` : "reply: none needed"
@@ -232,12 +243,13 @@ export function formatStatus(message: BoardMessage, receipts: MessageReceipt[]):
       lines.push(`${recipient}: missing receipt`)
       continue
     }
-    const foreign = [receipt.readBy, receipt.ackedBy].find((actor) => actor && actor.window !== recipient)?.window
+    const foreign = [receipt.readBy, receipt.ackedBy, receipt.cancelledBy].find((actor) => actor && actor.window !== recipient)?.window
     const stamps = [
       `q ${shortStamp(receipt.enqueuedAt)}`,
       ...(receipt.notifiedAt ? [`n ${shortStamp(receipt.notifiedAt)}`] : []),
       ...(receipt.readAt ? [`r ${shortStamp(receipt.readAt)}`] : []),
       ...(receipt.ackedAt ? [`a ${shortStamp(receipt.ackedAt)}`] : []),
+      ...(receipt.cancelledAt ? [`cancelled ${shortStamp(receipt.cancelledAt)}`] : []),
       ...(receipt.ackNote ? [`note ${JSON.stringify(receipt.ackNote)}`] : []),
       ...(foreign ? [`by ${foreign}`] : []),
       ...(receipt.supersededBy ? [`superseded by ${receipt.supersededBy}`] : []),

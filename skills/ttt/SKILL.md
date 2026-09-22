@@ -1,7 +1,7 @@
 ---
 name: ttt
 version: 0.1.3
-description: Message teammate agents that share your tmux session. Use when you see a line starting with `ttt:`, when you need to contact, reply to, or check on another agent window, or when instructions mention `ttt send`, `ttt read`, `ttt ack`, or a teammate window name.
+description: Message teammate agents that share your tmux session. Use when you see a line starting with `ttt:`, when you need to contact, reply to, check on, or retract a message to another agent window, or when instructions mention `ttt send`, `ttt read`, `ttt ack`, `ttt cancel`, or a teammate window name.
 ---
 
 # ttt — talk to teammates
@@ -42,7 +42,8 @@ When you have nothing else to do, wait instead of ending your turn:
 | Several recipients | `ttt broadcast A B -- message`, or `--all` for one agent per window (scratch `W-N` windows are skipped; relay to your own second agents yourself) |
 | Triage a busy mailbox (stays unread) | `ttt inbox --detail`, `ttt read --headers-only`, `ttt inbox --detail --from NAME` |
 | Mark handled | `ttt ack MESSAGE_ID -- note`, or `ttt ack --all -- note` for the whole mailbox |
-| Check delivery | `ttt status MESSAGE_ID` (`q/n/r/a` = queued/notified/read/acked; `by WINDOW` when someone else read or acked) |
+| Retract a stale message you sent | `ttt cancel MESSAGE_ID` (only while unread; `ttt cancel --replace KEY` retracts every pending one). The recipient's next `ttt read` says `(N cancelled)` instead of showing it |
+| Check delivery | `ttt status MESSAGE_ID` (`q/n/r/a` = queued/notified/read/acked; `cancelled` when retracted; `by WINDOW` when someone else read, acked, or cancelled) |
 | Full thread | `ttt thread MESSAGE_ID` (header shows `topic:` + `members:`; `--headers-only` to triage) |
 | Peek at another agent's screen | `ttt capture NAME --lines 40` (their seat, never the focused one; `--grep PATTERN`, or `--around PATTERN --context N`; TUI chrome is cleaned unless `--raw`) |
 | Who/where am I (session, name, window, board) | `ttt whoami` (check `via:`; wrong window = broken runner env) |
@@ -77,6 +78,8 @@ When you have nothing else to do, wait instead of ending your turn:
   later with `ttt tmux open --window W-1 --harness`.
 - Skip `--cwd` when the agent should share your directory (it inherits the session's); skip
   `--ready` (the harness knows its prompt); skip `--ready-timeout` (settings `wait.seconds`).
+- Skip `--session` and `--from` on every command: identity is inherited from tmux. They exist only
+  to recover a broken runner, never for normal use.
 - `--harness NAME` only when you need a specific one; the operator's settings decide what exists
   (`ttt tmux doctor` lists them).
 
@@ -94,13 +97,14 @@ When you have nothing else to do, wait instead of ending your turn:
 - Add `--no-reply` when no answer is needed, so nobody spends a turn replying.
 - Name the thread when it matters: `ttt send NAME --subject TEXT -- your message`.
 - Expiring notes: `ttt send NAME --ttl SECONDS -- FYI only`.
+- Retract a stale message you sent: `ttt cancel MESSAGE_ID` (only while the recipient has not read it; `ttt cancel --replace KEY` retracts every pending one). A `ttt read` that says `(N cancelled)` means a sender retracted mail before you read it — nothing to do, do not go hunting for it.
 - Read `ttt capture` instead of asking "what are you doing".
 - Notifications reach your seat (the pane your name resolves to) even when you are working in
   another pane of the window. An unregistered window still receives: its first pane stands in for
   the main agent until something there runs ttt.
 - `broadcast --all` reaches one agent per window. If second agents share your window, relay to
   them yourself (`ttt send REVIEWER-2 -- ...`); their panes are not broadcast targets.
-- If `ttt whoami` shows the wrong window, prefix every command with `--session SESSION --from YOUR-WINDOW` until the runner is fixed.
+- Never pass `--session` or `--from`: your session, name, and board are inherited from the tmux environment automatically. They are recovery-only — if `ttt whoami` shows the wrong window, prefix every command with `--session SESSION --from YOUR-WINDOW` until the runner is fixed.
 - Bodies are plain text read by a model: request first, context second, keep them short.
 - A window named like a command needs the explicit form: `ttt send NAME -- message`.
 

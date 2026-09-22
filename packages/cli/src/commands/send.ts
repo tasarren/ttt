@@ -8,7 +8,7 @@ import { CliError, usageError } from "../cli-error.ts"
 import { agentIn, isSelf } from "../context.ts"
 import type { Agent, Context, Handler } from "../context.ts"
 import { WaitOutcome, waitForMail } from "../wait.ts"
-import { formatBatch, formatHeaders } from "./inbox.ts"
+import { cancelledNote, formatBatch, formatHeaders } from "./inbox.ts"
 import { pushUrgent, spawnNotifier } from "./notify.ts"
 import { isScratchName } from "./tmux/normalize-window.ts"
 
@@ -142,10 +142,10 @@ async function awaitReply(ctx: Context, message: BoardMessage, seconds: number):
   }
   const only = new Set(waited.messages.map((reply) => reply.messageId))
   const shown = await ctx.board.read(ctx.senderName, { max: only.size, peek: false, latest: false, only, ...(ctx.actor ? { actor: ctx.actor } : {}) })
-  process.stdout.write(`${formatBatch(shown.messages, shown.remaining, false)}\n`)
+  process.stdout.write(`${formatBatch(shown.messages, shown.remaining, false, cancelledNote(shown.cancelled))}\n`)
   if (shown.remaining > 0) {
     const others = await ctx.board.read(ctx.senderName, { max: 1_000, peek: true, latest: false })
-    process.stdout.write(`\n${formatHeaders(others.messages, others.remaining)}\n`)
+    process.stdout.write(`\n${formatHeaders(others.messages, others.remaining, cancelledNote(others.cancelled))}\n`)
   }
 }
 

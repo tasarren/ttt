@@ -86,6 +86,8 @@ export interface ReadOptions {
 export interface ReadResult {
   messages: BoardMessage[]
   remaining: number
+  /** Cancelled receipts in this mailbox; drives the honest empty-read line. */
+  cancelled: number
 }
 
 export interface PruneOptions {
@@ -97,6 +99,14 @@ export interface PruneOptions {
 export interface PruneResult {
   messages: number
   receipts: number
+}
+
+export interface CancelResult {
+  message: BoardMessage
+  /** Receipts flipped to `cancelled` by this call. */
+  cancelled: string[]
+  /** Recipients left alone: already read/acked/superseded/cancelled, or no receipt. */
+  skipped: { recipient: string; state: ReceiptState | "missing" }[]
 }
 
 export type InboxSummary = Record<ReceiptState, number>
@@ -318,7 +328,8 @@ export class Board {
         a.message.timestamp.localeCompare(b.message.timestamp)
         || (a.receipt.seq ?? 0) - (b.receipt.seq ?? 0)
         || a.message.messageId.localeCompare(b.message.messageId)
-      const unread = (await this.unreadUnlocked(agent)).sort(byTime)
+      const { unread: all, cancelled } = await this.mailboxStateUnlocked(agent)
+      const unread = all.sort(byTime)
       const eligible = options.only ? unread.filter((item) => options.only!.has(item.message.messageId)) : unread
       const selected = options.latest ? eligible.slice(-options.max) : eligible.slice(0, options.max)
 
@@ -330,7 +341,7 @@ export class Board {
         await this.addUnreadUnlocked(agent, -selected.length)
       }
       const remaining = unread.length - (options.peek ? 0 : selected.length)
-      return { messages: selected.map((item) => item.message), remaining }
+      return { messages: selected.map((item) => item.message), remaining, cancelled }
     })
   }
 
@@ -358,7 +369,7 @@ export class Board {
 
   async inboxSummary(agent: string): Promise<InboxSummary> {
     return this.withMailboxLock(agent, async() => {
-      const summary: InboxSummary = { unread: 0, read: 0, acked: 0, superseded: 0 }
+      const summary: InboxSummary = { unread: 0, read: 0, acked: 0, superseded: 0, cancelled: 0 }
       for (const receipt of await this.receiptsUnlocked(agent)) summary[receipt.state] += 1
       return summary
     })
@@ -370,6 +381,9 @@ export class Board {
       if (!receipt) throw new Error(`message ${messageId} is not in ${agent}'s mailbox`)
       if (receipt.state === ReceiptState.Superseded) {
         throw new Error(`message ${messageId} was superseded by ${receipt.supersededBy ?? "another message"}`)
+      }
+      if (receipt.state === ReceiptState.Cancelled) {
+        throw new Error(`message ${messageId} was cancelled`)
       }
       if (receipt.state === ReceiptState.Unread) {
         const message = await this.findMessage(messageId).catch(() => undefined)
@@ -395,7 +409,7 @@ export class Board {
     })
   }
 
-  /** Marks every unacked, non-superseded receipt in `agent`'s mailbox acked. One lock, one timestamp. */
+  /** Marks every unacked, non-terminal receipt in `agent`'s mailbox acked. One lock, one timestamp. */
   async ackAll(agent: string, note?: string, actor?: Actor): Promise<MessageReceipt[]> {
     return this.withMailboxLock(agent, async() => {
       await this.expireUnlocked(agent)
@@ -422,6 +436,55 @@ export class Board {
       await this.addUnreadUnlocked(agent, -wasUnread)
       return acked
     })
+  }
+
+  /**
+   * Retracts a message before it is read: flips each recipient's `unread` receipt to `cancelled`
+   * and drops the unread counter. Only the sender may cancel. A recipient who already read or
+   * acked keeps its receipt. Returns the honest result even when nothing was unread; callers
+   * decide whether that is an error (explicit-id form) or a no-op (key form).
+   */
+  async cancel(messageId: string, by: string, actor?: Actor): Promise<CancelResult> {
+    assertName(by, "sender name")
+    const message = await this.findMessage(messageId)
+    if (message.from !== by) {
+      throw new Error(`only the sender can cancel ${messageId} (sent by ${message.from})`)
+    }
+    const cancelled: string[] = []
+    const skipped: CancelResult["skipped"] = []
+    for (const recipient of message.recipients) {
+      await this.withMailboxLock(recipient, async() => {
+        const receipt = await readJsonIfExists<MessageReceipt>(this.receiptPath(recipient, messageId))
+        if (!receipt) {
+          skipped.push({ recipient, state: "missing" })
+          return
+        }
+        if (receipt.state !== ReceiptState.Unread) {
+          skipped.push({ recipient, state: receipt.state })
+          return
+        }
+        await this.writeReceipt({
+          ...receipt,
+          state: ReceiptState.Cancelled,
+          cancelledAt: new Date().toISOString(),
+          ...(actor ? { cancelledBy: actor } : {}),
+        })
+        await this.addUnreadUnlocked(recipient, -1)
+        cancelled.push(recipient)
+      })
+    }
+    return { message, cancelled, skipped }
+  }
+
+  /** Every message `from` sent carrying `replaceKey` (any kind: message, reply, broadcast). */
+  async messagesByReplaceKey(from: string, replaceKey: string): Promise<BoardMessage[]> {
+    assertName(from, "sender name")
+    // ponytail: full messages-root walk, no index. `--replace` collapses same-recipient
+    // duplicates so this normally matches one or two messages; add an index only if a profile
+    // ever shows the walk.
+    const found = (await readJsonTree<BoardMessage>(this.messagesRoot))
+      .filter((message) => message.from === from && message.replaceKey === replaceKey)
+    return found.sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.messageId.localeCompare(b.messageId))
   }
 
   async messageStatus(messageId: string): Promise<{ message: BoardMessage; receipts: MessageReceipt[] }> {
@@ -532,15 +595,15 @@ export class Board {
 
   /**
    * Garbage-collects terminal history: messages older than the cutoff whose every listed recipient holds a
-   * terminal (acked/superseded) receipt at least that old, plus orphan terminal receipts whose message is gone.
+   * terminal (acked/superseded/cancelled) receipt at least that old, plus orphan terminal receipts whose message is gone.
    * Unread/read history is never touched. Message files are removed before their receipts so a crash leaves
    * orphan receipts (reaped next run) rather than untracked messages.
    */
   async prune(options: PruneOptions): Promise<PruneResult> {
     const cutoff = Date.now() - options.olderThanMs
     const terminal = (receipt: MessageReceipt | undefined): receipt is MessageReceipt => {
-      if (!receipt || (receipt.state !== ReceiptState.Acked && receipt.state !== ReceiptState.Superseded)) return false
-      return Date.parse(receipt.ackedAt ?? receipt.supersededAt ?? receipt.enqueuedAt) <= cutoff
+      if (!receipt || (receipt.state !== ReceiptState.Acked && receipt.state !== ReceiptState.Superseded && receipt.state !== ReceiptState.Cancelled)) return false
+      return Date.parse(receipt.ackedAt ?? receipt.supersededAt ?? receipt.cancelledAt ?? receipt.enqueuedAt) <= cutoff
     }
     let messages = 0
     let receipts = 0
@@ -558,7 +621,7 @@ export class Board {
           try {
             await this.withMailboxLock(entry.recipient, async() => {
               const current = await readJsonIfExists<MessageReceipt>(this.receiptPath(entry.recipient, message.messageId))
-              if (current && (current.state === ReceiptState.Acked || current.state === ReceiptState.Superseded)) {
+              if (current && (current.state === ReceiptState.Acked || current.state === ReceiptState.Superseded || current.state === ReceiptState.Cancelled)) {
                 await rm(this.receiptPath(entry.recipient, message.messageId), { force: true })
                 receipts += 1
               }
@@ -773,10 +836,13 @@ export class Board {
     return readJsonTree<MessageReceipt>(join(this.mailboxesRoot, agent))
   }
 
-  private async unreadUnlocked(agent: string): Promise<Unread[]> {
+  /** One receipt walk: unread messages plus the cancelled-receipt count (for the empty-read line). */
+  private async mailboxStateUnlocked(agent: string): Promise<{ unread: Unread[]; cancelled: number }> {
     await this.expireUnlocked(agent)
     const unread: Unread[] = []
+    let cancelled = 0
     for (const receipt of await this.receiptsUnlocked(agent)) {
+      if (receipt.state === ReceiptState.Cancelled) cancelled += 1
       if (receipt.state !== ReceiptState.Unread) continue
       try {
         unread.push({ receipt, message: await this.findMessage(receipt.messageId) })
@@ -784,7 +850,11 @@ export class Board {
         // A missing message must not make the whole inbox unusable.
       }
     }
-    return unread
+    return { unread, cancelled }
+  }
+
+  private async unreadUnlocked(agent: string): Promise<Unread[]> {
+    return (await this.mailboxStateUnlocked(agent)).unread
   }
 
   /**

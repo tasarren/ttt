@@ -1,6 +1,7 @@
 export { Board } from "./board.ts"
 export type {
   BoardOptions,
+  CancelResult,
   InboxSummary,
   NotificationSummary,
   PruneOptions,

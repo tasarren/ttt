@@ -21,6 +21,7 @@ export const ReceiptState = {
   Read: "read",
   Acked: "acked",
   Superseded: "superseded",
+  Cancelled: "cancelled",
 } as const
 export type ReceiptState = (typeof ReceiptState)[keyof typeof ReceiptState]
 
@@ -58,6 +59,10 @@ export interface MessageReceipt {
   ackNote?: string
   supersededAt?: string
   supersededBy?: string
+  /** Set when the sender retracted this receipt before it was read. */
+  cancelledAt?: string
+  /** Detected performer of the cancel; absent when undetectable. */
+  cancelledBy?: Actor
   /** Detected performer of the read flip; absent on peeks, system transitions, and old receipts. */
   readBy?: Actor
   /** Detected performer of the ack; absent when acked before actors existed. */

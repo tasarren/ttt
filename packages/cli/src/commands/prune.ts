@@ -7,7 +7,7 @@ const PRUNE_OPTIONS = {
   "dry-run": { type: "boolean", default: false },
 } as const
 
-/** `prune --days N [--dry-run]`: garbage-collects terminal (acked/superseded) history older than N days. */
+/** `prune --days N [--dry-run]`: garbage-collects terminal (acked/superseded/cancelled) history older than N days. */
 export const prune: Handler = async(argv, ctx) => {
   const { values, positionals } = parseCommandArgs(argv, PRUNE_OPTIONS)
   if (positionals.length > 0) throw usageError("usage: ttt prune --days N [--dry-run]")

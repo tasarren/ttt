@@ -763,3 +763,62 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
     await rm(tmpDir, { recursive: true, force: true })
   }
 })
+
+test("cancel retracts unread mail: no paste, empty-read count, --replace batch, replies", async() => {
+  await ttt("A", "ack", "--all").catch(() => undefined)
+  await ttt("B", "ack", "--all").catch(() => undefined)
+  await ttt("A", "read").catch(() => undefined)
+  await ttt("B", "read").catch(() => undefined)
+  for (const pane of [panes["A"]!, panes["B"]!]) {
+    await tmux("clear-history", "-t", pane)
+    await tmux("send-keys", "-t", pane, "clear", "Enter")
+  }
+  await sleep(200)
+
+  // A cancels within the batching window: the notifier fires, finds nothing fresh, and paints nothing.
+  const queued = await ttt("A", "send", "B", "--no-reply", "--", "please ignore")
+  const id = /^queued (ttt-\S+) -> B/.exec(queued)?.[1]
+  assert.ok(id, `unexpected send output: ${queued}`)
+  assert.equal(await ttt("A", "cancel", id), `cancelled ${id} -> B`)
+  await sleep(1_500)
+  assert.doesNotMatch(await tmux("capture-pane", "-p", "-t", panes["B"]!), /Run: ttt read/, "a cancelled message is never pasted")
+  assert.equal(await ttt("B", "read"), "ttt: no unread messages (1 cancelled).")
+  const status = await ttt("A", "status", id)
+  assert.match(status, /^B: cancelled\b/m, "status shows the state")
+  assert.match(status, /cancelled \d{2}-\d{2} \d{2}:\d{2}:\d{2}/, "status shows when")
+  assert.match(status, /\bby A\b/, "status names the canceller")
+  assert.match(await ttt("B", "inbox"), /\bunread 0\b.*\bcancelled 1\b/)
+
+  // A recipient who already read it cannot be cancelled.
+  const readFirst = await ttt("A", "send", "B", "--no-reply", "--", "already read")
+  const readId = /^queued (ttt-\S+) -> B/.exec(readFirst)?.[1]
+  assert.ok(readId)
+  await ttt("B", "read")
+  await assert.rejects(ttt("A", "cancel", readId), /nothing to cancel \(B is read\)/)
+  await assert.rejects(ttt("A", "cancel", "ttt-20000101-000000-deadbeef"), /message not found/)
+
+  // --replace retracts every pending message carrying the key (the superseded one is not pending).
+  await ttt("A", "send", "B", "--no-reply", "--replace", "status", "--", "status one")
+  await ttt("A", "send", "B", "--no-reply", "--replace", "status", "--", "status two")
+  assert.match(await ttt("A", "cancel", "--replace", "status"), /^cancelled ttt-\S+ -> B$/m)
+  assert.equal(await ttt("B", "inbox", "--count"), "0")
+  await assert.rejects(ttt("A", "cancel", "--replace", "status"), /nothing pending for replace key status/)
+  await assert.rejects(ttt("A", "cancel", "--replace", "nope"), /no messages with replace key nope/)
+  await assert.rejects(ttt("A", "cancel"), /usage: ttt cancel/)
+  await assert.rejects(ttt("A", "cancel", "--replace", "x", "ttt-20000101-000000-deadbeef"), /--replace cannot be combined/)
+
+  // A reply is just a message: its sender can cancel it.
+  const root = await ttt("A", "send", "B", "--no-reply", "--", "reply cancel root")
+  const rootId = /^queued (ttt-\S+) -> B/.exec(root)?.[1]
+  assert.ok(rootId)
+  const reply = await ttt("B", "reply", rootId, "--no-reply", "--", "withdrawn answer")
+  const replyId = /^queued (ttt-\S+) -> A/.exec(reply)?.[1]
+  assert.ok(replyId, `unexpected reply output: ${reply}`)
+  assert.equal(await ttt("B", "cancel", replyId), `cancelled ${replyId} -> A`)
+  assert.equal(await ttt("A", "read"), "ttt: no unread messages (1 cancelled).")
+
+  await ttt("A", "ack", "--all").catch(() => undefined)
+  await ttt("B", "ack", "--all").catch(() => undefined)
+  await ttt("A", "read").catch(() => undefined)
+  await ttt("B", "read").catch(() => undefined)
+})

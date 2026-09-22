@@ -142,9 +142,9 @@ Ways to catch up. Reading marks messages read; triage does not:
 
 | Command | What it does |
 |---|---|
-| `ttt read [--max N] [--peek] [--latest]` | Print unread messages (oldest first) and mark them read. Every message states its reply obligation explicitly (`reply: ...` or `reply: none needed`). | `--peek` keeps them unread. `--latest` picks the newest N. Partial reads report `N shown, M still unread`. |
+| `ttt read [--max N] [--peek] [--latest]` | Print unread messages (oldest first) and mark them read. Every message states its reply obligation explicitly (`reply: ...` or `reply: none needed`). | `--peek` keeps them unread. `--latest` picks the newest N. Partial reads report `N shown, M still unread`. An empty read reports `(N cancelled)` when senders have retracted mail. |
 | `ttt read --headers-only` | Headers + one-line previews. No bodies, no state change. |
-| `ttt inbox [--count]` | Counts by state. `--count` prints only the unread number. |
+| `ttt inbox [--count]` | Counts by state (unread/read/acked/superseded/cancelled). `--count` prints only the unread number. |
 | `ttt inbox --detail [--max N] [--from NAME]` | Headers + previews for the oldest unread. `--from` filters by sender. |
 | `ttt ack MESSAGE_ID [NOTE]` | Mark a message handled. The note needs no `--`. Board state only; nothing is sent. |
 | `ttt ack --all [-- NOTE]` | Ack every unacked message in your mailbox at once. |
@@ -153,7 +153,8 @@ Ways to check what happened to something you sent, or to look at another agent's
 
 | Command | What it does |
 |---|---|
-| `ttt status MESSAGE_ID` | Per-recipient receipt state and short stamps (`q/n/r/a` = queued/notified/read/acked), with `by WINDOW` when someone else read or acked. |
+| `ttt cancel MESSAGE_ID...` / `ttt cancel --replace KEY` | Retract messages you sent that the recipient has not read. Sender-only; replies included; the same `--replace KEY` you sent with retracts every pending one. A recipient who already read it is reported, not changed. An already-pasted line cannot be un-pasted. |
+| `ttt status MESSAGE_ID` | Per-recipient receipt state and short stamps (`q/n/r/a` = queued/notified/read/acked; a cancelled receipt shows `cancelled` and when), with `by WINDOW` when someone else read, acked, or cancelled. |
 | `ttt thread MESSAGE_ID [--headers-only]` | Every message in the thread, oldest first, with `topic:` and `members:` header. `--headers-only` triages without bodies. |
 | `ttt capture TARGET [--lines N] [--raw] [--grep PATTERN] [--around PATTERN] [--context N]` | Last N lines of the agent's seat (the pane their name resolves to, never the focused one). TUI chrome (borders, spinners, padding) is cleaned; `--raw` skips the cleanup and keeps tmux line wrapping. `--grep` keeps matching lines. `--around` keeps matches plus N context lines each side (default 3). |
 | `ttt windows` | List windows in this session with ids; each window is its main agent. `(you)` marks the caller, `(unregistered)` that nothing there has run ttt yet. |
@@ -164,7 +165,7 @@ Ways to clean up and to move the board forward across versions:
 
 | Command | What it does |
 |---|---|
-| `ttt prune --days N [--dry-run]` | Delete acked/superseded messages and receipts older than N days. Unread/read history is never touched. |
+| `ttt prune --days N [--dry-run]` | Delete acked/superseded/cancelled messages and receipts older than N days. Unread/read history is never touched. |
 | `ttt migrate [--dry-run] [--all]` | Run pending schema migrations for this session (or every session). Newer-than-code boards are refused. |
 
 Message options (for `send`, `reply`, `broadcast`):
@@ -187,7 +188,8 @@ errors.
 ## How it works
 
 - **Board.** Every message is a JSON file under `~/.ttt/boards/<session>/messages/<day>/`. Each recipient
-  gets a receipt under `mailboxes/<window>/` that moves through `unread -> read -> acked`, or `superseded`.
+  gets a receipt under `mailboxes/<window>/` that moves through `unread -> read -> acked`, or `superseded`
+  (replaced or expired) or `cancelled` (retracted by the sender before you read it).
   Writes are atomic and mailboxes are locked per window, so concurrent senders are safe. A busy mailbox
   reports `mailbox NAME is busy; retry shortly`. Per-mailbox unread counters and per-thread indexes live
   under `state/` and `threads/`, so counts and thread views skip tree walks. `state/schema.json` records
@@ -208,9 +210,12 @@ errors.
   input line (`C-u`) before pasting, so it can clobber in-progress typing. Urgent broadcasts paste
   serially, one recipient at a time. Like batched notifications, the paste targets the
   recipient's seat.
-- **Replace and expiry.** `--replace KEY` marks your earlier unread messages with the same KEY as
+- **Replace, expiry, and cancel.** `--replace KEY` marks your earlier unread messages with the same KEY as
   superseded, so a busy recipient reads only the latest status. `--ttl SECONDS` lapses unread receipts
-  to `superseded` after the deadline instead. Both keep history; both count as terminal for `prune`.
+  to `superseded` after the deadline instead. `ttt cancel` retracts a message you sent from recipients
+  who had not read it: their receipt becomes `cancelled` and the message never appears in `ttt read`
+  (an empty read says `(N cancelled)`), though it stays in `ttt thread`. All three keep history and
+  count as terminal for `prune`.
 - **Badges.** After every command that changes receipts (send, reply, broadcast, read, ack, and the
   detached notifier), ttt mirrors each agent's unread counter into the `@ttt_unread` window option;
   a window's badge `[N]` sums the unread of every agent seated in it (lowest window id wins on

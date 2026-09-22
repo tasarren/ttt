@@ -1,5 +1,6 @@
 import { syncBadges } from "./badges.ts"
 import { usageError } from "./cli-error.ts"
+import { cancel } from "./commands/cancel.ts"
 import { capture } from "./commands/capture.ts"
 import { ack, inbox, read, status, thread } from "./commands/inbox.ts"
 import { migrate } from "./commands/migrate.ts"
@@ -20,6 +21,7 @@ const COMMANDS: Record<string, Handler> = {
   send,
   reply,
   ack,
+  cancel,
   broadcast,
   read,
   inbox,
@@ -42,6 +44,7 @@ usage:
   ttt reply MESSAGE_ID [--to sender|receiver|both|thread] [options] -- MESSAGE
   ttt broadcast TARGET... [options] -- MESSAGE  ttt broadcast --all [options] -- MESSAGE
   ttt ack MESSAGE_ID [NOTE]                     ttt ack --all [-- NOTE]
+  ttt cancel MESSAGE_ID... | ttt cancel --replace KEY
 
   ttt read [--max COUNT] [--peek] [--latest] [--headers-only]
   ttt read --wait [--timeout SECONDS]           block until mail arrives, then print it
@@ -68,9 +71,9 @@ message options:
   --timeout SEC   how long --wait blocks (default settings.wait.seconds, max settings.wait.maxSeconds)
 
 Normal messages are queued. A target gets one notification per burst and reads the batch with
-"ttt read". A recipient blocked in --wait gets no paste at all: the wait returns the mail itself. ACK is board state only; it sends nothing. Settings: ~/.ttt/settings.jsonc
+"ttt read". A recipient blocked in --wait gets no paste at all: the wait returns the mail itself. ACK is board state only; it sends nothing. Cancel retracts a message you sent from recipients who had not read it; the same --replace KEY you sent with retracts every pending one. Settings: ~/.ttt/settings.jsonc
 Shorthand "ttt TARGET -- MESSAGE" sends; a window named like a command (send, read, inbox,
-status, thread, capture, broadcast, reply, windows, whoami, prune, migrate, tmux) needs the explicit "ttt send" form.
+status, thread, capture, cancel, broadcast, reply, windows, whoami, prune, migrate, tmux) needs the explicit "ttt send" form.
 Identity is automatic (PID ancestry, then TMUX_PANE) and never uses the active window.
 Recovery overrides only come as a pair: --session NAME --from WINDOW; lone --from is rejected.
 Capture output is cleaned of TUI chrome (borders, spinners) unless --raw is passed.`

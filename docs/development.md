@@ -52,11 +52,13 @@ Ownership rules:
   `ttt-setup` exists only until the layout's windows are up. Layout parsing is covered by
   `packages/cli/tests/layout.test.ts`.
 - One operation lives in one file. `commands/send.ts` holds `send`, `broadcast`, and `reply` because they
-  share the same `deliver` flow; `commands/inbox.ts` holds the read side and its formatters.
+  share the same `deliver` flow; `commands/inbox.ts` holds the read side and its formatters;
+  `commands/cancel.ts` owns the sender's retract flow over `board.cancel` and `board.messagesByReplaceKey`.
 
 ## Toolchain
 
-Exact versions: Node 26.8.1, pnpm 11.24.0 (`scripts/check-runtime.mjs` enforces them). Source is strict,
+Minimum versions: Node 26.8.1, pnpm 11.24.0 (`scripts/check-runtime.mjs` enforces the floor, and
+newer is accepted). Source is strict,
 erasable ESM TypeScript; relative imports use `.ts` specifiers and run directly under Node's type
 stripping. No enums, namespaces, or parameter properties.
 
