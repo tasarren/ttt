@@ -14,7 +14,8 @@ before changing a package.
 
 ## Standards
 
-- Node 26.8.1 and pnpm 11.24.0 exactly for development. Corepack/pnpm only; never npm, tsx, or Bun.
+- Node 26.8.1+ and pnpm 11.24.0+ for development (a floor, not a lock; `scripts/check-runtime.mjs`
+  enforces the minimum, and newer is accepted). Corepack/pnpm only; never npm, tsx, or Bun.
 - Strict, erasable ESM TypeScript with `.ts` import specifiers. Lint and tsconfig are copied from the
   `@uft-ai` harness workspace; do not loosen them.
 - Repeated domain values are `as const` vocabularies beside their types (`MessageKind`, `ReceiptState`).

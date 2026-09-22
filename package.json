@@ -5,8 +5,8 @@
   "type": "module",
   "packageManager": "pnpm@11.24.0",
   "engines": {
-    "node": "26.8.1",
-    "pnpm": "11.24.0"
+    "node": ">=26.8.1",
+    "pnpm": ">=11.24.0"
   },
   "scripts": {
     "runtime:check": "node scripts/check-runtime.mjs",
