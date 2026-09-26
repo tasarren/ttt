@@ -6,13 +6,15 @@
   "packageManager": "pnpm@11.24.0",
   "scripts": {
     "ttt": "node packages/cli/src/ttt.ts",
-    "build": "pnpm --filter @ttt/tmux build && pnpm --filter @tasarren/ttt build && pnpm --filter @ttt/ui build",
-    "typecheck": "tsc -p tsconfig.json && pnpm --filter @ttt/ui typecheck",
+    "build": "pnpm --filter @ttt/tmux build && pnpm --filter @tasarren/ttt build && pnpm --filter @ttt/ui build && pnpm --filter @ttt/webapp build",
+    "typecheck": "pnpm --filter @ttt/ui build && tsc -p tsconfig.json && pnpm --filter @ttt/ui typecheck && pnpm --filter @ttt/webapp typecheck",
     "lint": "eslint .",
-    "test": "node --test packages/*/tests/*.test.ts packages/ui-lib/tests/*.test.mjs",
+    "test": "pnpm --filter @ttt/ui build && node --test packages/*/tests/*.test.ts packages/ui-lib/tests/*.test.mjs",
     "check": "pnpm run version:check && pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run build && pnpm --filter @ttt/ui build:stories",
     "version:check": "node scripts/sync-version.mjs",
-    "version:sync": "node scripts/sync-version.mjs --write"
+    "version:sync": "node scripts/sync-version.mjs --write",
+    "web": "pnpm --filter @ttt/webapp dev",
+    "web:start": "pnpm --filter @ttt/webapp start"
   },
   "devDependencies": {
     "@eslint/js": "catalog:devTools",

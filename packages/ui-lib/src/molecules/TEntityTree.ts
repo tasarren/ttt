@@ -1,4 +1,4 @@
-import { defineComponent, h, ref } from "vue"
+import { defineComponent, h, ref, watch } from "vue"
 import type { PropType, VNode } from "vue"
 import { TCount } from "../atoms/TCount.ts"
 
@@ -13,7 +13,9 @@ export const TEntityTree = defineComponent({
   name: "TEntityTree", props: {
     nodes: {
       type: Array as PropType<readonly EntityNode[]>, required: true,
-    }, selected: String as PropType<string | undefined>, label: {
+    }, selected: String as PropType<string | undefined>, contextIds: {
+      type: Array as PropType<readonly string[]>, default: () => [],
+    }, label: {
       type: String, default: "Items",
     },
   }, emits: {
@@ -33,6 +35,18 @@ export const TEntityTree = defineComponent({
     }
     initialize(p.nodes)
     const collapsed = ref(closed)
+    watch(() => p.selected, () => {
+      function reveal(nodes: readonly EntityNode[]): boolean {
+        let contains = false
+        for (const node of nodes) {
+          const child = node.children ? reveal(node.children) : false
+          if (child) collapsed.value.delete(node.id)
+          contains = node.id === p.selected || child || contains
+        }
+        return contains
+      }
+      reveal(p.nodes)
+    })
     function toggle(id: string) {
       const next = new Set(collapsed.value)
       if (next.has(id)) next.delete(id)
@@ -46,7 +60,7 @@ export const TEntityTree = defineComponent({
         key: n.id,
       }, [
         h("div", {
-          class: "t-tree-row", "data-selected": n.id === p.selected, style: {
+          class: "t-tree-row", "data-selected": n.id === p.selected, "data-context": p.contextIds.includes(n.id), style: {
             paddingLeft: `${depth * 14}px`,
           },
         }, [

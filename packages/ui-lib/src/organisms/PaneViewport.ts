@@ -54,7 +54,7 @@ export const PaneViewport = defineComponent({
         })
       const { tree, entries, exact } = arrangement.value
       const note = exact
-        ? "Geometry and captured output are supplied by the viewer adapter, not TreePane."
+        ? ""
         : "Illustrative arrangement. Valid geometry matching the pane IDs was not supplied." + (p.panes.length > 24 ? " First 24 tiles shown; the pane table contains every pane." : "")
       return h("div", {
         class: "stack",
@@ -71,9 +71,9 @@ export const PaneViewport = defineComponent({
               emit("select", entry.pane.pane)
           },
         }),
-        h("p", {
+        note ? h("p", {
           class: "small dim",
-        }, note),
+        }, note) : null,
       ])
     }
   },

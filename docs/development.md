@@ -11,6 +11,7 @@ packages/
   migrations/  @ttt/migrations  ordered schema steps over a session root; rerunnable, with a version ledger
   cli/         @tasarren/ttt    the `ttt` bin: settings, argument parsing, commands, output
   ui-lib/      @ttt/ui          Vue components, UI contracts, and Histoire stories
+  webapp/      @ttt/webapp      desktop Vue SSR/client, Pinia, routing, xterm, HTTP/SSE contract
 ```
 
 Ownership rules:
@@ -35,6 +36,13 @@ Ownership rules:
 - `packages/cli/src/tmux-context.ts` is the second composition root, for `ttt tmux` verbs only: no
   board, no sender identity. `--session NAME` alone is accepted and `--from` is rejected; running
   outside tmux is fine. `main.ts` routes `tmux` before `createContext`.
+- `packages/cli/src/web.ts` composes the localhost Hono host with CLI-owned settings/layouts,
+  observational board reads, and tmux. `packages/webapp` owns the SSR renderer, hydrated Vue app,
+  terminal UI, and OpenAPI transport contract. Each SSR request gets its own Pinia and router.
+  `/api/events` sends revision invalidations; route state is fetched in pages of 50. `/api/terminal`
+  streams only the selected window through `@ttt/tmux`'s control client. `/api/input` posts keys.
+  Board observation never settles expiry or updates receipts. JSONC writes check ETags under a
+  directory lock, validate through the CLI parser, then rename atomically. No SQLite or file moves.
 - Session records (`~/.ttt/sessions/<S>/session.json`, written by setup, read by doctor) live in
   `packages/cli/src/session-record.ts`, outside the boards on purpose.
 - Layouts live in `packages/cli/src/layout.ts` (schema, parser, file io — every error names file
@@ -67,10 +75,12 @@ pnpm install
 pnpm run typecheck   # server and UI TypeScript projects
 pnpm run lint        # eslint (stylistic + typescript-eslint strict, copied from the harness workspace)
 pnpm run test        # node --test packages/*/tests/*.test.ts
-pnpm run build       # CLI, tmux library, and Vue UI library
+pnpm run build       # CLI, tmux library, Vue UI library, and Webapp client/SSR
 pnpm run check       # all of the above, in order
 pnpm ttt --help      # run the CLI from source
 pnpm --filter @ttt/ui stories # Histoire components and page previews
+pnpm web             # localhost Hono/Vite development host
+pnpm web:start       # localhost host with built client/SSR output
 ```
 
 ## Dev loop

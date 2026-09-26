@@ -1,0 +1,94 @@
+import { defineComponent, h, ref, onMounted, onBeforeUnmount, watch, nextTick } from "vue"
+import type { PropType } from "vue"
+import type { TreeWindow, LayoutNode } from "@ttt/ui"
+import { parseLayout, leaves } from "@ttt/ui"
+import type { Terminal } from "@xterm/xterm"
+import { isTerminalEvent } from "./protocol.ts"
+
+export const LiveWindow = defineComponent({
+  name: "LiveWindow",
+  props: {
+    session: { type: String, required: true },
+    window: { type: Object as PropType<TreeWindow>, required: true },
+    token: { type: String, required: true },
+    selected: { type: String, required: true },
+    layout: { type: String, default: "" },
+  },
+  emits: { select: (_id: string) => true },
+  setup(p, { emit }) {
+    const host = ref<HTMLElement>()
+    const terminals = new Map<string, Terminal>()
+    const error = ref("")
+    let events: EventSource | undefined
+    const lifecycle = { disposed: false }
+    let generation = 0
+    let observer: ResizeObserver | undefined
+    let inputQueue: Promise<unknown> = Promise.resolve()
+    const sizes = new Map<string, { cols: number; rows: number }>()
+    function fit() {
+      for (const [pane, terminal] of terminals) {
+        const node = host.value?.querySelector<HTMLElement>(`[data-pane="${pane}"] .t-terminal-screen`)
+        const size = sizes.get(pane)
+        if (node && size) terminal.options.fontSize = Math.max(7, Math.min(13, (node.clientWidth - 16) / (size.cols * 0.62), (node.clientHeight - 16) / (size.rows * 1.25)))
+      }
+    }
+    async function connect() {
+      const current = ++generation
+      events?.close()
+      observer?.disconnect()
+      for (const terminal of terminals.values()) terminal.dispose()
+      terminals.clear()
+      if (lifecycle.disposed || document.hidden || !host.value) return
+      error.value = ""
+      const { Terminal } = await import("@xterm/xterm")
+      if (current !== generation) return
+      for (const pane of p.window.panes) {
+        const node = host.value.querySelector<HTMLElement>(`[data-pane="${pane.pane}"] .t-terminal-screen`)
+        if (!node) continue
+        const terminal = new Terminal({ cols: 80, rows: 24, convertEol: false, theme: { background: "#1b161e", foreground: "#f4edf4" }, fontFamily: "ui-monospace, monospace", fontSize: 12, scrollback: 1000 })
+        terminal.open(node)
+        terminal.onData(data => {
+          if (current !== generation || p.selected !== pane.pane) return
+          if (data.length > 8192) { error.value = "Paste exceeds 8192 characters"; return }
+          const input = { session: p.session, pane: pane.pane, data }
+          const token = p.token
+          inputQueue = inputQueue.then(async() => {
+            const response = await fetch("/api/input", { method: "POST", headers: { "Content-Type": "application/json", "X-TTT-Token": token }, body: JSON.stringify(input) })
+            if (!response.ok) throw new Error(`Input rejected (HTTP ${response.status})`)
+          }).catch((failure: unknown) => { error.value = failure instanceof Error ? failure.message : String(failure) })
+        })
+        terminals.set(pane.pane, terminal)
+      }
+      events = new EventSource(`/api/terminal?session=${encodeURIComponent(p.session)}&window=${encodeURIComponent(p.window.id)}`)
+      events.onmessage = event => {
+        if (current !== generation) return
+        let parsed: unknown
+        try { parsed = JSON.parse(String(event.data)) } catch { error.value = "Invalid terminal event"; return }
+        if (!isTerminalEvent(parsed)) return
+        if (parsed.type === "error") { error.value = parsed.message; return }
+        if (parsed.type === "snapshot") {
+          const terminal = terminals.get(parsed.pane)
+          if (terminal) { sizes.set(parsed.pane, parsed.frame); terminal.reset(); terminal.resize(parsed.frame.cols, parsed.frame.rows); fit(); terminal.write(parsed.frame.text) }
+        } else terminals.get(parsed.pane)?.write(parsed.text)
+      }
+      observer = new ResizeObserver(fit)
+      observer.observe(host.value)
+    }
+    const reconnect = () => { void nextTick(connect).catch((failure: unknown) => { error.value = failure instanceof Error ? failure.message : String(failure) }) }
+    const visibility = () => { if (document.hidden) { generation++; events?.close(); events = undefined } else reconnect() }
+    onMounted(() => { document.addEventListener("visibilitychange", visibility); reconnect() })
+    onBeforeUnmount(() => { lifecycle.disposed = true; generation++; events?.close(); observer?.disconnect(); document.removeEventListener("visibilitychange", visibility); for (const terminal of terminals.values()) terminal.dispose() })
+    watch(() => [p.session, p.window.id, p.layout, p.window.panes.map(pane => pane.pane).join(",")], reconnect)
+    return () => {
+      let layout: LayoutNode | undefined
+      try { if (p.layout) layout = parseLayout(p.layout) } catch { /* Missing geometry uses the labelled pane grid. */ }
+      const cells = layout ? leaves(layout) : []
+      return h("section", { ref: host, class: ["t-live-window", layout && "is-spatial"], style: !layout ? { gridTemplateColumns: `repeat(${Math.min(2, p.window.panes.length)},minmax(0,1fr))` } : {}, "aria-label": `Live panes of ${p.window.name}` }, [error.value ? h("p", { role: "alert" }, error.value) : null, ...p.window.panes.map(pane => {
+        const cell = cells.find(cell => `%${cell.pane}` === pane.pane)
+        return h("article", { class: "t-live-pane", style: cell && layout ? { left: `${cell.x / layout.width * 100}%`, top: `${cell.y / layout.height * 100}%`, width: `calc(${cell.width / layout.width * 100}% - 6px)`, height: `calc(${cell.height / layout.height * 100}% - 6px)` } : {}, "data-pane": pane.pane, "data-selected": pane.pane === p.selected, onClick: () => { emit("select", pane.pane) } }, [
+          h("header", [h("strong", pane.agent || pane.pane), h("span", pane.command)]), h("div", { class: "t-terminal-screen", "aria-label": `${pane.pane} terminal` }),
+        ])
+      })])
+    }
+  },
+})

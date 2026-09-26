@@ -2,8 +2,9 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "resolveJsonModule": true
   },
   "include": ["packages/*/src/**/*.ts", "packages/*/tests/**/*.ts", "packages/*/tsdown.config.ts"],
-  "exclude": ["packages/ui-lib/**"]
+  "exclude": ["packages/ui-lib/**", "packages/webapp/**"]
 }

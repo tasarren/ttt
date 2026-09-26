@@ -74,22 +74,25 @@ export const SettingsForm = defineComponent({
   name: "SettingsForm", props: {
     modelValue: {
       type: Object as PropType<SettingsFile>, required: true,
-    }, shippedHarnesses: {
+    }, source: String as PropType<string | undefined>, shippedHarnesses: {
       type: Array as PropType<readonly string[]>,
     },
   }, emits: {
-    "update:modelValue": (_v: SettingsFile) => true, save: (_v: SettingsFile) => true,
+    "update:modelValue": (_v: SettingsFile) => true, save: (_v: SettingsFile, _source: string) => true, dirty: (_dirty: boolean) => true,
   }, setup(p, { emit }) {
-    const source = ref(JSON.stringify(p.modelValue, null, 2))
+    const source = ref(p.source ?? JSON.stringify(p.modelValue, null, 2))
+    const original = ref(source.value)
     const tab = ref("fields")
     const message = ref("")
     const numberDrafts = ref<Record<string, string>>({})
     const numberErrors = ref<Record<string, string>>({})
     watch(() => p.modelValue, v => {
-      source.value = JSON.stringify(v, null, 2)
+      source.value = p.source ?? JSON.stringify(v, null, 2)
+      original.value = source.value
       numberDrafts.value = {}
       numberErrors.value = {}
     })
+    watch(source, value => { emit("dirty", value !== original.value) })
     const parsed = computed(() => parseJsonc<SettingsFile>(source.value))
     const structure = computed(() => parsed.value.errors.length ? parsed.value.errors : validateContract("SettingsFile", parsed.value.value))
     const draft = computed(() => structure.value.length ? undefined : parsed.value.value)
@@ -123,8 +126,8 @@ export const SettingsForm = defineComponent({
       if (!draft.value || errors.value.length)
         return
       emit("update:modelValue", cloneData(draft.value))
-      emit("save", cloneData(draft.value))
-      message.value = "Settings saved by the host adapter."
+      emit("save", cloneData(draft.value), source.value)
+      message.value = "Save requested."
     }
     return () => h("div", {
       class: "stack",

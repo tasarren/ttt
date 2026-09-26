@@ -6,6 +6,7 @@ export const AppShell = defineComponent({
     compact: Boolean,
   }, setup(p, { slots }) {
     const contextOpen = ref(false)
+    const detailsOpen = ref(false)
     return () => h("div", {
       class: "ttt t-shell", "data-density": p.compact ? "compact" : "comfortable",
     }, [
@@ -24,9 +25,18 @@ export const AppShell = defineComponent({
           ], "aria-label": "Context navigation",
         }, slots["sidebar"]?.()), h("main", {
           id: "ttt-main", class: "t-main", tabindex: -1,
-        }, slots["default"]?.()), h("aside", {
-          class: "t-right", "aria-label": "Context inspector",
-        }, slots["inspector"]?.()),
+        }, [
+          h("div", { class: "t-details-bar" }, h(TButton, {
+            size: "sm", intent: "ghost", "aria-controls": "ttt-details", "aria-expanded": detailsOpen.value,
+            onClick: () => { detailsOpen.value = !detailsOpen.value },
+          }, () => "Details")), slots["default"]?.(),
+        ]), h("aside", {
+          id: "ttt-details", class: ["t-right", detailsOpen.value && "is-open"], "aria-label": "Details",
+          "aria-hidden": !detailsOpen.value, inert: !detailsOpen.value,
+        }, [
+          h(TButton, { size: "sm", intent: "ghost", onClick: () => { detailsOpen.value = false } }, () => "Close details"),
+          slots["inspector"]?.(),
+        ]),
       ]),
     ])
   },

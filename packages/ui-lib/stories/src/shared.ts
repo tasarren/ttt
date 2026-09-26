@@ -54,12 +54,6 @@ export function boardSidebar(p: PageProps, emit: PageEmit, route = "boards") {
         id: b.name, label: b.name, count: Object.keys(b.threads).length,
       })), selected: boardFor(p)?.name, label: "Board contexts", onSelect: (id: string) => { emit("navigate", `/${route}/${id}`) },
     }), h("div", {
-      class: "t-sidebar-group",
-    }, "Session workspaces"), h(TEntityTree, {
-      nodes: p.snapshot.sessions.map(s => ({
-        id: s.name, label: s.name, count: s.windows.length,
-      })), onSelect: (id: string) => { emit("navigate", "/sessions/" + id) },
-    }), h("div", {
       style: {
         marginTop: "28px", padding: "0 10px",
       },

@@ -14,7 +14,7 @@ export const ThreadList = defineComponent({
       type: Object as PropType<Record<string, string[]>>, required: true,
     }, query: {
       type: String, default: "",
-    }, urgent: Boolean, selected: String,
+    }, urgent: Boolean, summaryOnly: Boolean, selected: String,
   }, emits: {
     select: (_id: string) => true,
   }, setup: (p, { emit }) => () => {
@@ -41,7 +41,7 @@ export const ThreadList = defineComponent({
               gap: "14px",
             },
           }, [
-            h("span", `${t.count} messages`), t.missing.length ? h(TBadge, {
+            h("span", `${t.count} messages`), !p.summaryOnly && t.missing.length ? h(TBadge, {
               tone: "amber", value: `${t.missing.length} not recorded`,
             }) : null, t.last ? h(TTimestamp, {
               value: t.last.timestamp,

@@ -164,11 +164,9 @@ export const LayoutEditor = defineComponent({
     function save() {
       if (draft.value && errors.value.length === 0) {
         const value = cloneData(draft.value)
-        original.value = source.value
         emit("update:modelValue", value)
         emit("save", value, source.value)
-        emit("dirty", false)
-        info.value = "Layout saved to the host adapter."
+        info.value = "Save requested."
       }
     }
     function field(label: string, content: (attrs: Record<string, unknown>) => ReturnType<typeof h>) {

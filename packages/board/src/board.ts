@@ -111,6 +111,18 @@ export interface CancelResult {
 
 export type InboxSummary = Record<ReceiptState, number>
 
+export interface BoardObservation {
+  messages: BoardMessage[]
+  receipts: MessageReceipt[]
+  threads: Record<string, string[]>
+  presences: Record<string, Presence>
+  streaks: Record<string, WaitStreak>
+  notifications: Record<string, NotificationMarker>
+  counters: Record<string, { count: number }>
+  sequenceCounters: Record<string, { next: number }>
+  ledger?: { version: number }
+}
+
 export interface NotificationSummary {
   target: string
   newCount: number
@@ -165,6 +177,39 @@ export class Board {
     this.stateRoot = join(options.sessionRoot, "state")
     this.locksRoot = join(options.sessionRoot, "locks")
     this.threadsRoot = join(options.sessionRoot, "threads")
+  }
+
+  /** Observational view: no locks, expiry settlement, index rebuilds, or writes. */
+  async observe(): Promise<BoardObservation> {
+    const result: BoardObservation = {
+      messages: await readJsonTree<BoardMessage>(this.messagesRoot),
+      receipts: await readJsonTree<MessageReceipt>(this.mailboxesRoot),
+      threads: {}, presences: {}, streaks: {}, notifications: {}, counters: {}, sequenceCounters: {},
+    }
+    const entries = await readdir(this.threadsRoot).catch((error: unknown) => {
+      if (isErrno(error, "ENOENT")) return []
+      throw error
+    })
+    for (const name of entries.filter(name => name.endsWith(".json"))) {
+      const ids = await readJsonIfExists<string[]>(join(this.threadsRoot, name)).catch(() => undefined)
+      if (ids) result.threads[name.slice(0, -5)] = ids
+    }
+    for (const agent of await this.mailboxNames()) {
+      const read = <T>(suffix: string): Promise<T | undefined> => readJsonIfExists<T>(join(this.stateRoot, `${agent}.${suffix}.json`)).catch(() => undefined)
+      const presence = await read<Presence>("waiting")
+      const streak = await read<WaitStreak>("wait")
+      const notification = await read<NotificationMarker>("notification")
+      const counter = await read<{ count: number }>("unread")
+      const sequence = await read<{ next: number }>("seq")
+      if (presence) result.presences[agent] = presence
+      if (streak) result.streaks[agent] = streak
+      if (notification) result.notifications[agent] = notification
+      if (counter) result.counters[agent] = counter
+      if (sequence) result.sequenceCounters[agent] = sequence
+    }
+    const version = await this.schemaVersion()
+    if (version !== undefined) result.ledger = { version }
+    return result
   }
 
   async send(from: string, recipients: string[], body: string, options: SendOptions): Promise<SendResult> {

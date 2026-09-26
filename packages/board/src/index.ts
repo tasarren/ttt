@@ -1,6 +1,7 @@
 export { Board } from "./board.ts"
 export type {
   BoardOptions,
+  BoardObservation,
   CancelResult,
   InboxSummary,
   NotificationSummary,
@@ -28,3 +29,4 @@ export {
 export type { Actor, BoardMessage, MessageReceipt, NotificationMarker, Presence, WaitStreak } from "./model.ts"
 export type { LockOptions } from "./store.ts"
 export { isErrno } from "./store.ts"
+export { withDirectoryLock } from "./store.ts"

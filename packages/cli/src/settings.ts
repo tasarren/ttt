@@ -69,7 +69,7 @@ export async function resolveSettings(env: NodeJS.ProcessEnv = process.env): Pro
   return { ...settings, currentPane: env["TMUX_PANE"], path: env["PATH"] }
 }
 
-async function readSettingsFile(home: string): Promise<{ file: string; text: string } | undefined> {
+export async function readSettingsFile(home: string): Promise<{ file: string; text: string } | undefined> {
   for (const name of SETTINGS_FILES) {
     const file = join(home, name)
     try {
@@ -81,7 +81,7 @@ async function readSettingsFile(home: string): Promise<{ file: string; text: str
   return undefined
 }
 
-function applySettings(defaults: Settings, file: string, text: string): Settings {
+export function applySettings(defaults: Settings, file: string, text: string): Settings {
   const errors: ParseError[] = []
   const raw: unknown = parse(text, errors, { allowTrailingComma: true })
   if (errors[0]) {

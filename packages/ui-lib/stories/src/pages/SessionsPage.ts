@@ -50,6 +50,14 @@ export const SessionsPage = defineComponent({
           panes: window.panes, selected: pane.pane, geometry: p.snapshot.geometry[window.id], captures: p.snapshot.captures, onSelect: (id: string) => {
             selection.value = id
           },
+        }),
+      ]), inspector(`Pane ${pane.pane}`, [
+        h(TBadge, {
+          value: pane.agent || "Helper pane", tone: pane.agent ? "sage" : "lavender",
+        }), h(PaneInspector, {
+          pane,
+        }), h(TInspector, {
+          items: [{ label: "Session ID", value: session.id }, { label: "Attached", value: session.attached }, { label: "Group", value: session.group }],
         }), h(TSurface, {
           title: "Window panes", padded: false,
         }, () => h(PaneTable, {
@@ -66,13 +74,7 @@ export const SessionsPage = defineComponent({
               ...window, panes: undefined,
             }, sessionRecord: p.snapshot.sessionRecords.find(s => s.session === session.name), panesView: p.snapshot.panesViews.find(v => v.id === window.id),
           },
-        })),
-      ]), inspector(`Pane ${pane.pane}`, [
-        h(TBadge, {
-          value: pane.agent || "Helper pane", tone: pane.agent ? "sage" : "lavender",
-        }), h(PaneInspector, {
-          pane,
-        }), h("p", {
+        })), h("p", {
           class: "small dim",
         }, "Terminal output shown here is a demo capture. Runtime control needs a host adapter; this viewer does not execute commands."),
       ]), h("div", [
@@ -80,18 +82,6 @@ export const SessionsPage = defineComponent({
           sessions: p.snapshot.sessions, selected: pane.pane, onSelect: (id: string) => {
             selection.value = id
           },
-        }), h("div", {
-          class: "t-sidebar-group",
-        }, "Selected session"), h(TInspector, {
-          items: [
-            {
-              label: "id", value: session.id,
-            }, {
-              label: "attached", value: session.attached,
-            }, {
-              label: "group", value: session.group,
-            },
-          ],
         }),
       ]))
     }

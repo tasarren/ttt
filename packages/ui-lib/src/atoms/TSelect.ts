@@ -16,6 +16,6 @@ export const TSelect = defineComponent({
   }, setup: (p, { emit }) => () => h("select", {
     class: "t-select", value: p.modelValue, onChange: (e: Event) => { emit("update:modelValue", (e.target as HTMLSelectElement).value) },
   }, p.options.map(o => h("option", {
-    key: o.value, value: o.value, disabled: o.disabled,
+    key: o.value, value: o.value, selected: o.value === p.modelValue, disabled: o.disabled,
   }, o.label))),
 })

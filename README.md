@@ -74,6 +74,35 @@ pnpm run check
 
 See [UI library usage](packages/ui-lib/README.md) and [component API](packages/ui-lib/docs/COMPONENT_API.md).
 
+## Local Webapp
+
+Desktop Webapp uses Hono SSR, Vue, Pinia, Vue Router, and the `@ttt/ui` library.
+Run from this checkout:
+
+```sh
+pnpm web                  # development, http://127.0.0.1:3000
+pnpm build
+pnpm web:start            # built client and SSR renderer, same address
+```
+
+Boards, threads, receipts, waiting agents, sessions, layouts, activity, projects, diagnostics,
+and settings use real local data. History loads in pages of 50. Viewing mail never marks it read,
+settles expiry, or changes board files. Files remain in their existing locations; SQLite is deferred.
+
+SSE refreshes state after changes. xterm.js shows every pane in the selected window through tmux
+control mode; leaving Sessions, switching windows, or hiding the browser stops that stream.
+Click a pane to type into it. Input refuses dead panes and synchronized windows. Terminal dimensions
+follow tmux; browser size changes scale the view without resizing another tmux client's panes.
+
+Sessions supports opening panes/windows, closing and renaming windows, interrupting/respawning
+agents, and saving/restoring layouts. Details opens a right sidebar for pane metadata and source.
+Settings/layout edits preserve JSONC comments and reject a save if the file changed since loading.
+Changes run through the existing CLI validation and tmux controls. The server binds localhost only;
+writes require the same origin and a per-process request token.
+
+See [Webapp API spec](packages/webapp/openapi.json), [domain JSON Schema](docs/ttt-system.schema.json),
+and [Webapp development](packages/webapp/README.md).
+
 ## Quick start
 
 Two windows, `A` and `B`, in one tmux session. `A` has something to say, `B` reads it, acks it, and

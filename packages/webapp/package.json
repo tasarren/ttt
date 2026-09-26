@@ -1,0 +1,29 @@
+{
+  "name": "@ttt/webapp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/protocol.ts"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @ttt/ui build && node ../cli/src/web.ts --dev",
+    "start": "node ../cli/src/web.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "vite build && vite build --ssr src/ssr.ts --outDir dist/server",
+    "test": "node --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@ttt/ui": "workspace:*",
+    "vue": "catalog:ui",
+    "@vue/server-renderer": "catalog:web",
+    "pinia": "catalog:web",
+    "vue-router": "catalog:web",
+    "@xterm/xterm": "catalog:ui"
+  },
+  "devDependencies": {
+    "vite": "catalog:web",
+    "ajv": "catalog:ui",
+    "ajv-formats": "catalog:ui"
+  }
+}

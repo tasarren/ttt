@@ -375,6 +375,7 @@ Hierarchical context navigator with local selection and keyboard controls.
 ```ts
   nodes: { type: Array as PropType<readonly EntityNode[]>, required: true }
   selected: String as PropType<string | undefined>
+  contextIds: { type: Array as PropType<readonly string[]>, default: () => [] }
   label: { type: String, default: "Items" }
 ```
 
@@ -830,6 +831,7 @@ Typed optional settings and JSONC editing, explicit overrides, validation and sa
 
 ```ts
   modelValue: { type: Object as PropType<SettingsFile>, required: true }
+  source: String
   shippedHarnesses: { type: Array as PropType<readonly string[]> }
 ```
 
@@ -837,7 +839,9 @@ Typed optional settings and JSONC editing, explicit overrides, validation and sa
 
 ```ts
 {
-    "update:modelValue": (_v: SettingsFile) => true, save: (_v: SettingsFile) => true
+    "update:modelValue": (_v: SettingsFile) => true,
+    save: (_v: SettingsFile, _source: string) => true,
+    dirty: (_value: boolean) => true
   }
 ```
 
@@ -879,6 +883,7 @@ Root-subject thread rows built from append-ordered indexes and available message
   threads: { type: Object as PropType<Record<string, string[]>>, required: true }
   query: { type: String, default: "" }
   urgent: Boolean
+  summaryOnly: Boolean
   selected: String
 ```
 
@@ -928,7 +933,7 @@ Blocked --wait process and recorded wait streak; absence is not offline.
 
 ### AppShell
 
-Responsive top bar, context navigation, reading region and inspector template.
+Top bar, context navigation, reading region and toggled right details sidebar.
 
 [Source](../src/templates/AppShell.ts) · [Story](../stories/src/stories/AppShell.story.vue)
 
@@ -943,5 +948,9 @@ Responsive top bar, context navigation, reading region and inspector template.
 ## Composition and persistence
 
 `LayoutEditor` and `SettingsForm` keep local drafts and emit explicit save events. The host owns persistent writes and rejection handling. Story previews use sample drafts and never execute tmux actions. `TEntityTree`/`SessionTree` selection is local UI state, separate from runtime `active` flags.
+
+Pass raw JSONC `source` to editors to preserve comments. After a successful save, update their model/source
+with the persisted result; rejected saves retain the draft. `SessionTree` highlights selected session/window
+ancestors. `AppShell` opens its `inspector` slot with Details and keeps it hidden until requested.
 
 Message and receipt views expose read-only navigation and source inspection. Receipt acknowledgements are source data, never a side effect of opening the human viewer. Webapp routing and live data belong to its host.

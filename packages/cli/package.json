@@ -39,7 +39,13 @@
     "@ttt/board": "workspace:*",
     "@ttt/migrations": "workspace:*",
     "@ttt/tmux": "workspace:*",
-    "jsonc-parser": "catalog:runtime"
+    "jsonc-parser": "catalog:runtime",
+    "hono": "catalog:web",
+    "@hono/node-server": "catalog:web",
+    "@ttt/webapp": "workspace:*",
+    "@ttt/ui": "workspace:*",
+    "vite": "catalog:web",
+    "ajv": "catalog:ui"
   },
   "keywords": [
     "tmux",

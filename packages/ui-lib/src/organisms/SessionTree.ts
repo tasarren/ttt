@@ -11,6 +11,7 @@ export const SessionTree = defineComponent({
   }, emits: {
     select: (_id: string) => true,
   }, setup: (p, { emit }) => () => h(TEntityTree, {
+    contextIds: p.sessions.flatMap(session => session.windows.flatMap(window => session.id === p.selected || window.id === p.selected || window.panes.some(pane => pane.pane === p.selected) ? [session.id, window.id] : [])),
     label: "Sessions, windows and panes", ...(p.selected === undefined ? {} : { selected: p.selected }), nodes: p.sessions.map(s => ({
       id: s.id, label: s.name, count: s.windows.length, detail: s.attached ? "Attached tmux session" : "Detached tmux session", children: s.windows.map(w => ({
         id: w.id, label: `${w.index}  ${w.name}`, count: w.panes.length, children: w.panes.map(p => ({
