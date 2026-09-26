@@ -39,6 +39,7 @@ export const TMUX_USAGE = `  ttt tmux setup [--name SESSION] [--layout NAME] [--
   ttt tmux open --window NAME|auto [--harness NAME] [--ready REGEX|none] [--ready-timeout SECONDS] [--cwd DIR] [-- COMMAND]
   ttt tmux open --pane [TITLE] [--in WINDOW] [--horizontal] [--size PERCENT] [--cwd DIR] [-- COMMAND]
   ttt tmux close NAME                           ttt tmux respawn NAME [-- COMMAND]
+  ttt tmux close --pane TARGET
   ttt tmux rename OLD NEW                       (refused once OLD has a mailbox: the name is the mailbox key)
   ttt tmux type TARGET -- TEXT                  ttt tmux press TARGET KEY
   ttt tmux interrupt TARGET                     ttt tmux wait TARGET --for PATTERN [--timeout SECONDS]

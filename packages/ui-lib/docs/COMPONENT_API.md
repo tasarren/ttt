@@ -529,6 +529,7 @@ Timestamp-derived activity; not an invented durable event ledger.
 ```ts
   entries: { type: Array as PropType<readonly TimelineEntry[]>, required: true }
   compact: Boolean
+  detailsOpen: { type: Boolean, default: undefined }
 ```
 
 **Declared events**
@@ -906,6 +907,7 @@ Append-ordered agent conversation with parent links and non-disruptive live inse
 ```ts
   messages: { type: Array as PropType<readonly BoardMessage[]>, required: true }
   index: { type: Array as PropType<readonly string[]>, required: true }
+  pageScroll: Boolean
 ```
 
 **Declared events**
@@ -944,6 +946,9 @@ Top bar, context navigation, reading region and toggled right details sidebar.
 ```
 
 **Slots:** `topbar`, `sidebar`, `default`, `inspector`. Scoped slot arguments are visible in the source and story.
+
+Optional `detailsOpen` model lets pane controls open the same sidebar. `update:detailsOpen` emits
+when the user toggles or closes it. Without the model, the shell keeps its own local state.
 
 ## Composition and persistence
 

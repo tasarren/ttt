@@ -72,6 +72,18 @@ after(async() => {
   await rm(home, { recursive: true, force: true })
 })
 
+test("close --pane closes only the target pane and rejects another session's pane", async() => {
+  const pane = (await tmux("split-window", "-d", "-t", panes["B"]!, "-P", "-F", "#{pane_id}", "sh")).trim()
+  assert.match(await ttt("A", "tmux", "close", "--pane", pane), new RegExp(`closed pane ${pane} in B`))
+  assert.match(await tmux("list-panes", "-t", `${SESSION}:B`, "-F", "#{pane_id}"), new RegExp(panes["B"]!))
+  await tmux("new-session", "-d", "-s", "other", "sh")
+  try {
+    const other = (await tmux("display-message", "-p", "-t", "other", "#{pane_id}")).trim()
+    await assert.rejects(ttt("A", "tmux", "close", "--pane", other), /is not in session work/)
+    await assert.rejects(ttt("A", "tmux", "close", "--pane", panes["A"]!), /refusing to close the pane/)
+  } finally { await tmux("kill-session", "-t", "other") }
+})
+
 test("normal send: queued, one batched notification, read, ack, status, thread", async() => {
   const queued = await ttt("A", "send", "B", "--", "hello from A")
   const id = /^queued (ttt-\S+) -> B \(notify in ~1s\)$/.exec(queued)?.[1]

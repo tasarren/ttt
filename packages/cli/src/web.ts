@@ -12,12 +12,12 @@ import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import { StringDecoder } from "node:string_decoder"
 import { Board, assertName, isErrno, withDirectoryLock } from "@ttt/board"
-import type { BoardObservation } from "@ttt/board"
+import type { BoardObservation, MessageReceipt } from "@ttt/board"
 import { Tmux, ControlClient, OptionScope, createRunner } from "@ttt/tmux"
 import type { TmuxServer } from "@ttt/tmux"
-import { parseJsonc, validateContract } from "@ttt/ui"
-import type { LayoutFile, SettingsFile, InboxSummary } from "@ttt/ui"
-import { WebAction, ACTION_SCHEMA, SOURCE_WRITE_SCHEMA, INPUT_SCHEMA, serializeState } from "@ttt/webapp"
+import { parseJsonc, validateContract, timeline, receiptStates } from "@ttt/ui"
+import type { LayoutFile, SettingsFile, InboxSummary, TimelineEntry } from "@ttt/ui"
+import { WebAction, ACTION_SCHEMA, SOURCE_WRITE_SCHEMA, INPUT_SCHEMA, serializeState, boardViews } from "@ttt/webapp"
 import type { ActionRequest, WebState, TerminalEvent, SourceDocument } from "@ttt/webapp"
 import { resolveSettings, readSettingsFile, applySettings, defaultSettings } from "./settings.ts"
 import type { Settings } from "./settings.ts"
@@ -78,7 +78,7 @@ export async function createWebApp(initialSettings?: Settings, server: TmuxServe
     const boardNames = names.filter(entry => entry.isDirectory() && /^[A-Za-z0-9_-]+$/.test(entry.name)).map(entry => entry.name).sort()
     const sessions = await Promise.all((await tmux.inventory.listSessions()).map(session => tmux.inventory.tree(session.name).catch(() => undefined)))
     const live = sessions.filter((session): session is NonNullable<typeof session> => session !== undefined)
-    const selected = segments[1] || (pageName === "sessions" ? live[0]?.name : boardNames[0]) || live[0]?.name
+    const selected = segments[1] || (["sessions", "activity"].includes(pageName) ? live[0]?.name : boardNames[0]) || boardNames[0]
     let board: WebState["board"] = null
     const offset = Math.max(0, Number(url.searchParams.get("offset") || 0))
     if (!Number.isSafeInteger(offset)) throw new Error("Invalid page offset")
@@ -97,17 +97,44 @@ export async function createWebApp(initialSettings?: Settings, server: TmuxServe
       const validReceipts = source.receipts.filter(value => validateContract("MessageReceipt", value).length === 0)
       const ordered = [...validMessages].sort((a, b) => b.timestamp.localeCompare(a.timestamp) || b.messageId.localeCompare(a.messageId))
       let messages = ordered.slice(offset, offset + limit)
+      let receipts: MessageReceipt[] | undefined
+      let activity: TimelineEntry[] = []
       total = ordered.length
       if (pageName === "boards") {
+        const view = url.searchParams.get("view") ?? "all"
+        if (!boardViews.some(mode => mode.value === view)) throw new Error("Invalid board view")
+        const receiptState = url.searchParams.get("state") ?? ""
+        if (receiptState && !receiptStates.some(state => state === receiptState)) throw new Error("Invalid receipt state")
         const query = (url.searchParams.get("q") ?? "").toLowerCase()
         const matching = new Set(ordered.filter(message => `${message.body} ${message.subject ?? ""} ${message.from} ${message.recipients.join(" ")}`.toLowerCase().includes(query)).map(message => message.threadId))
         const urgent = new Set(ordered.filter(message => message.priority === "urgent").map(message => message.threadId))
-        const threads = [...new Set(ordered.map(message => message.threadId))].filter(id => matching.has(id) && (url.searchParams.get("urgent") !== "1" || urgent.has(id)))
+        const messageThreads = new Map(validMessages.map(message => [message.messageId, message.threadId]))
+        const withState = new Set(validReceipts.filter(receipt => receipt.state === receiptState).map(receipt => messageThreads.get(receipt.messageId)))
+        const threads = [...new Set(ordered.map(message => message.threadId))].filter(id => matching.has(id)
+          && (url.searchParams.get("urgent") !== "1" || urgent.has(id))
+          && (!receiptState || withState.has(id))
+          && (view !== "threads" || (source.threads[id]?.length ?? 1) > 1)
+          && (view !== "standalone" || (source.threads[id]?.length ?? 1) === 1))
         total = threads.length
         const ids = threads.slice(offset, offset + limit)
         const visible = new Set(ids)
         for (const id of ids) { const last = ordered.find(message => message.threadId === id); if (last) visible.add(last.messageId) }
         messages = ordered.filter(message => visible.has(message.messageId))
+        if (view === "acknowledgements") {
+          const byId = new Map(validMessages.map(message => [message.messageId, message]))
+          const acks = validReceipts.filter(receipt => receipt.state === "acked" && (!receiptState || receiptState === "acked") && (url.searchParams.get("urgent") !== "1" || byId.get(receipt.messageId)?.priority === "urgent") && `${receipt.recipient} ${receipt.ackNote ?? ""} ${byId.get(receipt.messageId)?.body ?? ""} ${byId.get(receipt.messageId)?.subject ?? ""}`.toLowerCase().includes(query))
+            .sort((a, b) => (b.ackedAt ?? b.enqueuedAt).localeCompare(a.ackedAt ?? a.enqueuedAt) || a.messageId.localeCompare(b.messageId))
+          total = acks.length
+          receipts = acks.slice(offset, offset + limit)
+          const ids = new Set(receipts.map(receipt => receipt.messageId))
+          messages = validMessages.filter(message => ids.has(message.messageId))
+        }
+      } else if (pageName === "activity") {
+        const entries = timeline(validMessages, validReceipts).reverse()
+        total = entries.length
+        activity = entries.slice(offset, offset + limit)
+        messages = []
+        receipts = []
       } else if (pageName === "threads" && segments[2]) {
         const index = source.threads[segments[2]] ?? []
         total = index.length
@@ -122,7 +149,7 @@ export async function createWebApp(initialSettings?: Settings, server: TmuxServe
         summary[receipt.state]++
         summaries[receipt.recipient] = summary
       }
-      board = { ...source, name: selected, messages, summaries, receipts: validReceipts.filter(receipt => ids.has(receipt.messageId)), threads: Object.fromEntries([...threadIds].map(id => [id, source.threads[id] ?? []])) }
+      board = { ...source, name: selected, messages, summaries, activity, receipts: receipts ?? validReceipts.filter(receipt => ids.has(receipt.messageId)), threads: Object.fromEntries([...threadIds].map(id => [id, source.threads[id] ?? []])) }
     }
     const layouts: WebState["layouts"] = {}
     for (const name of await listLayouts(settings.home)) {
@@ -308,6 +335,7 @@ export function actionArgs(input: ActionRequest): string[] {
     case WebAction.OpenWindow: case WebAction.OpenPane:
       return ["open", ...(input.action === WebAction.OpenWindow ? ["--window", input.name || "auto"] : ["--pane", ...(input.name ? [input.name] : input.harness ? [] : [""]), "--in", required(input.target, "window")]), ...(input.harness ? ["--harness", input.harness] : []), ...(input.cwd ? ["--cwd", input.cwd] : []), ...(input.horizontal ? ["--horizontal"] : []), ...(input.command ? ["--", input.command] : [])]
     case WebAction.Close: case WebAction.Respawn: case WebAction.Interrupt: return [input.action, required(input.target, "target")]
+    case WebAction.ClosePane: return ["close", "--pane", required(input.target, "pane")]
     case WebAction.Rename: return ["rename", required(input.target, "target"), required(input.name, "name")]
     case WebAction.Save: return ["save", required(input.name, "layout name")]
     case WebAction.Restore: return ["restore", required(input.name, "layout name"), "--as", input.session]

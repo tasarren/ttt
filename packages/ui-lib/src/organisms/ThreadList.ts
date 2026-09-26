@@ -30,7 +30,7 @@ export const ThreadList = defineComponent({
         h("div", {
           class: "row between",
         }, [
-          h("h3", t.root ? t.root.subject || "Untitled thread" : "Root message not recorded"), t.root?.priority === "urgent" ? h(TBadge, {
+          h("h3", t.root ? t.root.subject || t.root.body.split("\n").find(Boolean)?.slice(0, 90) || "Message" : "Root message not recorded"), t.root?.priority === "urgent" ? h(TBadge, {
             value: "urgent",
           }) : null,
         ]), h("p", t.root?.body.slice(0, 140) || "Available replies can still be inspected."), h("div", {
@@ -41,7 +41,9 @@ export const ThreadList = defineComponent({
               gap: "14px",
             },
           }, [
-            h("span", `${t.count} messages`), !p.summaryOnly && t.missing.length ? h(TBadge, {
+            h(TBadge, { value: t.count === 1 ? "Standalone" : "Thread", tone: t.count === 1 ? "neutral" : "lavender" }),
+            t.root?.kind === "broadcast" ? h(TBadge, { value: "broadcast" }) : null,
+            h("span", `${t.count} ${t.count === 1 ? "message" : "messages"}`), !p.summaryOnly && t.missing.length ? h(TBadge, {
               tone: "amber", value: `${t.missing.length} not recorded`,
             }) : null, t.last ? h(TTimestamp, {
               value: t.last.timestamp,

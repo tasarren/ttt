@@ -8,7 +8,7 @@ import type { HarnessSettings, ResolvedHarness } from "../../harnesses.ts"
 import type { TmuxVerb, TmuxVerbContext } from "../../tmux-context.ts"
 import { checkWindowName, generateSeatName, generateWindowName, mailboxNames } from "./names.ts"
 import { FURNITURE_STEM } from "./normalize-window.ts"
-import { requireSession, resolveAgentTarget } from "./target.ts"
+import { requireSession, resolveAgentTarget, resolvePaneTarget } from "./target.ts"
 
 const OPEN_OPTIONS = {
   window: { type: "string" },
@@ -242,11 +242,18 @@ export const split: TmuxVerb = async(argv, ctx) => {
 
 const SPLIT_OPTIONS = { horizontal: { type: "boolean", default: false }, size: { type: "string" }, cwd: { type: "string" } } as const
 
-/** `ttt tmux close NAME`: kills the whole window, teammate or furniture; the mailbox on disk is untouched. */
+/** Close a window or one explicitly targeted pane; the mailbox on disk is untouched. */
 export const close: TmuxVerb = async(argv, ctx) => {
-  const { positionals } = parseCommandArgs(argv, {} as const)
+  const { values, positionals } = parseCommandArgs(argv, { pane: { type: "boolean", default: false } } as const)
   const [name, ...extra] = positionals
-  if (name === undefined || extra.length > 0) throw usageError("usage: ttt tmux close NAME")
+  if (name === undefined || extra.length > 0) throw usageError("usage: ttt tmux close NAME | close --pane TARGET")
+  if (values.pane) {
+    const target = await resolvePaneTarget(ctx, name)
+    if (ctx.self?.paneId === target.paneId) throw new CliError("refusing to close the pane this command runs in")
+    await ctx.tmux.panes.kill(target.paneId)
+    process.stdout.write(`closed pane ${target.paneId} in ${target.window.name}\n`)
+    return
+  }
   const session = requireSession(ctx)
   const window = await ctx.tmux.windows.find(session, name)
   if (!window) throw new CliError(`tmux window does not exist: ${session}:${name}`)

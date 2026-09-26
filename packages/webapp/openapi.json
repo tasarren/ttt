@@ -20,7 +20,8 @@
             "in": "query",
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Webapp route, including offset, q, urgent, receipt state, and view (all, threads, standalone, acknowledgements). Activity uses /activity/{session} and pages recorded events."
           }
         ],
         "responses": {
@@ -249,6 +250,7 @@
               "open-window",
               "open-pane",
               "close",
+              "close-pane",
               "rename",
               "respawn",
               "interrupt",
@@ -490,7 +492,8 @@
           "notifications",
           "counters",
           "sequenceCounters",
-          "summaries"
+          "summaries",
+          "activity"
         ],
         "properties": {
           "name": {
@@ -552,6 +555,12 @@
           },
           "ledger": {
             "$ref": "../../docs/ttt-system.schema.json#/$defs/SchemaLedger"
+          },
+          "activity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelineEntry"
+            }
           }
         }
       },
@@ -591,6 +600,38 @@
             "type": "string"
           },
           "etag": {
+            "type": "string"
+          }
+        }
+      },
+      "TimelineEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "timestamp",
+          "type",
+          "actor",
+          "messageId",
+          "detail"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "timestamp": {
+            "$ref": "../../docs/ttt-system.schema.json#/$defs/Timestamp"
+          },
+          "type": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "messageId": {
+            "$ref": "../../docs/ttt-system.schema.json#/$defs/MessageId"
+          },
+          "detail": {
             "type": "string"
           }
         }

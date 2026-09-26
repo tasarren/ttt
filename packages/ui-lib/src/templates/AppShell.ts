@@ -1,12 +1,16 @@
-import { defineComponent, h, ref } from "vue"
+import { defineComponent, h, ref, computed } from "vue"
 import { TButton } from "../atoms/TButton.ts"
 
 export const AppShell = defineComponent({
   name: "AppShell", props: {
-    compact: Boolean,
-  }, setup(p, { slots }) {
+    compact: Boolean, detailsOpen: { type: Boolean, default: undefined },
+  }, emits: { "update:detailsOpen": (_value: boolean) => true }, setup(p, { slots, emit }) {
     const contextOpen = ref(false)
-    const detailsOpen = ref(false)
+    const localDetailsOpen = ref(false)
+    const detailsOpen = computed({
+      get: () => p.detailsOpen ?? localDetailsOpen.value,
+      set: (value: boolean) => { localDetailsOpen.value = value; emit("update:detailsOpen", value) },
+    })
     return () => h("div", {
       class: "ttt t-shell", "data-density": p.compact ? "compact" : "comfortable",
     }, [

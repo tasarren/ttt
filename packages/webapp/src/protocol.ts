@@ -1,6 +1,11 @@
 import api from "../openapi.json" with { type: "json" }
 import { validateContract } from "@ttt/ui"
-import type { BoardMessage, MessageReceipt, Presence, WaitStreak, NotificationMarker, UnreadCounter, SequenceCounter, SchemaLedger, ThreadIndex, TreeSession, SettingsFile, LayoutFile, DoctorFinding, InboxSummary } from "@ttt/ui"
+import type { BoardMessage, MessageReceipt, Presence, WaitStreak, NotificationMarker, UnreadCounter, SequenceCounter, SchemaLedger, ThreadIndex, TreeSession, SettingsFile, LayoutFile, DoctorFinding, InboxSummary, TimelineEntry } from "@ttt/ui"
+
+export const boardViews = [
+  { value: "all", label: "All" }, { value: "threads", label: "Threads" },
+  { value: "standalone", label: "Standalone" }, { value: "acknowledgements", label: "Acknowledgements" },
+] as const
 
 export interface BoardView {
   name: string
@@ -13,6 +18,7 @@ export interface BoardView {
   counters: Record<string, UnreadCounter>
   sequenceCounters: Record<string, SequenceCounter>
   summaries: Record<string, InboxSummary>
+  activity: TimelineEntry[]
   ledger?: SchemaLedger
 }
 export interface SourceDocument<T> { value: T; source: string; etag: string }
@@ -35,7 +41,7 @@ export type TerminalEvent =
   | { type: "output"; pane: string; epoch: number; text: string }
   | { type: "error"; message: string }
 export const WebAction = {
-  OpenWindow: "open-window", OpenPane: "open-pane", Close: "close", Rename: "rename", Respawn: "respawn", Interrupt: "interrupt", Save: "save", Restore: "restore", Setup: "setup",
+  OpenWindow: "open-window", OpenPane: "open-pane", Close: "close", ClosePane: "close-pane", Rename: "rename", Respawn: "respawn", Interrupt: "interrupt", Save: "save", Restore: "restore", Setup: "setup",
 } as const
 export type WebAction = (typeof WebAction)[keyof typeof WebAction]
 export interface ActionRequest { action: WebAction; session: string; target?: string; name?: string; harness?: string; command?: string; cwd?: string; horizontal?: boolean }
@@ -72,6 +78,7 @@ export function isWebState(value: unknown): value is WebState {
   const board = value["board"]
   if (board === null) return true
   if (!record(board) || !validRecord("Name", board["name"]) || !Array.isArray(board["messages"]) || !board["messages"].every((item: unknown) => validRecord("BoardMessage", item)) || !Array.isArray(board["receipts"]) || !board["receipts"].every((item: unknown) => validRecord("MessageReceipt", item))) return false
+  if (!Array.isArray(board["activity"]) || !board["activity"].every((entry: unknown) => record(entry) && ["id", "timestamp", "type", "actor", "messageId", "detail"].every(key => typeof entry[key] === "string"))) return false
   return map(board["threads"], "ThreadIndex") && map(board["presences"], "Presence") && map(board["streaks"], "WaitStreak") && map(board["notifications"], "NotificationMarker") && map(board["counters"], "UnreadCounter") && map(board["sequenceCounters"], "SequenceCounter") && map(board["summaries"], "InboxSummary") && (board["ledger"] === undefined || validRecord("SchemaLedger", board["ledger"]))
 }
 

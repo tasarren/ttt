@@ -33,6 +33,13 @@ deleted, or marked read. A persistent SQLite archive/FTS replica can replace sca
 ANSI snapshots before output, preserves UTF-8 across chunks, and closes on navigation or hidden tabs.
 xterm retains tmux dimensions and scales text to fit; it does not resize tmux. Slow terminal streams
 close after 4 MB of queued events and reconnect for a fresh snapshot.
+Pane fonts use actual rendered cell width. Each pane scrolls independently when its rows exceed the
+panel height. Pane headers open Details or close that pane through `ttt tmux close --pane TARGET`.
+
+Board `view` selects all conversations, threads with replies, standalone messages, or acknowledged
+receipts. `q`, `urgent`, and receipt `state` filters apply before paging. Acknowledgements use receipt
+data, not text heuristics. `/activity/{session}` pages 50 derived events, newest first, and opening an
+event navigates to its message. Archived session names remain selectable alongside live sessions.
 
 Writes use same-origin requests plus `X-TTT-Token`. Settings/layout writes include their loaded ETag;
 stale or concurrent saves return 409. JSONC source survives round trips, including comments. Terminal

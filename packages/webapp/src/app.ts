@@ -2,11 +2,11 @@ import { createSSRApp, defineComponent, h, ref, computed, onMounted, onBeforeUnm
 import type { PropType } from "vue"
 import { createPinia, defineStore } from "pinia"
 import { createRouter, createMemoryHistory, createWebHistory, RouterView, useRoute, useRouter, onBeforeRouteUpdate } from "vue-router"
-import { AppShell, TTopBar, TButton, TNotice, TEntityTree, SessionTree, PaneInspector, PaneTable, TInspector, TSourceViewer, TDisclosure, ThreadList, ThreadReader, MessageCard, ReceiptTable, LayoutEditor, SettingsForm, DoctorReport, TSearch, TCheckbox, TSelect, MailboxSummary, WaitingPresence, ActivityTimeline, timeline, groupProjects, TSurface  } from "@ttt/ui"
+import { AppShell, TTopBar, TButton, TNotice, TEntityTree, SessionTree, PaneInspector, PaneTable, TInspector, TSourceViewer, TDisclosure, ThreadList, ThreadReader, MessageCard, ReceiptTable, LayoutEditor, SettingsForm, DoctorReport, TSearch, TCheckbox, TSelect, TTabs, MailboxSummary, WaitingPresence, ActivityTimeline, timeline, groupProjects, TSurface, receiptStates } from "@ttt/ui"
 import type { LayoutFile, SettingsFile } from "@ttt/ui"
 import type { WebState, ActionRequest, SourceDocument } from "./protocol.ts"
 import { LiveWindow } from "./terminal.ts"
-import { responseError, isWebState } from "./protocol.ts"
+import { responseError, isWebState, boardViews } from "./protocol.ts"
 
 const nav = [
   { id: "boards", label: "Boards", href: "/boards" },
@@ -48,12 +48,15 @@ const WebPage = defineComponent({
     const router = useRouter()
     const active = computed(() => route.path.split("/")[1] || "boards")
     const selectedPane = ref("")
+    const detailsOpen = ref(false)
     const selectedWindow = ref("")
     const pending = ref("")
     const message = ref("")
     const query = ref(String(route.query["q"] ?? ""))
     const urgent = ref(route.query["urgent"] === "1")
-    watch(() => route.query, value => { query.value = String(value["q"] ?? ""); urgent.value = value["urgent"] === "1" })
+    const receiptState = ref(String(route.query["state"] ?? ""))
+    const boardView = computed(() => String(route.query["view"] ?? "all"))
+    watch(() => route.query, value => { query.value = String(value["q"] ?? ""); urgent.value = value["urgent"] === "1"; receiptState.value = String(value["state"] ?? "") })
     const harness = ref(p.store.state.harnesses.includes("opencode2") ? "opencode2" : "")
     const settingsBase = ref(p.store.state.settings)
     const settingsDirty = ref(false)
@@ -73,7 +76,11 @@ const WebPage = defineComponent({
     })
     let requestNumber = 0
     const boardName = computed(() => route.path.split("/")[2] || p.store.state.boards[0]?.name || "")
-    const session = computed(() => p.store.state.sessions.find(item => item.name === (route.path.split("/")[2] || "")) ?? p.store.state.sessions.find(item => item.windows.some(window => window.id === selectedWindow.value)) ?? p.store.state.sessions[0])
+    const session = computed(() => {
+      const name = active.value === "sessions" ? route.path.split("/")[2] : undefined
+      if (name) return p.store.state.sessions.find(item => item.name === name)
+      return p.store.state.sessions.find(item => item.windows.some(window => window.id === selectedWindow.value)) ?? p.store.state.sessions[0]
+    })
     const window = computed(() => session.value?.windows.find(item => item.id === selectedWindow.value) ?? session.value?.windows[0])
     const pane = computed(() => window.value?.panes.find(item => item.pane === selectedPane.value) ?? window.value?.panes[0])
     watch(() => window.value?.id, () => { if (window.value) { selectedWindow.value = window.value.id; selectedPane.value = window.value.panes[0]?.pane ?? "" } }, { immediate: true })
@@ -104,7 +111,7 @@ const WebPage = defineComponent({
       finally { pending.value = "" }
     }
     function action(request: ActionRequest) { void mutate("/api/actions", request) }
-    function filter() { void router.replace({ path: route.path, query: { ...(query.value ? { q: query.value } : {}), ...(urgent.value ? { urgent: "1" } : {}) } }) }
+    function filter() { void router.replace({ path: route.path, query: { view: boardView.value, ...(query.value ? { q: query.value } : {}), ...(urgent.value ? { urgent: "1" } : {}), ...(receiptState.value ? { state: receiptState.value } : {}) } }) }
     async function newLayout() {
       const name = prompt("Layout name")
       if (!name || !/^[A-Za-z0-9_-]+$/.test(name)) return
@@ -132,7 +139,9 @@ const WebPage = defineComponent({
           const match = state.sessions.flatMap(session => session.windows.map(window => ({ session, window }))).find(item => item.session.id === id || item.window.id === id || item.window.panes.some(pane => pane.pane === id))
           if (match) { selectedWindow.value = match.window.id; selectedPane.value = id.startsWith("%") ? id : match.window.panes[0]?.pane ?? ""; void router.push(`/sessions/${match.session.name}`) }
         } }),
-      ]) : ["boards", "threads", "messages", "agents", "activity"].includes(active.value) ? h("div", [
+      ]) : active.value === "activity" ? h("div", [
+        h("h2", "Sessions"), h(TEntityTree, { nodes: [...new Set([...state.sessions.map(session => session.name), ...state.boards.map(board => board.name)])].map(name => ({ id: name, label: name })), selected: state.board?.name ?? boardName.value, onSelect: (name: string) => { void router.push(`/activity/${name}`) } }),
+      ]) : ["boards", "threads", "messages", "agents"].includes(active.value) ? h("div", [
         h("h2", "Boards"), h(TEntityTree, { nodes: state.boards.map(board => ({ id: board.name, label: board.name })), selected: boardName.value, onSelect: (id: string) => { void router.push(`/boards/${id}`) } }),
       ]) : active.value === "layouts" ? h("div", [h("h2", "Layouts"), h(TEntityTree, { nodes: Object.keys(state.layouts).map(name => ({ id: name, label: name })), selected: route.path.split("/")[2] ?? Object.keys(state.layouts)[0], onSelect: (name: string) => { void router.push(`/layouts/${name}`) } }), h(TButton, { onClick: () => { void newLayout() } }, () => "New layout")]) : h("div", [h("h2", `${active.value[0]?.toUpperCase() ?? ""}${active.value.slice(1)}`)])
       let main
@@ -142,13 +151,16 @@ const WebPage = defineComponent({
         else {
           const current = session.value, win = window.value
           main = h("div", { class: "stack" }, [
-            h("header", { class: "t-page-head" }, [h("div", [h("h1", `${current.name} / ${win.name}`), h("p", `${current.windows.length} windows · ${win.panes.length} panes`)]), h("div", { class: "t-toolbar" }, [
+            h("header", { class: "t-page-head" }, [h("div", [h("h1", `${current.name} / ${win.name}`), h("p", `${current.windows.length} ${current.windows.length === 1 ? "window" : "windows"} · ${win.panes.length} ${win.panes.length === 1 ? "pane" : "panes"}`)]), h("div", { class: "t-toolbar" }, [
               h(TSelect, { modelValue: harness.value, options: [{ value: "", label: "Shell" }, ...state.harnesses.map(name => ({ value: name, label: name }))], "aria-label": "Program for new panes", "onUpdate:modelValue": (value: string) => { harness.value = value } }),
               h(TButton, { disabled: !!pending.value, onClick: () => { action({ action: "open-pane", session: current.name, target: win.name, ...(harness.value ? { harness: harness.value } : {}) }) } }, () => "Open pane"),
               h(TButton, { disabled: !!pending.value, onClick: () => { action({ action: "open-window", session: current.name, ...(harness.value ? { harness: harness.value } : {}) }) } }, () => "Open window"),
               h(TButton, { intent: "danger", onClick: () => { if (confirm(`Close ${win.name}?`)) action({ action: "close", session: current.name, target: win.name }) } }, () => "Close window"),
             ])]),
-            h(LiveWindow, { session: current.name, window: win, layout: state.geometry[win.id] ?? "", token: state.token, selected: pane.value?.pane ?? "", onSelect: (id: string) => { selectedPane.value = id } }),
+            h(LiveWindow, { session: current.name, window: win, layout: state.geometry[win.id] ?? "", token: state.token, selected: pane.value?.pane ?? "", onSelect: (id: string) => { selectedPane.value = id },
+              onInspect: (id: string) => { selectedPane.value = id; detailsOpen.value = true },
+              onClose: (id: string) => { if (confirm(`Close pane ${id}? This stops its process. Closing the last pane also closes its window.`)) action({ action: "close-pane", session: current.name, target: id }) },
+            }),
           ])
           inspector = h("div", { class: "stack" }, [
             h("h2", `Pane ${pane.value?.pane ?? ""}`), pane.value ? h(PaneInspector, { pane: pane.value }) : null,
@@ -168,12 +180,16 @@ const WebPage = defineComponent({
         if (!board) main = h(TNotice, { tone: "amber" }, () => "No board data")
         else if (active.value === "threads") {
           const id = route.path.split("/")[3] ?? ""
-          main = h("div", { class: "stack" }, [h(ThreadReader, { messages: board.messages, index: (board.threads[id] ?? []).slice(state.page.offset, state.page.offset + state.page.limit), onInspect: (messageId: string) => { void router.push(`/messages/${board.name}/${messageId}`) } }), pager()])
+          const root = board.messages.find(message => message.messageId === id)
+          main = h("div", { class: "stack t-thread-page" }, [h("h1", root?.subject || root?.body.split("\n").find(Boolean)?.slice(0, 100) || "Conversation"), h(ThreadReader, { key: id, pageScroll: true, messages: board.messages, index: (board.threads[id] ?? []).slice(state.page.offset, state.page.offset + state.page.limit), onInspect: (messageId: string) => { void router.push(`/messages/${board.name}/${messageId}`) } }), pager()])
         } else if (active.value === "messages") {
           const found = board.messages[0]
           main = found ? h("div", { class: "stack" }, [h(MessageCard, { message: found }), h(ReceiptTable, { status: { message: found, receipts: board.receipts } })]) : h(TNotice, { tone: "amber" }, () => "Message not found")
         } else main = h("div", { class: "stack" }, [
-          h("h1", board.name), h("div", { class: "t-filterbar" }, [h(TSearch, { class: "grow", label: "Search board history", modelValue: query.value, "onUpdate:modelValue": (value: string) => { query.value = value }, onKeydown: (event: KeyboardEvent) => { if (event.key === "Enter") filter() } }), h(TCheckbox, { label: "Urgent only", modelValue: urgent.value, "onUpdate:modelValue": (value: boolean) => { urgent.value = value; filter() } }), h(TButton, { onClick: filter }, () => "Search")]), h(ThreadList, { summaryOnly: true, messages: board.messages, threads: board.threads, onSelect: (id: string) => { void router.push(`/threads/${board.name}/${id}`) } }),
+          h("h1", board.name), h(TTabs, { modelValue: boardView.value, tabs: boardViews, label: "Board record types", "onUpdate:modelValue": (value: string) => { void router.push({ path: route.path, query: { ...route.query, view: value, offset: 0 } }) } }),
+          h("div", { class: "t-filterbar" }, [h(TSearch, { class: "grow", label: "Search board history", modelValue: query.value, "onUpdate:modelValue": (value: string) => { query.value = value }, onKeydown: (event: KeyboardEvent) => { if (event.key === "Enter") filter() } }), h(TCheckbox, { label: "Urgent only", modelValue: urgent.value, "onUpdate:modelValue": (value: boolean) => { urgent.value = value; filter() } }),
+            h(TSelect, { class: "t-history-state", modelValue: receiptState.value, options: [{ value: "", label: "All receipt states" }, ...receiptStates.map(value => ({ value, label: value }))], "aria-label": "Receipt state", "onUpdate:modelValue": (value: string) => { receiptState.value = value; filter() } }), h(TButton, { onClick: filter }, () => "Search")]),
+          boardView.value === "acknowledgements" ? h(ActivityTimeline, { entries: timeline([], board.receipts).filter(entry => entry.type === "acked").reverse(), onInspect: (id: string) => { void router.push(`/messages/${board.name}/${id}`) } }) : h(ThreadList, { summaryOnly: true, messages: board.messages, threads: board.threads, onSelect: (id: string) => { void router.push(`/threads/${board.name}/${id}`) } }),
           pager(),
         ])
         inspector = h(TInspector, { items: [{ label: "Board", value: board?.name }, { label: "Visible messages", value: board?.messages.length }, { label: "Threads on page", value: Object.keys(board?.threads ?? {}).length }] })
@@ -182,7 +198,7 @@ const WebPage = defineComponent({
         const selected = route.path.split("/")[3] ?? Object.keys(board?.summaries ?? {})[0] ?? ""
         main = board ? h("div", { class: "stack" }, [h("h1", "Agents"), h(TEntityTree, { nodes: Object.keys(board.summaries).map(name => ({ id: name, label: name })), selected, onSelect: (name: string) => { void router.push(`/agents/${board.name}/${name}`) } }), board.summaries[selected] ? h(MailboxSummary, { summary: board.summaries[selected] }) : null, h(WaitingPresence, { presence: board.presences[selected], streak: board.streaks[selected] })]) : h(TNotice, { tone: "amber" }, () => "No board data")
       } else if (active.value === "activity") {
-        main = h("div", { class: "stack" }, [h("h1", "Activity"), h(ActivityTimeline, { entries: timeline(state.board?.messages ?? [], state.board?.receipts ?? []) }), pager()])
+        main = h("div", { class: "stack" }, [h("h1", `Activity · ${state.board?.name ?? boardName.value}`), h(ActivityTimeline, { entries: state.board?.activity ?? [], onInspect: (id: string) => { if (state.board) void router.push(`/messages/${state.board.name}/${id}`) } }), pager()])
       } else if (active.value === "projects") {
         main = h("div", { class: "stack" }, [h("h1", "Projects"), ...groupProjects(state.sessions).map(group => h(TSurface, { title: group.cwd }, () => h("div", { class: "row wrap" }, group.sessions.map(name => h(TButton, { onClick: () => { selectedWindow.value = ""; void router.push(`/sessions/${name}`) } }, () => name)))))])
       } else if (active.value === "layouts") {
@@ -198,7 +214,7 @@ const WebPage = defineComponent({
       } else if (active.value === "diagnostics") {
         main = h(DoctorReport, { findings: state.findings })
       } else main = h(TNotice, { tone: "amber" }, () => "Choose a page")
-      return h(AppShell, {}, { topbar: () => h(TTopBar, { items: nav, active: active.value, state: p.store.connection, onNavigate: (path: string) => { void router.push(path) } }), sidebar: () => sidebar, default: () => h("div", { class: "stack" }, [p.store.error ? h(TNotice, { tone: "coral" }, () => p.store.error) : null, message.value ? h(TNotice, { tone: "mint" }, () => message.value) : null, main]), inspector: () => inspector })
+      return h(AppShell, { detailsOpen: detailsOpen.value, "onUpdate:detailsOpen": (value: boolean) => { detailsOpen.value = value } }, { topbar: () => h(TTopBar, { items: nav, active: active.value, state: p.store.connection, onNavigate: (path: string) => { void router.push(path) } }), sidebar: () => sidebar, default: () => h("div", { class: "stack" }, [p.store.error ? h(TNotice, { tone: "coral" }, () => p.store.error) : null, message.value ? h(TNotice, { tone: "mint" }, () => message.value) : null, main]), inspector: () => inspector })
     }
   },
 })

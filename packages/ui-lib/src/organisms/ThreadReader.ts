@@ -1,4 +1,4 @@
-import { defineComponent, h, ref, watch, nextTick } from "vue"
+import { defineComponent, h, ref, watch, nextTick, onMounted, onBeforeUnmount } from "vue"
 import type { PropType } from "vue"
 import type { BoardMessage } from "../contracts/index.ts"
 import { orderedMessages } from "../contracts/index.ts"
@@ -12,7 +12,7 @@ export const ThreadReader = defineComponent({
       type: Array as PropType<readonly BoardMessage[]>, required: true,
     }, index: {
       type: Array as PropType<readonly string[]>, required: true,
-    },
+    }, pageScroll: Boolean,
   }, emits: {
     inspect: (_id: string) => true,
   }, setup(p, { emit }) {
@@ -20,7 +20,7 @@ export const ThreadReader = defineComponent({
     const pending = ref(0)
     const atBottom = ref(true)
     function scroll() {
-      const e = viewport.value
+      const e = p.pageScroll ? document.scrollingElement : viewport.value
       if (e)
         atBottom.value = e.scrollHeight - e.scrollTop - e.clientHeight < 60
       if (atBottom.value)
@@ -28,7 +28,8 @@ export const ThreadReader = defineComponent({
     }
     async function latest() {
       await nextTick()
-      if (viewport.value)
+      if (p.pageScroll) viewport.value?.lastElementChild?.scrollIntoView({ block: "end" })
+      else if (viewport.value)
         viewport.value.scrollTop = viewport.value.scrollHeight
       pending.value = 0
       atBottom.value = true
@@ -49,6 +50,8 @@ export const ThreadReader = defineComponent({
         block: "center",
       })
     }
+    onMounted(() => { if (p.pageScroll) window.addEventListener("scroll", scroll, { passive: true }); scroll() })
+    onBeforeUnmount(() => { if (p.pageScroll) window.removeEventListener("scroll", scroll) })
     return () => {
       const ordered = orderedMessages(p.index, p.messages)
       const missing = p.index.length - ordered.length
@@ -58,7 +61,7 @@ export const ThreadReader = defineComponent({
         missing ? h(TNotice, {
           tone: "amber",
         }, () => `${missing} message records are not available. Thread order is preserved.`) : null, h("div", {
-          ref: viewport, onScroll: scroll, class: "stack", style: {
+          ref: viewport, onScroll: scroll, class: "stack", style: p.pageScroll ? { padding: "3px" } : {
             maxHeight: "calc(100vh - 240px)", overflowY: "auto", padding: "3px",
           }, tabindex: 0, role: "region", "aria-label": "Thread conversation",
         }, ordered.length ? ordered.map(m => h(MessageCard, {
