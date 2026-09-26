@@ -34,6 +34,7 @@ test("every shipped harness preset has a command and a readiness pattern; a shel
   assert.equal(harnessPreset("sh"), undefined)
   assert.ok(harnessPreset("claude")?.ready.test("  ⏵⏵ auto mode on (shift+tab to cycle)"))
   assert.ok(harnessPreset("opencode")?.ready.test("  ┃  Ask anything... \"Fix broken tests\""))
+  assert.ok(harnessPreset("opencode2")?.ready.test("  ┃  Ask anything\u2026 \"Fix broken tests\""))
   assert.ok(harnessPreset("codex")?.ready.test("› Ask Codex to do anything"))
   assert.equal(harnessPreset("gemini"), undefined)
   assert.equal(harnessPreset("constructor"), undefined, "no prototype leakage")
@@ -50,7 +51,7 @@ test("withBareValues spells a valueless --harness as --harness= and leaves every
 
 test("parseHarnesses: shipped presets without a section; declared entries merge over presets; exactly one default", () => {
   const shipped = shippedHarnesses()
-  assert.deepEqual(Object.keys(shipped.declared), ["claude", "opencode", "codex"])
+  assert.deepEqual(Object.keys(shipped.declared), ["claude", "opencode", "opencode2", "codex"])
   assert.equal(shipped.defaultName, undefined)
   const file = "/x/settings.jsonc"
   const parsed = parseHarnesses({
@@ -68,6 +69,9 @@ test("parseHarnesses: shipped presets without a section; declared entries merge 
   assert.equal(parsed.declared["codex"]!.note, undefined, "a note about the preset's prompt is dropped with the preset regex")
   assert.equal(parsed.declared["gemini"]!.bin, "gemini")
   assert.equal(parsed.declared["claude"]!.limited, undefined, "no preset ships a limited pattern yet")
+  const opencode2 = parseHarnesses({ opencode2: { default: true } }, file)
+  assert.equal(opencode2.defaultName, "opencode2")
+  assert.equal(opencode2.declared["opencode2"]!.bin, "opencode2")
   const withLimited = parseHarnesses({ claude: { default: true, limited: "out of tokens" } }, file)
   assert.equal(withLimited.declared["claude"]!.limited!.source, "out of tokens")
   assert.ok(withLimited.declared["claude"]!.note, "a limited pattern does not drop the ready note")
@@ -80,7 +84,7 @@ test("parseHarnesses: shipped presets without a section; declared entries merge 
   }
   bad({ claude: {} }, /harnesses: 0 marked default; set harnesses\.NAME\.default to true/)
   bad({ claude: { default: true }, codex: { default: true } }, /2 marked default: claude, codex; only one may be/)
-  bad({ gemini: { default: true } }, /harnesses\.gemini\.bin is required \(no shipped preset for "gemini"; shipped: claude, opencode, codex\)/)
+  bad({ gemini: { default: true } }, /harnesses\.gemini\.bin is required \(no shipped preset for "gemini"; shipped: claude, opencode, opencode2, codex\)/)
   bad({ gemini: { bin: "gemini", default: true } }, /harnesses\.gemini\.ready is required/)
   bad({ claude: { default: true, ready: "(" } }, /harnesses\.claude\.ready is not a valid regular expression/)
   bad({ claude: { default: true, limited: "(" } }, /harnesses\.claude\.limited is not a valid regular expression/)

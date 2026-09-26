@@ -21,6 +21,7 @@ export interface HarnessPreset {
 export const Harness = {
   Claude: "claude",
   OpenCode: "opencode",
+  OpenCode2: "opencode2",
   Codex: "codex",
 } as const
 export type Harness = (typeof Harness)[keyof typeof Harness]
@@ -34,6 +35,8 @@ export const HARNESS_PRESETS: Readonly<Record<Harness, HarnessPreset>> = {
   },
   // verified on opencode v0.0.0-beta-17823, 2026-09-07: the input placeholder.
   [Harness.OpenCode]: { command: "opencode", ready: /Ask anything\.\.\./ },
+  // verified on opencode 2.0.12, 2026-09-24: the input placeholder uses an ellipsis.
+  [Harness.OpenCode2]: { command: "opencode2", ready: /Ask anything\u2026/ },
   // verified on codex-cli 0.153.4, 2026-09-07: the input placeholder, shown after the trust prompt.
   [Harness.Codex]: {
     command: "codex",

@@ -4,18 +4,13 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.24.0",
-  "engines": {
-    "node": ">=26.8.1",
-    "pnpm": ">=11.24.0"
-  },
   "scripts": {
-    "runtime:check": "node scripts/check-runtime.mjs",
     "ttt": "node packages/cli/src/ttt.ts",
-    "build": "pnpm --filter @ttt/tmux build && pnpm --filter @tasarren/ttt build",
-    "typecheck": "tsc -p tsconfig.json",
+    "build": "pnpm --filter @ttt/tmux build && pnpm --filter @tasarren/ttt build && pnpm --filter @ttt/ui build",
+    "typecheck": "tsc -p tsconfig.json && pnpm --filter @ttt/ui typecheck",
     "lint": "eslint .",
-    "test": "node --test packages/*/tests/*.test.ts",
-    "check": "pnpm run runtime:check && pnpm run version:check && pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run build",
+    "test": "node --test packages/*/tests/*.test.ts packages/ui-lib/tests/*.test.mjs",
+    "check": "pnpm run version:check && pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run build && pnpm --filter @ttt/ui build:stories",
     "version:check": "node scripts/sync-version.mjs",
     "version:sync": "node scripts/sync-version.mjs --write"
   },

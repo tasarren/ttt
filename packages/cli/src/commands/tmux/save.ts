@@ -131,7 +131,7 @@ export function descendantCommand(rows: PsRow[], panePid: number, selfPid: numbe
 /**
  * The declared harness `args` runs, if any: any non-flag token's basename against the harness
  * name or its resolved `bin` basename, case-insensitive, prefix-tolerant (`claudex` →
- * `claude`). Humans launch through wrapper scripts (`bash .../bin/codex ...`), so argv[0]
+ * `claude`); the longest match wins (`opencode2` before `opencode`). Humans launch through wrapper scripts (`bash .../bin/codex ...`), so argv[0]
  * alone is the shell. A wrong label only re-stamps `@ttt_harness` (the relaunch is always
  * the verbatim line, reviewable via `source: "tree"`).
  */
@@ -140,11 +140,18 @@ export function harnessName(args: string, harnesses: HarnessSettings): string | 
     basename(token).toLowerCase().replace(/\.[a-z0-9]+$/, ""),
   )
   if (bases.length === 0) return undefined
+  let winner: string | undefined
+  let longest = 0
   for (const [name, resolved] of Object.entries(harnesses.declared)) {
     const candidates = [name.toLowerCase(), basename(resolved.bin).toLowerCase().replace(/\.[a-z0-9]+$/, "")]
-    if (candidates.some((candidate) => candidate !== "" && bases.some((base) => base === candidate || base.startsWith(candidate)))) return name
+    for (const candidate of candidates) {
+      if (candidate.length > longest && bases.some((base) => base.startsWith(candidate))) {
+        winner = name
+        longest = candidate.length
+      }
+    }
   }
-  return undefined
+  return winner
 }
 
 /** `{ harness: name }` when the launch line runs a declared harness. */

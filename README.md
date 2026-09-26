@@ -61,6 +61,19 @@ node packages/cli/dist/ttt.mjs --help
 
 `pnpm pack` in `packages/cli` produces a tarball whose `bin` points at that file.
 
+## UI library
+
+`packages/ui-lib` is one private `@ttt/ui` workspace package. It exports Vue components, styles,
+and contract types/helpers through `@ttt/ui`. Histoire includes component variants and
+ten page previews with sample data; it does not connect to a live ttt session.
+
+```sh
+pnpm --filter @ttt/ui stories
+pnpm run check
+```
+
+See [UI library usage](packages/ui-lib/README.md) and [component API](packages/ui-lib/docs/COMPONENT_API.md).
+
 ## Quick start
 
 Two windows, `A` and `B`, in one tmux session. `A` has something to say, `B` reads it, acks it, and
@@ -232,8 +245,11 @@ errors.
 
 Optional file `~/.ttt/settings.jsonc` (or `settings.json`). Comments and trailing commas are allowed.
 Unknown keys are rejected so typos surface immediately. `TTT_HOME` moves the whole directory.
+Copy the example below to `~/.ttt/settings.jsonc` for every general setting and its default value.
+Harness presets inherit `bin` and `ready`; add either key to override it. The example selects
+`opencode2` as default; remove `harnesses` for no default.
 
-Vocabulary, stated once: a *harness* is an agent program that runs in a pane (claude, opencode,
+Vocabulary, stated once: a *harness* is an agent program that runs in a pane (claude, opencode2,
 codex, whatever the operator declares). A *shell* is what a pane runs without one. The agent
 vocabulary (agent, seat, second agent, registered, scratch window) is stated in
 [Quick start](#quick-start) and holds everywhere below.
@@ -242,7 +258,7 @@ vocabulary (agent, seat, second agent, registered, scratch window) is stated in
 {
   // seconds a normal message waits for company before the recipient is notified
   "notifySeconds": 20,
-  "notifyOverrides": { "WATCHER": 10 },   // per-window batching windows
+  "notifyOverrides": {},                  // per-window batching windows, e.g. { "WATCHER": 10 }
   "readMax": 10,
   "boardRoot": "~/.ttt/boards",
   "capture": { "lines": 40, "maxLines": 500 },
@@ -260,10 +276,10 @@ vocabulary (agent, seat, second agent, registered, scratch window) is stated in
     "badges": true          // mirror unread counts into the @ttt_unread window option
   },
   "harnesses": {
-    "claude":   { "default": true },                              // shipped preset: bin "claude", verified ready regex
-    "opencode": { "bin": "/home/haze/.local/bin/opencode" },      // bin override
-    "codex":    { "ready": "Ask Codex to do anything" },          // ready override (string regex); dropping the preset regex drops its note
-    "gemini":   { "bin": "gemini", "ready": "Type your message" } // no preset: bin and ready both required
+    "opencode2": { "default": true }, // shipped v2 preset; bin and ready regex inherited
+    "opencode":  {},                  // shipped v1 preset
+    "claude":    {},                  // shipped preset
+    "codex":    {}                   // shipped preset
   }
 }
 ```
@@ -286,7 +302,7 @@ vocabulary (agent, seat, second agent, registered, scratch window) is stated in
 | `tmux.enterPresses` | integer | `3` | See above. |
 | `tmux.postSendMs` | integer | `300` | See above. |
 | `tmux.badges` | boolean | `true` | Mirror unread counts into the `@ttt_unread` window option after each command. |
-| `harnesses` | object | absent | The harnesses `open` may start. Absent: every shipped preset (`claude`, `opencode`, `codex`) is allowed and none is the default. Present: only declared names are allowed. Per entry: `bin` (string, default the preset's command; required without a preset), `ready` (string regex, default the preset's regex; required without a preset; invalid -> exit 2, `harnesses.NAME.ready is not a valid regular expression: ...`), `default` (boolean; exactly one true, else exit 2, `harnesses: 0 marked default; set harnesses.NAME.default to true on one of them` or `harnesses: 2 marked default: claude, codex; only one may be`), `limited` (string regex, placeholder: a screen line meaning the harness is out of tokens; no preset ships one yet and nothing matches against it). Unknown key -> `unknown setting "harnesses.claude.foo"`. Empty object -> `harnesses declares nothing; remove the section to allow the shipped presets`. Overriding `ready` drops the preset's note. |
+| `harnesses` | object | absent | The harnesses `open` may start. Absent: every shipped preset (`claude`, `opencode`, `opencode2`, `codex`) is allowed and none is the default. Present: only declared names are allowed. Per entry: `bin` (string, default the preset's command; required without a preset), `ready` (string regex, default the preset's regex; required without a preset; invalid -> exit 2, `harnesses.NAME.ready is not a valid regular expression: ...`), `default` (boolean; exactly one true, else exit 2, `harnesses: 0 marked default; set harnesses.NAME.default to true on one of them` or `harnesses: 2 marked default: claude, codex; only one may be`), `limited` (string regex, placeholder: a screen line meaning the harness is out of tokens; no preset ships one yet and nothing matches against it). Unknown key -> `unknown setting "harnesses.claude.foo"`. Empty object -> `harnesses declares nothing; remove the section to allow the shipped presets`. Overriding `ready` drops the preset's note. |
 
 ## Tmux setup
 
@@ -310,9 +326,9 @@ allowed before the command; `--from` is rejected; running outside tmux is fine.
 `@ttt_setup` marker and session record; every profile option (assert-only ones warn, pinned ones
 FAIL with a `tmux set-option ...` fix); the hook; the hook binary path; run-shell failures from
 `tmux show-messages`; the harnesses section
-(`ok harnesses: opencode, claude, codex; declared in /home/haze/.ttt/settings.jsonc; default opencode`
+(`ok harnesses: opencode2, opencode, claude, codex; declared in /home/haze/.ttt/settings.jsonc; default opencode2`
 — or `; shipped presets (no harnesses section in settings); default none (a bare --harness is refused)`
-— then per harness `ok harness opencode: /home/haze/.config/scripts/bin/opencode` or
+— then per harness `ok harness opencode2: /home/haze/.config/scripts/bin/opencode2` or
 `warn harness gemini: bin "gemini" not found on PATH`, fix `install it, or set harnesses.gemini.bin in settings`);
 per window (`ok window MUSE: unregistered: pane 1 receives until something there runs ttt` — ok, no
 fix; `warn window X: pane %id is stamped @ttt_agent=Y, also the name of window @id; messages to Y
@@ -416,7 +432,7 @@ error names the file and the path, exit 2.
   `<file>: windows[i].harness moved to windows[i].panes[j].harness (the pane that runs it)`. It
   stamps `@ttt_harness` on that pane, agent or helper. At `setup --layout` / `restore`, every
   pane's harness must be declared in settings: exit 2,
-  `layout NAME: windows[CODER].panes[0].harness "x" is not a declared harness (opencode, claude, codex)`.
+  `layout NAME: windows[CODER].panes[0].harness "x" is not a declared harness (opencode2, opencode, claude, codex)`.
 - `ttt tmux restore` / `setup --layout` builds the windows: panes in file order — each extra pane is
   split from the pane created last, so `pane_index` 1..N follows the file and the saved `layout`
   string binds cells correctly — then the layout applied, then every layout window gets the
@@ -497,10 +513,10 @@ refusal is the point) and a window with `synchronize-panes` on (keys would reach
 
 Both `open` containers resolve `--harness` the same way. No `--harness`: the session's default
 shell; nothing stamped as harness, no wait. `--harness` bare: the default harness; exit 2 without
-one: `no default harness; set harnesses.NAME.default to true in ~/.ttt/settings.jsonc (shipped: claude, opencode, codex)`.
+one: `no default harness; set harnesses.NAME.default to true in ~/.ttt/settings.jsonc (shipped: claude, opencode, opencode2, codex)`.
 `--harness NAME`: that declared harness; exit 2 otherwise:
-`unknown harness "gemini"; declared in /home/haze/.ttt/settings.jsonc: opencode, claude, codex`
-(or `; shipped: claude, opencode, codex` without a section). `--ready REGEX` and `--ready none`
+`unknown harness "gemini"; declared in /home/haze/.ttt/settings.jsonc: opencode2, opencode, claude, codex`
+(or `; shipped: claude, opencode, opencode2, codex` without a section). `--ready REGEX` and `--ready none`
 still override the harness's regex; `--ready` with neither harness nor COMMAND: exit 2,
 `--ready needs something to wait for: pass --harness or -- COMMAND`. `--ready-timeout` defaults to
 `wait.seconds`, capped by `wait.maxSeconds`.

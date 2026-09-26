@@ -1,0 +1,42 @@
+{
+  "name": "@ttt/ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "sideEffects": ["**/*.css"],
+  "license": "MIT",
+  "author": "tasarren",
+  "files": ["dist", "src/styles"],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles.css": "./src/styles/index.css"
+  },
+  "scripts": {
+    "stories": "histoire dev",
+    "test": "node --test tests/*.test.ts tests/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "generate": "node scripts/generate-contracts.mjs && eslint src/contracts/types.ts --fix",
+    "build": "tsdown",
+    "build:stories": "histoire build"
+  },
+  "dependencies": {
+    "ajv": "catalog:ui",
+    "ajv-formats": "catalog:ui",
+    "jsonc-parser": "catalog:runtime"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.43"
+  },
+  "devDependencies": {
+    "vue": "catalog:ui",
+    "histoire": "catalog:ui",
+    "@histoire/plugin-vue": "catalog:ui",
+    "vite": "catalog:ui",
+    "@vitejs/plugin-vue": "catalog:ui"
+  }
+}

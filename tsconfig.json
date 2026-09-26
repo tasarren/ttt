@@ -4,5 +4,6 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["packages/*/src/**/*.ts", "packages/*/tests/**/*.ts", "packages/*/tsdown.config.ts"]
+  "include": ["packages/*/src/**/*.ts", "packages/*/tests/**/*.ts", "packages/*/tsdown.config.ts"],
+  "exclude": ["packages/ui-lib/**"]
 }

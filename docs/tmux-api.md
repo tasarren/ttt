@@ -195,9 +195,9 @@ settings file may override `bin`/`ready` and declare more.
 
 | Export | Kind | Purpose |
 |---|---|---|
-| `Harness` | vocabulary | `as const`: `claude`, `opencode`, `codex`. |
+| `Harness` | vocabulary | `as const`: `claude`, `opencode` (v1), `opencode2` (v2), `codex`. |
 | `HarnessPreset` | type | `{ command, ready: RegExp, note? }` — `ready` matches one screen line once the harness accepts input; `note` warns the operator (codex's trust prompt, claude's trust-configuration prompt). |
-| `HARNESS_PRESETS` | constant | The three presets, each with its verification comment (e.g. Claude Code 2.1.260, 2026-09-07: the mode line under the input box). Notes where trusting is involved: claude — a folder with pre-approved permissions asks 'Only proceed if you trust this configuration' first; answer with `ttt tmux press NAME Down` then `Enter`, or start it in a trusted `--cwd`. codex — an unseen directory asks 'Do you trust the contents' first; answer with `ttt tmux press NAME Enter` or a trusted `--cwd`. The note is appended to the open timeout message and only while the preset's `ready` is still in use. |
+| `HARNESS_PRESETS` | constant | The four presets, each with its verification comment (e.g. opencode2 2.0.12, 2026-09-24: the input placeholder). Notes where trusting is involved: claude — a folder with pre-approved permissions asks 'Only proceed if you trust this configuration' first; answer with `ttt tmux press NAME Down` then `Enter`, or start it in a trusted `--cwd`. codex — an unseen directory asks 'Do you trust the contents' first; answer with `ttt tmux press NAME Enter` or a trusted `--cwd`. The note is appended to the open timeout message and only while the preset's `ready` is still in use. |
 | `harnessPreset` | function | `(name) => HarnessPreset | undefined` — lookup by name. |
 
 ## hooks.ts

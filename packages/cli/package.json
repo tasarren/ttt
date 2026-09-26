@@ -13,9 +13,6 @@
   },
   "homepage": "https://github.com/tasarren/ttt#readme",
   "bugs": "https://github.com/tasarren/ttt/issues",
-  "engines": {
-    "node": ">=24.11.0"
-  },
   "files": [
     "dist",
     "skills",

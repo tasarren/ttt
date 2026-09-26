@@ -10,6 +10,7 @@ packages/
   board/       @ttt/board       the message board on disk: messages, receipts, locks, notification markers
   migrations/  @ttt/migrations  ordered schema steps over a session root; rerunnable, with a version ledger
   cli/         @tasarren/ttt    the `ttt` bin: settings, argument parsing, commands, output
+  ui-lib/      @ttt/ui          Vue components, UI contracts, and Histoire stories
 ```
 
 Ownership rules:
@@ -57,19 +58,19 @@ Ownership rules:
 
 ## Toolchain
 
-Minimum versions: Node 26.8.1, pnpm 11.24.0 (`scripts/check-runtime.mjs` enforces the floor, and
-newer is accepted). Source is strict,
+CI selects Node and pnpm versions; local development uses Corepack/pnpm. Source is strict,
 erasable ESM TypeScript; relative imports use `.ts` specifiers and run directly under Node's type
 stripping. No enums, namespaces, or parameter properties.
 
 ```sh
 pnpm install
-pnpm run typecheck   # tsc over every package and test
+pnpm run typecheck   # server and UI TypeScript projects
 pnpm run lint        # eslint (stylistic + typescript-eslint strict, copied from the harness workspace)
 pnpm run test        # node --test packages/*/tests/*.test.ts
-pnpm run build       # tsdown -> packages/cli/dist/ttt.mjs
+pnpm run build       # CLI, tmux library, and Vue UI library
 pnpm run check       # all of the above, in order
 pnpm ttt --help      # run the CLI from source
+pnpm --filter @ttt/ui stories # Histoire components and page previews
 ```
 
 ## Dev loop

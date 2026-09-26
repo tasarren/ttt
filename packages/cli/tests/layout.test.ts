@@ -110,6 +110,7 @@ test("descendantCommand picks the harness child, never the saver, longest line o
   assert.equal(descendantCommand(bare, 100, 900, harnesses), undefined, "a shell running only the save is bare")
   assert.equal(harnessName("bash /home/haze/.config/scripts/bin/codex resume PLANNER", harnesses), "codex")
   assert.equal(harnessName("bash /home/haze/.config/scripts/bin/claudex --resume REVIEWER", harnesses), "claude", "prefix-tolerant wrapper match")
+  assert.equal(harnessName("bash /home/haze/.config/scripts/bin/opencode2", harnesses), "opencode2", "longest matching harness wins")
   assert.equal(harnessName("sleep 3600", harnesses), undefined)
 })
 

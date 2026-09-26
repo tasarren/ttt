@@ -14,8 +14,7 @@ before changing a package.
 
 ## Standards
 
-- Node 26.8.1+ and pnpm 11.24.0+ for development (a floor, not a lock; `scripts/check-runtime.mjs`
-  enforces the minimum, and newer is accepted). Corepack/pnpm only; never npm, tsx, or Bun.
+- Corepack/pnpm only; never npm, tsx, or Bun. CI selects its Node and pnpm versions.
 - Strict, erasable ESM TypeScript with `.ts` import specifiers. Lint and tsconfig are copied from the
   `@uft-ai` harness workspace; do not loosen them.
 - Repeated domain values are `as const` vocabularies beside their types (`MessageKind`, `ReceiptState`).
@@ -24,5 +23,5 @@ before changing a package.
 
 ## Before closing a change
 
-`pnpm run check` must pass: runtime check, typecheck, lint, tests (including the tmux e2e), build.
+`pnpm run check` must pass: version sync, typecheck, lint, tests (including the tmux e2e), build, and UI stories.
 Update `README.md` when behavior or settings change, in the same change.
