@@ -13,7 +13,7 @@ import { promisify } from "node:util"
 import { StringDecoder } from "node:string_decoder"
 import { Board, assertName, isErrno, withDirectoryLock } from "@ttt/board"
 import type { BoardObservation, MessageReceipt } from "@ttt/board"
-import { Tmux, ControlClient, OptionScope, createRunner } from "@ttt/tmux"
+import { Tmux, ControlClient, OptionScope, createRunner, resolveAgent } from "@ttt/tmux"
 import type { TmuxServer } from "@ttt/tmux"
 import { parseJsonc, validateContract, timeline, receiptStates } from "@ttt/ui"
 import type { LayoutFile, SettingsFile, InboxSummary, TimelineEntry } from "@ttt/ui"
@@ -78,6 +78,19 @@ export async function createWebApp(initialSettings?: Settings, server: TmuxServe
     const boardNames = names.filter(entry => entry.isDirectory() && /^[A-Za-z0-9_-]+$/.test(entry.name)).map(entry => entry.name).sort()
     const sessions = await Promise.all((await tmux.inventory.listSessions()).map(session => tmux.inventory.tree(session.name).catch(() => undefined)))
     const live = sessions.filter((session): session is NonNullable<typeof session> => session !== undefined)
+    const unreadCounts: Record<string, number> = {}
+    if (pageName === "sessions") for (const session of live) {
+      const counts = await new Board({ sessionRoot: join(settings.boardRoot, session.name), notifySeconds: settings.notifySeconds, lock: settings.lock }).unreadCounts()
+      unreadCounts[session.id] = [...counts.values()].reduce((sum, count) => sum + Math.max(0, count), 0)
+      for (const window of session.windows) for (const pane of window.panes) unreadCounts[pane.pane] = 0
+      const panes = session.windows.flatMap(window => window.panes)
+      for (const [agent, count] of counts) {
+        const window = session.windows.find(window => window.name === agent)
+        const seat = resolveAgent(panes, window, agent)
+        if (seat) unreadCounts[seat.paneId] = (unreadCounts[seat.paneId] ?? 0) + Math.max(0, count)
+      }
+      for (const window of session.windows) unreadCounts[window.id] = window.panes.reduce((sum, pane) => sum + (unreadCounts[pane.pane] ?? 0), 0)
+    }
     const selected = segments[1] || (["sessions", "activity"].includes(pageName) ? live[0]?.name : boardNames[0]) || boardNames[0]
     let board: WebState["board"] = null
     const offset = Math.max(0, Number(url.searchParams.get("offset") || 0))
@@ -179,7 +192,7 @@ export async function createWebApp(initialSettings?: Settings, server: TmuxServe
     }
     const normalized: unknown = JSON.parse(JSON.stringify(live))
     if (!Array.isArray(normalized) || normalized.some((value: unknown) => validateContract("TreeSession", value).length > 0)) throw new Error("Invalid tmux inventory")
-    return { boards: boardNames.map(name => ({ name })), board, sessions: normalized as WebState["sessions"], geometry, layouts, settings: { source, value, etag: digest(source) }, harnesses: Object.keys(settings.harnesses.declared), findings, page: { offset, limit, total }, token, revision }
+    return { boards: boardNames.map(name => ({ name })), board, sessions: normalized as WebState["sessions"], geometry, unreadCounts, layouts, settings: { source, value, etag: digest(source) }, harnesses: Object.keys(settings.harnesses.declared), findings, page: { offset, limit, total }, token, revision }
   }
 
   const app = new Hono()
@@ -306,7 +319,7 @@ export async function createWebApp(initialSettings?: Settings, server: TmuxServe
           decoders.set(pane.pane, new StringDecoder("utf8"))
           const dimensions = (await control.command(["display-message", "-p", "-t", pane.pane, "#{pane_width} #{pane_height} #{cursor_x} #{cursor_y} #{keypad_cursor_flag}"])).split(" ").map(Number)
           const [cols = 80, rows = 24, x = 0, y = 0, application = 0] = dimensions
-          await control.command(["capture-pane", "-p", "-e", "-t", pane.pane, "-S", "0", "-E", String(rows - 1)], text => {
+          await control.command(["capture-pane", "-p", "-e", "-t", pane.pane, "-S", "-1000", "-E", String(rows - 1)], text => {
             enqueue({ type: "snapshot", pane: pane.pane, frame: { epoch, cols, rows, text: `\x1b[0m\x1b[H\x1b[2J${text.replace(/\n/g, "\r\n")}\x1b[${y + 1};${x + 1}H${application ? "\x1b[?1h" : "\x1b[?1l"}` } })
             ready.add(pane.pane)
           })

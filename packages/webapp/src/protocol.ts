@@ -27,6 +27,7 @@ export interface WebState {
   board: BoardView | null
   sessions: TreeSession[]
   geometry: Record<string, string>
+  unreadCounts: Record<string, number>
   layouts: Record<string, SourceDocument<LayoutFile>>
   settings: SourceDocument<SettingsFile>
   harnesses: string[]
@@ -73,6 +74,7 @@ export function isWebState(value: unknown): value is WebState {
   if (!Array.isArray(value["harnesses"]) || !value["harnesses"].every((item: unknown) => typeof item === "string")) return false
   if (!source(value["settings"], "SettingsFile") || !record(value["layouts"]) || !Object.values(value["layouts"]).every(item => source(item, "LayoutFile"))) return false
   if (!record(value["geometry"]) || !Object.values(value["geometry"]).every(item => typeof item === "string")) return false
+  if (!record(value["unreadCounts"]) || !Object.values(value["unreadCounts"]).every(item => Number.isSafeInteger(item) && Number(item) >= 0)) return false
   const page = value["page"]
   if (!record(page) || !["offset", "limit", "total"].every(key => Number.isSafeInteger(page[key]) && Number(page[key]) >= 0)) return false
   const board = value["board"]

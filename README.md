@@ -93,13 +93,17 @@ priority, and receipt-state filters. Acknowledgements are receipt records with r
 note; they are not guessed from message text. Activity is scoped to a session, defaults to the first
 live session, and pages 50 recorded events from newest to oldest.
 
-SSE refreshes state after changes. xterm.js shows every pane in the selected window through tmux
-control mode; leaving Sessions, switching windows, or hiding the browser stops that stream.
+SSE refreshes state after changes. Sessions lists every window and pane; hide/show windows independently,
+or open one window for focused interaction. xterm.js streams every pane in each expanded window currently
+on screen through tmux control mode. Collapsed, offscreen, and hidden browser windows stop streaming.
 Click a pane to type into it. Input refuses dead panes and synchronized windows. Terminal dimensions
 follow tmux; browser size changes scale the view without resizing another tmux client's panes.
 Metadata refreshes and geometry changes preserve terminal instances and the connected output stream.
-Each pane has its own scroll area, including content taller than the panel, and header controls for
-Details and Close pane. Closing the last pane also closes its window; the Webapp asks before closing.
+Each pane uses xterm's own scrollback scrollbar and has header controls for Details and Close pane.
+Auto fits the existing tmux columns to pane width; A−/A+ adjust each pane manually. Tall
+output scrolls inside xterm, keeping the pane wrapper fixed and preserving tmux's grid.
+Closing the last pane also closes its window; the Webapp asks before closing. Session, window, and pane
+badges show recorded unread mailbox counts; IDs appear as small labels beside names.
 
 Sessions supports opening panes/windows, closing and renaming windows, interrupting/respawning
 agents, and saving/restoring layouts. Details opens a right sidebar for pane metadata and source.

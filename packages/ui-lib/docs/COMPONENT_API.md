@@ -374,6 +374,7 @@ Hierarchical context navigator with local selection and keyboard controls.
 
 ```ts
   nodes: { type: Array as PropType<readonly EntityNode[]>, required: true }
+  // EntityNode may carry a small ID badge and a message-count label beside its human name.
   selected: String as PropType<string | undefined>
   contextIds: { type: Array as PropType<readonly string[]>, default: () => [] }
   label: { type: String, default: "Items" }
@@ -812,6 +813,7 @@ TreeSession → TreeWindow → TreePane navigation; selection is not runtime foc
 ```ts
   sessions: { type: Array as PropType<readonly TreeSession[]>, required: true }
   selected: String
+  unreadCounts: { type: Object as PropType<Readonly<Record<string, number>>>, default: () => ({}) }
 ```
 
 **Declared events**

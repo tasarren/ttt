@@ -6,6 +6,8 @@ export interface EntityNode {
   id: string
   label: string
   count?: number
+  badge?: string
+  countLabel?: string
   detail?: string
   children?: EntityNode[]
 }
@@ -75,8 +77,8 @@ export const TEntityTree = defineComponent({
           }, [
             h("span", {
               class: "truncate mono grow",
-            }, n.label), n.count !== undefined ? h(TCount, {
-              value: n.count,
+            }, n.label), n.badge ? h("span", { class: "t-tree-id", title: n.badge }, n.badge) : null, n.count !== undefined ? h(TCount, {
+              value: n.count, title: n.countLabel, "aria-label": n.countLabel,
             }) : null,
           ]),
         ]), n.children?.length && !collapsed.value.has(n.id) ? render(n.children, depth + 1) : null,

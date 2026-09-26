@@ -29,12 +29,17 @@ invalidated by filesystem events with a periodic refresh as backup. No board fil
 deleted, or marked read. A persistent SQLite archive/FTS replica can replace scans if latency grows.
 
 `/api/events` sends `invalidate` revisions and heartbeats. Reconnection sends the current revision.
-`/api/terminal` creates one tmux control-mode client for all panes of the selected window. It sends
-ANSI snapshots before output, preserves UTF-8 across chunks, and closes on navigation or hidden tabs.
+`/api/terminal` creates one tmux control-mode client for all panes of each expanded, visible window. It sends
+ANSI snapshots and recent history before output, preserves UTF-8 across chunks, and closes when the window
+collapses, leaves the viewport, or the browser tab hides.
 xterm retains tmux dimensions and scales text to fit; it does not resize tmux. Slow terminal streams
 close after 4 MB of queued events and reconnect for a fresh snapshot.
-Pane fonts use actual rendered cell width. Each pane scrolls independently when its rows exceed the
-panel height. Pane headers open Details or close that pane through `ttt tmux close --pane TARGET`.
+Pane fonts fit rendered cell width. A−/A+ set a pane's font size, Auto restores
+fitting, and neither operation reconnects its stream. The pane container does not scroll; xterm's
+root owns scrolling for tall rows and scrollback. Output updates never trigger font fitting.
+Pane headers open Details or close that pane through `ttt tmux close --pane TARGET`. Sessions list every
+window and pane; expanding several windows streams only those in the viewport. Recorded unread counters
+appear next to the responsible session, window, and agent pane; unmapped mailboxes remain in session totals.
 
 Board `view` selects all conversations, threads with replies, standalone messages, or acknowledged
 receipts. `q`, `urgent`, and receipt `state` filters apply before paging. Acknowledgements use receipt

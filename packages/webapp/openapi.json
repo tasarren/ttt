@@ -386,7 +386,8 @@
           "findings",
           "page",
           "token",
-          "revision"
+          "revision",
+          "unreadCounts"
         ],
         "properties": {
           "boards": {
@@ -475,6 +476,14 @@
           },
           "revision": {
             "type": "integer"
+          },
+          "unreadCounts": {
+            "type": "object",
+            "description": "Recorded unread mailbox counts keyed by tmux session, window, and pane IDs. Pane counts resolve agent seats, window counts sum panes, session counts include every mailbox.",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         },
         "additionalProperties": false

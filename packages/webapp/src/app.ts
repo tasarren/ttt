@@ -50,6 +50,8 @@ const WebPage = defineComponent({
     const selectedPane = ref("")
     const detailsOpen = ref(false)
     const selectedWindow = ref("")
+    const expandedWindows = ref<Set<string>>(new Set())
+    const paneFontSizes = ref<Record<string, number>>({})
     const pending = ref("")
     const message = ref("")
     const query = ref(String(route.query["q"] ?? ""))
@@ -81,9 +83,19 @@ const WebPage = defineComponent({
       if (name) return p.store.state.sessions.find(item => item.name === name)
       return p.store.state.sessions.find(item => item.windows.some(window => window.id === selectedWindow.value)) ?? p.store.state.sessions[0]
     })
+    const focusedWindow = computed({
+      get: () => session.value?.windows.some(window => window.id === route.query["window"]) ? String(route.query["window"]) : "",
+      set: (id: string) => { void router.replace({ path: route.path, query: id ? { window: id } : {} }) },
+    })
     const window = computed(() => session.value?.windows.find(item => item.id === selectedWindow.value) ?? session.value?.windows[0])
     const pane = computed(() => window.value?.panes.find(item => item.pane === selectedPane.value) ?? window.value?.panes[0])
-    watch(() => window.value?.id, () => { if (window.value) { selectedWindow.value = window.value.id; selectedPane.value = window.value.panes[0]?.pane ?? "" } }, { immediate: true })
+    watch(() => session.value?.id, () => {
+      const first = session.value?.windows.find(window => window.id === focusedWindow.value) ?? session.value?.windows.find(window => window.active) ?? session.value?.windows[0]
+      selectedWindow.value = first?.id ?? ""
+      selectedPane.value = first?.panes[0]?.pane ?? ""
+      expandedWindows.value = new Set(first ? [first.id] : [])
+    }, { immediate: true })
+    watch(() => window.value?.id, () => { if (window.value && !window.value.panes.some(pane => pane.pane === selectedPane.value)) selectedPane.value = window.value.panes[0]?.pane ?? "" })
     async function refresh() {
       const current = ++requestNumber
       const path = route.fullPath
@@ -135,9 +147,14 @@ const WebPage = defineComponent({
         h(TButton, { disabled: state.page.offset + state.page.limit >= state.page.total, onClick: () => { void router.push({ path: route.path, query: { ...route.query, offset: state.page.offset + state.page.limit } }) } }, () => "Next"),
       ])
       const sidebar = active.value === "sessions" ? h("div", [
-        h("h2", "Sessions"), h(SessionTree, { sessions: state.sessions, selected: pane.value?.pane ?? "", onSelect: (id: string) => {
+        h("h2", "Sessions"), h(SessionTree, { sessions: state.sessions, unreadCounts: state.unreadCounts, selected: focusedWindow.value ? pane.value?.pane ?? "" : session.value?.id ?? "", onSelect: (id: string) => {
           const match = state.sessions.flatMap(session => session.windows.map(window => ({ session, window }))).find(item => item.session.id === id || item.window.id === id || item.window.panes.some(pane => pane.pane === id))
-          if (match) { selectedWindow.value = match.window.id; selectedPane.value = id.startsWith("%") ? id : match.window.panes[0]?.pane ?? ""; void router.push(`/sessions/${match.session.name}`) }
+          if (match) {
+            selectedWindow.value = match.window.id
+            selectedPane.value = id.startsWith("%") ? id : match.window.panes[0]?.pane ?? ""
+            if (id !== match.session.id) expandedWindows.value = new Set([...expandedWindows.value, match.window.id])
+            void router.push({ path: `/sessions/${match.session.name}`, query: id === match.session.id ? {} : { window: match.window.id } })
+          }
         } }),
       ]) : active.value === "activity" ? h("div", [
         h("h2", "Sessions"), h(TEntityTree, { nodes: [...new Set([...state.sessions.map(session => session.name), ...state.boards.map(board => board.name)])].map(name => ({ id: name, label: name })), selected: state.board?.name ?? boardName.value, onSelect: (name: string) => { void router.push(`/activity/${name}`) } }),
@@ -147,32 +164,45 @@ const WebPage = defineComponent({
       let main
       let inspector = h("div", [h("h2", "Details")])
       if (active.value === "sessions") {
-        if (!session.value || !window.value) main = h(TNotice, { tone: "amber" }, () => "No live session")
+        if (!session.value) main = h(TNotice, { tone: "amber" }, () => "No live session")
         else {
-          const current = session.value, win = window.value
-          main = h("div", { class: "stack" }, [
-            h("header", { class: "t-page-head" }, [h("div", [h("h1", `${current.name} / ${win.name}`), h("p", `${current.windows.length} ${current.windows.length === 1 ? "window" : "windows"} · ${win.panes.length} ${win.panes.length === 1 ? "pane" : "panes"}`)]), h("div", { class: "t-toolbar" }, [
+          const current = session.value
+          main = h("div", { class: "stack t-session-view" }, [
+            h("header", { class: "t-session-head" }, [h("div", [h("h1", current.name), h("span", { class: "small muted" }, `${current.windows.length} ${current.windows.length === 1 ? "window" : "windows"} · ${current.windows.reduce((sum, window) => sum + window.panes.length, 0)} panes`)]), h("div", { class: "t-toolbar" }, [
+              focusedWindow.value ? h(TButton, { size: "sm", onClick: () => { focusedWindow.value = "" } }, () => "All windows") : null,
               h(TSelect, { modelValue: harness.value, options: [{ value: "", label: "Shell" }, ...state.harnesses.map(name => ({ value: name, label: name }))], "aria-label": "Program for new panes", "onUpdate:modelValue": (value: string) => { harness.value = value } }),
-              h(TButton, { disabled: !!pending.value, onClick: () => { action({ action: "open-pane", session: current.name, target: win.name, ...(harness.value ? { harness: harness.value } : {}) }) } }, () => "Open pane"),
-              h(TButton, { disabled: !!pending.value, onClick: () => { action({ action: "open-window", session: current.name, ...(harness.value ? { harness: harness.value } : {}) }) } }, () => "Open window"),
-              h(TButton, { intent: "danger", onClick: () => { if (confirm(`Close ${win.name}?`)) action({ action: "close", session: current.name, target: win.name }) } }, () => "Close window"),
+              h(TButton, { size: "sm", disabled: !!pending.value, onClick: () => { action({ action: "open-window", session: current.name, ...(harness.value ? { harness: harness.value } : {}) }) } }, () => "New window"),
+              h(TButton, { size: "sm", intent: "ghost", onClick: () => { detailsOpen.value = true } }, () => "Details"),
             ])]),
-            h(LiveWindow, { session: current.name, window: win, layout: state.geometry[win.id] ?? "", token: state.token, selected: pane.value?.pane ?? "", onSelect: (id: string) => { selectedPane.value = id },
-              onInspect: (id: string) => { selectedPane.value = id; detailsOpen.value = true },
-              onClose: (id: string) => { if (confirm(`Close pane ${id}? This stops its process. Closing the last pane also closes its window.`)) action({ action: "close-pane", session: current.name, target: id }) },
-            }),
+            h("div", { class: ["t-session-overview", focusedWindow.value && "is-focused"] }, current.windows.filter(win => !focusedWindow.value || win.id === focusedWindow.value).map(win => {
+              const expanded = expandedWindows.value.has(win.id)
+              return h("section", { key: win.id, class: ["t-session-window", expanded && "is-open"] }, [
+                h("header", { class: "t-window-head" }, [h("div", { class: "row" }, [h("h2", win.name), h("span", { class: "t-tree-id" }, `#${win.index}`), state.unreadCounts[win.id] ? h("span", { class: "t-count" }, `${state.unreadCounts[win.id]} unread`) : null]), h("div", { class: "t-toolbar" }, [
+                  !focusedWindow.value ? h(TButton, { size: "sm", intent: "primary", onClick: () => { focusedWindow.value = win.id; selectedWindow.value = win.id; expandedWindows.value = new Set([...expandedWindows.value, win.id]) } }, () => "Open") : null,
+                  h(TButton, { size: "sm", "aria-expanded": expanded, onClick: () => { expandedWindows.value = new Set(expanded ? [...expandedWindows.value].filter(id => id !== win.id) : [...expandedWindows.value, win.id]) } }, () => expanded ? "Hide window" : "Show window"),
+                  expanded ? h(TButton, { size: "sm", disabled: !!pending.value, onClick: () => { action({ action: "open-pane", session: current.name, target: win.name, ...(harness.value ? { harness: harness.value } : {}) }) } }, () => "Open pane") : null,
+                  expanded ? h(TButton, { size: "sm", intent: "danger", onClick: () => { if (confirm(`Close ${win.name}?`)) action({ action: "close", session: current.name, target: win.name }) } }, () => "Close window") : null,
+                ])]),
+                h("div", { class: "t-window-panes" }, win.panes.map(item => h("button", { type: "button", class: "t-pane-chip", key: item.pane, "data-selected": item.pane === selectedPane.value, onClick: () => { selectedWindow.value = win.id; selectedPane.value = item.pane; focusedWindow.value = win.id; expandedWindows.value = new Set([...expandedWindows.value, win.id]) } }, [h("span", item.agent || item.paneTitle || item.title || item.command || "Helper"), h("span", { class: "t-tree-id" }, item.pane), state.unreadCounts[item.pane] ? h("span", { class: "t-count" }, String(state.unreadCounts[item.pane])) : null]))),
+                expanded ? h(LiveWindow, { session: current.name, window: win, layout: state.geometry[win.id] ?? "", token: state.token, fontSizes: paneFontSizes.value, selected: win.id === selectedWindow.value ? pane.value?.pane ?? "" : "", onSelect: (id: string) => { selectedWindow.value = win.id; selectedPane.value = id },
+                  onZoom: (id: string, size: number) => { paneFontSizes.value = Object.fromEntries([...Object.entries(paneFontSizes.value).filter(([pane]) => pane !== id), ...(size ? [[id, size] as const] : [])]) },
+                  onInspect: (id: string) => { selectedWindow.value = win.id; selectedPane.value = id; detailsOpen.value = true },
+                  onClose: (id: string) => { if (confirm(`Close pane ${id}? This stops its process. Closing the last pane also closes its window.`)) action({ action: "close-pane", session: current.name, target: id }) },
+                }) : null,
+              ])
+            })),
           ])
           inspector = h("div", { class: "stack" }, [
             h("h2", `Pane ${pane.value?.pane ?? ""}`), pane.value ? h(PaneInspector, { pane: pane.value }) : null,
             pane.value ? h("div", { class: "t-toolbar" }, [
-              h(TButton, { disabled: !pane.value.agent && pane.value !== win.panes[0], onClick: () => { if (confirm(`Respawn ${pane.value?.pane}?`)) action({ action: "respawn", session: current.name, target: pane.value!.agent ?? win.name }) } }, () => "Respawn"),
+              h(TButton, { disabled: !pane.value.agent && pane.value !== window.value?.panes[0], onClick: () => { if (confirm(`Respawn ${pane.value?.pane}?`)) action({ action: "respawn", session: current.name, target: pane.value!.agent ?? window.value!.name }) } }, () => "Respawn"),
               h(TButton, { intent: "danger", onClick: () => { if (confirm(`Interrupt ${pane.value?.pane}?`)) action({ action: "interrupt", session: current.name, target: pane.value!.pane }) } }, () => "Interrupt"),
             ]) : null,
             h(TInspector, { items: [{ label: "Session ID", value: current.id }, { label: "Attached", value: current.attached }, { label: "Group", value: current.group }] }),
-            h(TDisclosure, { title: "Window panes" }, () => h(PaneTable, { panes: win.panes, selected: pane.value?.pane ?? "", onSelect: (id: string) => { selectedPane.value = id } })),
-            h(TButton, { onClick: () => { const name = prompt("New window name", win.name); if (name) action({ action: "rename", session: current.name, target: win.name, name }) } }, () => "Rename window"),
+            window.value ? h(TDisclosure, { title: "Window panes" }, () => h(PaneTable, { panes: window.value!.panes, selected: pane.value?.pane ?? "", onSelect: (id: string) => { selectedPane.value = id } })) : null,
+            window.value ? h(TButton, { onClick: () => { const name = prompt("New window name", window.value!.name); if (name) action({ action: "rename", session: current.name, target: window.value!.name, name }) } }, () => "Rename window") : null,
             h(TButton, { onClick: () => { const name = prompt("Save current session as layout"); if (name) action({ action: "save", session: current.name, name }) } }, () => "Save session layout"),
-            h(TDisclosure, { title: "Source" }, () => h(TSourceViewer, { value: { session: current, window: win, pane: pane.value } })),
+            h(TDisclosure, { title: "Source" }, () => h(TSourceViewer, { value: { session: current, window: window.value, pane: pane.value } })),
           ])
         }
       } else if (active.value === "boards" || active.value === "threads" || active.value === "messages") {
@@ -214,7 +244,7 @@ const WebPage = defineComponent({
       } else if (active.value === "diagnostics") {
         main = h(DoctorReport, { findings: state.findings })
       } else main = h(TNotice, { tone: "amber" }, () => "Choose a page")
-      return h(AppShell, { detailsOpen: detailsOpen.value, "onUpdate:detailsOpen": (value: boolean) => { detailsOpen.value = value } }, { topbar: () => h(TTopBar, { items: nav, active: active.value, state: p.store.connection, onNavigate: (path: string) => { void router.push(path) } }), sidebar: () => sidebar, default: () => h("div", { class: "stack" }, [p.store.error ? h(TNotice, { tone: "coral" }, () => p.store.error) : null, message.value ? h(TNotice, { tone: "mint" }, () => message.value) : null, main]), inspector: () => inspector })
+      return h(AppShell, { class: active.value === "sessions" ? ["t-session-shell", focusedWindow.value && "t-session-focused"] : "", detailsOpen: detailsOpen.value, "onUpdate:detailsOpen": (value: boolean) => { detailsOpen.value = value } }, { topbar: () => h(TTopBar, { items: nav, active: active.value, state: p.store.connection, onNavigate: (path: string) => { void router.push(path) } }), sidebar: () => sidebar, default: () => h("div", { class: "stack" }, [p.store.error ? h(TNotice, { tone: "coral" }, () => p.store.error) : null, message.value ? h(TNotice, { tone: "mint" }, () => message.value) : null, main]), inspector: () => inspector })
     }
   },
 })
