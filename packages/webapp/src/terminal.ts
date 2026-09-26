@@ -77,15 +77,25 @@ export const LiveWindow = defineComponent({
     const reconnect = () => { void nextTick(connect).catch((failure: unknown) => { error.value = failure instanceof Error ? failure.message : String(failure) }) }
     const visibility = () => { if (document.hidden) { generation++; events?.close(); events = undefined } else reconnect() }
     onMounted(() => { document.addEventListener("visibilitychange", visibility); reconnect() })
-    onBeforeUnmount(() => { lifecycle.disposed = true; generation++; events?.close(); observer?.disconnect(); document.removeEventListener("visibilitychange", visibility); for (const terminal of terminals.values()) terminal.dispose() })
-    watch(() => [p.session, p.window.id, p.layout, p.window.panes.map(pane => pane.pane).join(",")], reconnect)
+    onBeforeUnmount(() => { lifecycle.disposed = true; generation++; events?.close(); observer?.disconnect(); document.removeEventListener("visibilitychange", visibility); for (const terminal of terminals.values()) terminal.dispose(); terminals.clear() })
+    watch([() => p.session, () => p.window.id, () => p.window.panes.map(pane => pane.pane).join(",")], reconnect)
+    watch(() => p.layout, () => { void nextTick(() => {
+      if (lifecycle.disposed) return
+      try { if (p.layout) for (const cell of leaves(parseLayout(p.layout))) {
+        const pane = `%${cell.pane}`
+        const terminal = terminals.get(pane)
+        if (terminal && (terminal.cols !== cell.width || terminal.rows !== cell.height)) terminal.resize(cell.width, cell.height)
+        sizes.set(pane, { cols: cell.width, rows: cell.height })
+      } } catch { /* Keep snapshot dimensions without geometry. */ }
+      fit()
+    }) })
     return () => {
       let layout: LayoutNode | undefined
       try { if (p.layout) layout = parseLayout(p.layout) } catch { /* Missing geometry uses the labelled pane grid. */ }
       const cells = layout ? leaves(layout) : []
       return h("section", { ref: host, class: ["t-live-window", layout && "is-spatial"], style: !layout ? { gridTemplateColumns: `repeat(${Math.min(2, p.window.panes.length)},minmax(0,1fr))` } : {}, "aria-label": `Live panes of ${p.window.name}` }, [error.value ? h("p", { role: "alert" }, error.value) : null, ...p.window.panes.map(pane => {
         const cell = cells.find(cell => `%${cell.pane}` === pane.pane)
-        return h("article", { class: "t-live-pane", style: cell && layout ? { left: `${cell.x / layout.width * 100}%`, top: `${cell.y / layout.height * 100}%`, width: `calc(${cell.width / layout.width * 100}% - 6px)`, height: `calc(${cell.height / layout.height * 100}% - 6px)` } : {}, "data-pane": pane.pane, "data-selected": pane.pane === p.selected, onClick: () => { emit("select", pane.pane) } }, [
+        return h("article", { key: pane.pane, class: "t-live-pane", style: cell && layout ? { left: `${cell.x / layout.width * 100}%`, top: `${cell.y / layout.height * 100}%`, width: `calc(${cell.width / layout.width * 100}% - 6px)`, height: `calc(${cell.height / layout.height * 100}% - 6px)` } : {}, "data-pane": pane.pane, "data-selected": pane.pane === p.selected, onClick: () => { emit("select", pane.pane) } }, [
           h("header", [h("strong", pane.agent || pane.pane), h("span", pane.command)]), h("div", { class: "t-terminal-screen", "aria-label": `${pane.pane} terminal` }),
         ])
       })])

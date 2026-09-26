@@ -93,6 +93,7 @@ SSE refreshes state after changes. xterm.js shows every pane in the selected win
 control mode; leaving Sessions, switching windows, or hiding the browser stops that stream.
 Click a pane to type into it. Input refuses dead panes and synchronized windows. Terminal dimensions
 follow tmux; browser size changes scale the view without resizing another tmux client's panes.
+Metadata refreshes and geometry changes preserve terminal instances and the connected output stream.
 
 Sessions supports opening panes/windows, closing and renaming windows, interrupting/respawning
 agents, and saving/restoring layouts. Details opens a right sidebar for pane metadata and source.
