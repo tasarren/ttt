@@ -80,13 +80,10 @@ async function pasteToAgent(ctx: Context, paneId: string, text: string, urgent =
 }
 
 export function formatUrgent(message: BoardMessage): string {
-  const instruction = message.replyExpected
-    ? `Reply with: ttt reply ${message.messageId} -- MESSAGE`
-    : "No reply required."
-  return `URGENT from ${message.from} [${message.messageId}]:\n\n${message.body}\n\n${instruction}`
+  return `ttt: URGENT from ${message.from} [${message.messageId}]. Run: ttt read`
 }
 
-/** Pastes an urgent message into every recipient now; a failed paste falls back to a batched notification. */
+/** Pastes an urgent notification into every recipient now; a failed paste falls back to a batched notification. */
 export async function pushUrgent(ctx: Context, message: BoardMessage, windows: Map<string, Agent>): Promise<void> {
   const failures: string[] = []
   for (const [name, agent] of windows) {

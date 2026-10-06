@@ -62,7 +62,7 @@ ${TMUX_USAGE}
 
 message options:
   --no-reply      the recipient does not need to reply
-  --urgent        skip the batching window and paste into the target window now
+  --urgent        notify the target now; read the full message with ttt read
   --replace KEY   supersede your older unread messages that carry the same KEY
   --subject TEXT  thread subject, set once on the root message (not on replies)
   --ttl SECONDS   unread receipts lapse to superseded after SECONDS (1..2592000)

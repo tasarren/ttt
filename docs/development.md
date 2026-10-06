@@ -168,9 +168,10 @@ plumbing (`awaitReply`, `refuseMutualWait`) in `commands/send.ts`, presence in `
   streak stays on an idle exit, so a re-run exits at once too; explicit `--timeout` waits bypass
   the cap but still extend the streak.
 
-`--urgent` skips the marker: the CLI pastes the formatted message right away through
+`--urgent` skips the marker: the CLI pastes a one-line urgent notification right away through
 `board.deliverUrgent` (unless the recipient waits and sees it — then the wait delivers), which marks
-the receipt notified but leaves it unread.
+the receipt notified but leaves it unread. The body and reply instructions are retrieved by `ttt read`,
+never pasted. `Input.sendText` uses bracketed paste when the receiving application enables it.
 
 ## Tests
 

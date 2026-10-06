@@ -116,13 +116,20 @@ test("normal send: queued, one batched notification, read, ack, status, thread",
   assert.equal(days.length, 1, "messages are sharded by day under TTT_HOME/boards/<session>")
 })
 
-test("urgent send is pasted immediately and stays unread until read", async() => {
-  const sent = await ttt("A", "send", "B", "--urgent", "--no-reply", "--", "stop now")
-  assert.match(sent, /^sent URGENT ttt-\S+ -> B$/)
-  const pane = await paneShows("B", "URGENT from A [")
-  assert.match(pane, /stop now/)
-  assert.match(pane, /No reply required\./)
-  assert.match(await ttt("B", "read", "--peek"), /stop now/)
+test("urgent sends only an immediate notification; the full body stays unread until read", async() => {
+  const body = "urgent-body-only: Let's resume!!\n\nKeep \"quotes\", $(commands), and `backticks` literal."
+  const sent = await ttt("A", "send", "B", "--urgent", "--no-reply", "--", body)
+  const id = /^sent URGENT (ttt-\S+) -> B$/.exec(sent)?.[1]
+  assert.ok(id, `unexpected send output: ${sent}`)
+  const pane = await paneShows("B", `ttt: URGENT from A [${id}]. Run: ttt read`)
+  assert.doesNotMatch(pane, /urgent-body-only|Let's resume|backticks|No reply required/)
+  assert.match(await ttt("A", "status", id), /^B: unread .* n /m, "notification does not read the message")
+  const peek = await ttt("B", "read", "--peek")
+  assert.ok(peek.includes(body), "peek preserves the full body, including newlines and quotes")
+  assert.match(peek, /reply: none needed/)
+  assert.equal(await ttt("B", "inbox", "--count"), "1")
+  assert.ok((await ttt("B", "read")).includes(body))
+  assert.match(await ttt("A", "status", id), /^B: read .* r /m)
 })
 
 test("triage stays unread; bare-note ack and ack --all clear the mailbox", async() => {
@@ -304,7 +311,7 @@ test("refuses to message itself and unknown windows; capture peeks at the other 
   await assert.rejects(ttt("A", "send", "ZZZ", "--", "x"), /tmux window does not exist: work:ZZZ/)
   await assert.rejects(ttt("A", "read", "--max", "0"), /--max must be an integer between 1 and 1000/)
   assert.match(await ttt("A", "capture", "B", "--lines", "20"), /URGENT from A/)
-  assert.match(await ttt("A", "capture", "B", "--lines", "20", "--grep", "stop now"), /stop now/)
+  assert.match(await ttt("A", "capture", "B", "--lines", "20", "--grep", "URGENT from A"), /URGENT from A/)
   assert.equal(await ttt("A", "capture", "B", "--lines", "20", "--grep", "no-such-line-xyz"), "")
   await assert.rejects(ttt("A", "capture", "B", "--grep", ""), /--grep pattern cannot be empty/)
   const listed = await ttt("A", "windows")
@@ -336,7 +343,7 @@ test("duplicate names flag the loser; around shows context", async() => {
   await tmux("new-window", "-t", SESSION, "-n", "B", "sh")
   const listed = await ttt("A", "windows")
   assert.match(listed, /^B\t@\d+\t\(dup of @\d+\)$/m)
-  assert.match(await ttt("A", "capture", "B", "--lines", "20", "--around", "stop now", "--context", "1"), /stop now/)
+  assert.match(await ttt("A", "capture", "B", "--lines", "20", "--around", "URGENT from A", "--context", "1"), /URGENT from A/)
   await assert.rejects(ttt("A", "capture", "B", "--grep", "x", "--around", "y"), /cannot be combined/)
 })
 

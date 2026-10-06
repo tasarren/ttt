@@ -118,7 +118,7 @@ test("sendText waits for seat quiet, then clears, pastes through a private buffe
   ])
   const buffer = calls[10]![2]
   assert.deepEqual(calls[10]!.slice(3), ["--", "hello"])
-  assert.deepEqual(calls[11], ["paste-buffer", "-b", buffer, "-d", "-t", "@2"])
+  assert.deepEqual(calls[11], ["paste-buffer", "-b", buffer, "-d", "-p", "-t", "@2"])
   assert.deepEqual(calls[12], ["send-keys", "-t", "@2", "Enter"])
 })
 

@@ -46,7 +46,7 @@ export class Input {
   }
 
   /**
-   * Clears the target's input line, pastes `text` through a private buffer, then presses Enter.
+   * Clears the target's input line, bracket-pastes `text` through a private buffer, then presses Enter.
    * Waits for 2 s of screen quiet first (a human typing or the agent streaming both defer the
    * paste, silently); `quiet: false` skips the gate for urgent delivery.
    */
@@ -57,7 +57,7 @@ export class Input {
     if (inputSettleMs > 0) await sleep(inputSettleMs)
     const buffer = await this.fillBuffer(text)
     try {
-      await this.pasteBuffer(buffer, target, false)
+      await this.pasteBuffer(buffer, target, true)
       if (postPasteMs > 0) await sleep(postPasteMs)
       for (let press = 0; press < enterPresses; press += 1) {
         await this.run(["send-keys", "-t", target, Key.Enter])

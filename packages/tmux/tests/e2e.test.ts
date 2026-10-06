@@ -108,6 +108,35 @@ test("input.sendText lands in the pane and input.type pastes without Enter", asy
   assert.equal((await raw("list-buffers")).trim(), "", "private buffers are always deleted")
 })
 
+test("sendText brackets multiline text and special characters before the submit key", async() => {
+  // A real raw-mode terminal reader: enables the same paste mode as a TUI and reports received bytes.
+  const reader = `
+    process.stdin.setRawMode(true)
+    let bytes = Buffer.alloc(0)
+    process.stdin.on("data", (chunk) => {
+      bytes = Buffer.concat([bytes, chunk])
+      process.stdout.write("\\r\\nreceived:" + bytes.toString("hex") + "\\r\\n")
+    })
+    process.stdout.write("\\x1b[?2004hready\\r\\n")
+  `
+  const { windowId, paneId } = await tmux.windows.open({
+    session: SESSION,
+    name: "PASTE",
+    command: `"${process.execPath}" -e '${reader}'`,
+  })
+  try {
+    assert.equal((await tmux.screen.waitFor({ target: paneId, pattern: /^ready$/, timeoutMs: 5_000, pollMs: 50 })).outcome, WaitOutcome.Matched)
+    const text = "Let's resume!!\n\nKeep \"quotes\" and `backticks` literal."
+    await tmux.input.sendText(paneId, text, { quiet: false })
+    // tmux's default paste separator converts LF to CR, inside the bracketed-paste delimiters.
+    const expected = Buffer.from(`\x15\x1b[200~${text.replaceAll("\n", "\r")}\x1b[201~\r`).toString("hex")
+    const received = await tmux.screen.waitFor({ target: paneId, pattern: new RegExp(`received:${expected}`), timeoutMs: 5_000, pollMs: 50 })
+    assert.equal(received.outcome, WaitOutcome.Matched, "body is enclosed in paste delimiters; Enter follows the closing delimiter")
+  } finally {
+    await tmux.windows.close(windowId)
+  }
+})
+
 test("screen.waitFor resolves when a line appears and times out otherwise", async() => {
   const window = (await tmux.windows.find(SESSION, "B"))!
   const waiting = tmux.screen.waitFor({ target: window.id, pattern: /^waited-for$/, timeoutMs: 5_000, pollMs: 50 })

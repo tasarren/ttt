@@ -226,7 +226,7 @@ Message options (for `send`, `reply`, `broadcast`):
 | Option | Effect |
 |---|---|
 | `--no-reply` | Tell the recipient no reply is needed. |
-| `--urgent` | Skip the batching window: paste the message into the target window now (unless they are waiting — then the wait delivers it). |
+| `--urgent` | Skip the batching window: paste a short urgent notification now. Read the full message with `ttt read` (unless already waiting — then the wait delivers it). |
 | `--replace KEY` | Supersede your own older *unread* messages to that recipient that carry the same KEY. Use it for status updates. |
 | `--subject TEXT` | Thread subject, set once on the root message. `--subject` on a reply is rejected. |
 | `--ttl SECONDS` | Self-expiring message: unread receipts lapse to `superseded` after SECONDS (max 30 days). History is kept. Expiry settles on next mailbox access. |
@@ -258,7 +258,9 @@ errors.
   which is whoever touched it last. Before clearing the input line the paste waits for 2 s of
   screen quiet (a human typing or the agent streaming both defer it, silently, up to 15 s) --
   no keystrokes are captured, only screen equality.
-- **Urgent.** `--urgent` pastes the full message immediately, with the reply instruction. If the paste
+- **Urgent.** `--urgent` immediately pastes one line: `ttt: URGENT from NAME [MESSAGE_ID]. Run: ttt read`.
+  The body and reply instructions stay on the board until `ttt read`; message text is never pasted into
+  the prompt. Notifications use bracketed paste when the receiving application supports it. If the paste
   fails, the message falls back to a batched notification, so nothing is lost. Pasting clears the target
   input line (`C-u`) before pasting, so it can clobber in-progress typing. Urgent broadcasts paste
   serially, one recipient at a time. Like batched notifications, the paste targets the
