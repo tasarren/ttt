@@ -181,6 +181,19 @@ Acking without a prior `ttt read` warns on stderr. The receipt is still marked a
 
 ## Commands
 
+Always shell-quote message bodies, ACK notes, and subjects as single arguments:
+`ttt ack --all -- 'FOO BAR; BIZ'`. `--` ends CLI options, not shell parsing; an unquoted
+semicolon starts another command before ttt can validate it. Prefer single quotes because double
+quotes still expand `$` and backticks. Escape apostrophes as `'"'"'`, for example:
+`ttt ack MESSAGE_ID -- 'It'"'"'s done; tests passed'`. For complex message bodies, use
+`--file PATH` or stdin with a quoted heredoc delimiter:
+
+```sh
+ttt send PLANNER <<'MESSAGE'
+It's done; tests passed. Literal $variables and `backticks` stay text.
+MESSAGE
+```
+
 Ways to send something:
 
 | Command | What it does |

@@ -18,15 +18,15 @@ the moment the window exists; a second agent in the same window is messageable b
 
 1. A line starting with `ttt:` appears in your input → run `ttt read` **once**.
 2. Handle every message in the batch.
-3. `ttt ack MESSAGE_ID -- short note` for each one you handled. Never skip the ack.
-4. Reply in-thread when an answer is owed: `ttt reply MESSAGE_ID -- your answer`. Triage tags it: `(needs reply)` means open the batch and answer, `(no-reply)` means ack and move on.
+3. `ttt ack MESSAGE_ID -- 'short note'` for each one you handled. Never skip the ack.
+4. Reply in-thread when an answer is owed: `ttt reply MESSAGE_ID -- 'your answer'`. Triage tags it: `(needs reply)` means open the batch and answer, `(no-reply)` means ack and move on.
    Never start a new thread for an answer.
 
 When you have nothing else to do, wait instead of ending your turn:
 
 - Idle: run `ttt read --wait`. It returns when mail arrives or after the timeout; either way handle what it prints, then decide again. One wait per idle period; empty waits lengthen on their own (120s, 180s, 240s, 300s) and any arrival resets — do not re-poll on your own timer, and do not pass `--timeout` to defeat the ramp. After 5 consecutive empty waits the wait exits at once telling you to end your turn — obey it, do not run another wait; new mail wakes you with a notification.
 - While you wait, no prompts land on your input: the wait is the notification, and the batch it prints is the delivery. A bare `ttt read --wait` with no `--timeout` is the cheapest idle.
-- Need an answer to continue: `ttt send NAME --wait -- question` (or `ttt reply ID --wait -- ...`). The reply is printed in the same tool result; ack it as usual. Anything else that arrived is listed as headers below it: triage, do not ignore.
+- Need an answer to continue: `ttt send NAME --wait -- 'question'` (or `ttt reply ID --wait -- 'answer'`). The reply is printed in the same tool result; ack it as usual. Anything else that arrived is listed as headers below it: triage, do not ignore.
 - Otherwise: send and move on. `--no-reply` where no answer is needed.
 - A notification line `ttt: N new ...` still appears when you were not waiting; the loop for it is unchanged.
 - Never `--wait` when the teammate might be waiting on you (ttt refuses the obvious case; the rest is on you).
@@ -35,13 +35,13 @@ When you have nothing else to do, wait instead of ending your turn:
 
 | Need | Run |
 |---|---|
-| Message a teammate | `ttt send NAME -- your message` (`--file PATH` for multi-line; add `--wait` to block until the reply) |
+| Message a teammate | `ttt send NAME -- 'your message'` (`--file PATH` for multi-line; add `--wait` to block until the reply) |
 | Idle: wait for mail to come to you | `ttt read --wait` (returns on arrival or at the timeout) |
-| Reply | `ttt reply MESSAGE_ID -- your answer` (`--to receiver` to widen, `--to thread` for group threads; add `--wait` to block until the reply lands) |
-| Group thread | `ttt broadcast A B --subject TOPIC -- message`, then `ttt reply ID --to thread -- answer` |
-| Several recipients | `ttt broadcast A B -- message`, or `--all` for one agent per window (scratch `W-N` windows are skipped; relay to your own second agents yourself) |
+| Reply | `ttt reply MESSAGE_ID -- 'your answer'` (`--to receiver` to widen, `--to thread` for group threads; add `--wait` to block until the reply lands) |
+| Group thread | `ttt broadcast A B --subject 'topic' -- 'message'`, then `ttt reply ID --to thread -- 'answer'` |
+| Several recipients | `ttt broadcast A B -- 'message'`, or `--all` for one agent per window (scratch `W-N` windows are skipped; relay to your own second agents yourself) |
 | Triage a busy mailbox (stays unread) | `ttt inbox --detail`, `ttt read --headers-only`, `ttt inbox --detail --from NAME` |
-| Mark handled | `ttt ack MESSAGE_ID -- note`, or `ttt ack --all -- note` for the whole mailbox |
+| Mark handled | `ttt ack MESSAGE_ID -- 'note'`, or `ttt ack --all -- 'note'` for the whole mailbox |
 | Retract a stale message you sent | `ttt cancel MESSAGE_ID` (only while unread; `ttt cancel --replace KEY` retracts every pending one). The recipient's next `ttt read` says `(N cancelled)` instead of showing it |
 | Check delivery | `ttt status MESSAGE_ID` (`q/n/r/a` = queued/notified/read/acked; `cancelled` when retracted; `by WINDOW` when someone else read, acked, or cancelled) |
 | Full thread | `ttt thread MESSAGE_ID` (header shows `topic:` + `members:`; `--headers-only` to triage) |
@@ -54,8 +54,8 @@ When you have nothing else to do, wait instead of ending your turn:
 | See the session: who owns which pane | `ttt tmux tree` |
 | Is the session set up right | `ttt tmux doctor` |
 | Start an agent and wait until it accepts input | `ttt tmux open --window auto --harness` (bare `--harness` = the default; `--harness claude` to pick) |
-| Turn an existing single-pane window into an agent | `ttt tmux open --window W-2 --harness` (adopts it), then `ttt tmux open --pane tests --in W-2 -- pnpm test --watch`, then `ttt send W-2 --wait -- ...` |
-| Second agent next to you, messageable by name | `ttt tmux open --pane --harness` (name chosen) or `--pane NAME --harness` to pick one; then `ttt send NAME --wait -- task` |
+| Turn an existing single-pane window into an agent | `ttt tmux open --window W-2 --harness` (adopts it), then `ttt tmux open --pane tests --in W-2 -- pnpm test --watch`, then `ttt send W-2 --wait -- 'task'` |
+| Second agent next to you, messageable by name | `ttt tmux open --pane --harness` (name chosen) or `--pane NAME --harness` to pick one; then `ttt send NAME --wait -- 'task'` |
 | Helper pane next to you (never messageable) | `ttt tmux open --pane tests -- pnpm test --watch` |
 | Which harnesses exist here | `ttt tmux doctor` (harness rows) |
 | Revive a dead agent pane | `ttt tmux respawn NAME` (any agent, second agents included) |
@@ -69,11 +69,11 @@ When you have nothing else to do, wait instead of ending your turn:
 ## Cheapest forms
 
 - `ttt tmux open --window auto --harness`: one agent on the default harness, name chosen for
-  you, returns when it accepts input. Then `ttt send NAME --wait -- task`. Two commands, no
+  you, returns when it accepts input. Then `ttt send NAME --wait -- 'task'`. Two commands, no
   `wait --for`, no `capture` to check readiness.
 - `ttt tmux open --pane --harness`: the cheapest second agent next to you — name chosen
   (`WINDOW-N`), messageable at once; `--pane NAME --harness` to pick the name. Then
-  `ttt send NAME --wait -- task`.
+  `ttt send NAME --wait -- 'task'`.
 - `ttt tmux open --window auto`: a scratch shell (`W-N`); use `NAME.1` targets to drive it; adopt
   later with `ttt tmux open --window W-1 --harness`.
 - Skip `--cwd` when the agent should share your directory (it inherits the session's); skip
@@ -85,6 +85,11 @@ When you have nothing else to do, wait instead of ending your turn:
 
 ## Rules
 
+- Always shell-quote message bodies, ACK notes, and subjects as single arguments. `--` ends CLI
+  options; it does not quote shell text. Use `ttt ack --all -- 'FOO BAR; BIZ'`, never bare prose.
+  Prefer single quotes: double quotes still expand `$` and backticks. Escape an apostrophe as
+  `'"'"'` (example: `ttt ack ID -- 'It'"'"'s done; tests passed'`). For complex message bodies,
+  use `--file PATH` or stdin with a quoted heredoc delimiter, such as `<<'MESSAGE'`.
 - Never poll. Do not run `ttt read` or `ttt inbox` in a loop; an empty `read --wait` already waits
   longer next time, and you will be notified the moment mail arrives — the wait itself is the
   notification, so while you wait nothing is pasted into your window.
@@ -93,20 +98,20 @@ When you have nothing else to do, wait instead of ending your turn:
 - `ttt capture` to look, `ttt tmux wait` to wait for the screen, `ttt send --wait` to wait for an answer.
 - `--urgent` interrupts the teammate now. Use it only to stop harmful work or unblock a
   teammate waiting on you. Everything else is a normal send.
-- Status updates carry a key so stale ones vanish: `ttt send NAME --replace status -- tests green`.
+- Status updates carry a key so stale ones vanish: `ttt send NAME --replace status -- 'tests green'`.
 - Add `--no-reply` when no answer is needed, so nobody spends a turn replying.
-- Name the thread when it matters: `ttt send NAME --subject TEXT -- your message`.
-- Expiring notes: `ttt send NAME --ttl SECONDS -- FYI only`.
+- Name the thread when it matters: `ttt send NAME --subject 'topic' -- 'your message'`.
+- Expiring notes: `ttt send NAME --ttl SECONDS -- 'FYI only'`.
 - Retract a stale message you sent: `ttt cancel MESSAGE_ID` (only while the recipient has not read it; `ttt cancel --replace KEY` retracts every pending one). A `ttt read` that says `(N cancelled)` means a sender retracted mail before you read it — nothing to do, do not go hunting for it.
 - Read `ttt capture` instead of asking "what are you doing".
 - Notifications reach your seat (the pane your name resolves to) even when you are working in
   another pane of the window. An unregistered window still receives: its first pane stands in for
   the main agent until something there runs ttt.
 - `broadcast --all` reaches one agent per window. If second agents share your window, relay to
-  them yourself (`ttt send REVIEWER-2 -- ...`); their panes are not broadcast targets.
+  them yourself (`ttt send REVIEWER-2 -- 'message'`); their panes are not broadcast targets.
 - Never pass `--session` or `--from`: your session, name, and board are inherited from the tmux environment automatically. They are recovery-only — if `ttt whoami` shows the wrong window, prefix every command with `--session SESSION --from YOUR-WINDOW` until the runner is fixed.
 - Bodies are plain text read by a model: request first, context second, keep them short.
-- A window named like a command needs the explicit form: `ttt send NAME -- message`.
+- A window named like a command needs the explicit form: `ttt send NAME -- 'message'`.
 
 ## If `ttt` is missing
 

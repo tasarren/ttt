@@ -10,9 +10,14 @@ is what `ttt whoami` prints as `name:` — the window name unless you registered
 (`WINDOW-N`) in someone's window. Every window has a main agent named like the window; other agents
 live in other windows. Find them with `ttt windows`, and panes with `ttt panes`.
 
-- To message a teammate: `ttt send NAME -- your message`. Multi-line bodies: `ttt send NAME --file PATH`.
+- Always shell-quote message bodies, ACK notes, and subjects as single arguments. `--` ends CLI
+  options; it does not quote shell text. Use `ttt ack --all -- 'FOO BAR; BIZ'`, never bare prose.
+  Prefer single quotes: double quotes still expand `$` and backticks. Escape an apostrophe as
+  `'"'"'` (example: `ttt ack ID -- 'It'"'"'s done; tests passed'`). For complex message bodies,
+  use `--file PATH` or stdin with a quoted heredoc delimiter, such as `<<'MESSAGE'`.
+- To message a teammate: `ttt send NAME -- 'your message'`. Multi-line bodies: `ttt send NAME --file PATH`.
 - When a line starting with `ttt:` appears in your input, run `ttt read` once, handle every message in the
-  batch, then `ttt ack MESSAGE_ID -- short note` for each one you handled. Never skip the ack.
+  batch, then `ttt ack MESSAGE_ID -- 'short note'` for each one you handled. Never skip the ack.
 - When you have nothing else to do, wait instead of ending your turn. Idle: run `ttt read --wait`;
   it returns when mail arrives or after the timeout — either way, handle what it prints, then decide
   again. One wait per idle period; empty waits lengthen on their own (120s, 180s, 240s, 300s) and
@@ -20,25 +25,25 @@ live in other windows. Find them with `ttt windows`, and panes with `ttt panes`.
   ramp. After 5 consecutive empty waits the wait exits at once telling you to end your turn —
   obey it, do not run another wait; new mail wakes you with a notification. While you wait, no prompts land on your input: the wait is the notification, so a bare
   `ttt read --wait` with no `--timeout` is the cheapest idle.
-- Need an answer to continue: `ttt send NAME --wait -- question` (or
-  `ttt reply MESSAGE_ID --wait -- ...`). The reply is printed in the same tool result; ack it as
+- Need an answer to continue: `ttt send NAME --wait -- 'question'` (or
+  `ttt reply MESSAGE_ID --wait -- 'answer'`). The reply is printed in the same tool result; ack it as
   usual. Anything else that arrived is listed as headers below it: triage, do not ignore.
 - Otherwise: send and move on. Add `--no-reply` where no answer is needed. A notification line
   (`ttt: N new ...`) still appears when you were not waiting; the loop for it is unchanged.
 - Never `--wait` when the teammate might be waiting on you; ttt refuses the obvious case, the rest
   is on you.
 - Triage a busy mailbox before reading bodies: `ttt inbox --detail` or `ttt read --headers-only`.
-- Reply with `ttt reply MESSAGE_ID -- your answer`. Do not start a new thread for an answer.
-  For group threads: `ttt broadcast A B --subject TOPIC -- message`, then
-  `ttt reply MESSAGE_ID --to thread -- your answer`.
+- Reply with `ttt reply MESSAGE_ID -- 'your answer'`. Do not start a new thread for an answer.
+  For group threads: `ttt broadcast A B --subject 'topic' -- 'message'`, then
+  `ttt reply MESSAGE_ID --to thread -- 'your answer'`.
 - Never poll. Do not run `ttt read` or `ttt inbox` in a loop; an empty `read --wait` already waits
   longer next time, and while you wait nothing is pasted into your window — the batch the wait
   prints is the delivery.
-- Status updates use a key so stale ones disappear: `ttt send NAME --replace status -- tests green`.
+- Status updates use a key so stale ones disappear: `ttt send NAME --replace status -- 'tests green'`.
 - `--urgent` interrupts the teammate immediately. Use it only to stop harmful work or unblock a teammate
   who is waiting on you. Everything else is a normal send.
 - Add `--no-reply` when you do not need an answer, so the teammate does not spend a turn replying.
-- Name the thread when it matters: `ttt send NAME --subject TEXT -- your message`.
+- Name the thread when it matters: `ttt send NAME --subject 'topic' -- 'your message'`.
 - `ttt capture NAME --lines 40` shows the seat NAME resolves to (a stamp anywhere in the session,
   else the window's first pane — never the focused one). Read it instead of asking "what are you
   doing". TUI chrome is cleaned automatically; pass `--raw` for the untouched pane.
@@ -59,8 +64,8 @@ live in other windows. Find them with `ttt windows`, and panes with `ttt panes`.
 - "Use W-2 for the verification run": adopt the existing window —
   `ttt tmux open --window W-2 --harness` (works when W-2 is unregistered with
   exactly one pane), then `ttt tmux open --pane tests --in W-2 -- pnpm test --watch`, then
-  `ttt send W-2 --wait -- ...`.
-- Cheapest forms: `ttt tmux open --window auto --harness` then `ttt send NAME --wait -- task` —
+   `ttt send W-2 --wait -- 'task'`.
+- Cheapest forms: `ttt tmux open --window auto --harness` then `ttt send NAME --wait -- 'task'` —
   two commands, no `wait --for`, no `capture` to check readiness. `ttt tmux open --pane --harness`
   is the cheapest second agent: messageable as soon as it opens. `ttt tmux open --window auto`
   is a scratch shell (`W-N`): drive it with `NAME.1` targets, adopt later with

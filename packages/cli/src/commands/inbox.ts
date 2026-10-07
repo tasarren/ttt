@@ -217,7 +217,7 @@ export function formatBatch(messages: BoardMessage[], remaining: number, peek: b
   if (messages.length === 0) return emptyLine(extraInfo)
   const lines = [`ttt: ${plural(messages.length, "message")}${peek ? " (peek; still unread)" : ""}`]
   messages.forEach((message, index) => {
-    const reply = message.replyExpected ? `reply: ttt reply ${message.messageId} -- MESSAGE` : "reply: none needed"
+    const reply = message.replyExpected ? `reply: ttt reply ${message.messageId} -- 'MESSAGE'` : "reply: none needed"
     const tags = messageTags(message, false)
     lines.push(
       "",
@@ -270,7 +270,7 @@ export function formatThread(messages: BoardMessage[], members: string[]): strin
   if (!first) return "ttt: empty thread."
   const lines = [`thread ${first.threadId} (${plural(messages.length, "message")}) topic: ${topicOf(first)} members: ${members.join(", ")}`]
   for (const message of messages) {
-    const reply = message.replyExpected ? `reply: ttt reply ${message.messageId} -- MESSAGE` : "reply: none needed"
+    const reply = message.replyExpected ? `reply: ttt reply ${message.messageId} -- 'MESSAGE'` : "reply: none needed"
     lines.push(
       "",
       `${shortStamp(message.timestamp)} ${message.from} -> ${message.recipients.join(", ")} [${message.messageId}]${message.inReplyTo ? ` re: ${message.inReplyTo}` : ""}`,
@@ -288,7 +288,7 @@ export function formatThreadHeaders(messages: BoardMessage[], members: string[])
   if (!first) return "ttt: empty thread."
   const lines = [`thread ${first.threadId} (${plural(messages.length, "message")}) topic: ${topicOf(first)} members: ${members.join(", ")} (headers)`]
   messages.forEach((message, index) => {
-    const reply = message.replyExpected ? `reply: ttt reply ${message.messageId} -- MESSAGE` : "reply: none needed"
+    const reply = message.replyExpected ? `reply: ttt reply ${message.messageId} -- 'MESSAGE'` : "reply: none needed"
     lines.push(
       `[${index + 1}/${messages.length}] ${shortStamp(message.timestamp)} ${message.from} [${message.messageId}]`,
       `  ${previewBody(message.body)}`,

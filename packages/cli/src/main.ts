@@ -39,11 +39,11 @@ const COMMANDS: Record<string, Handler> = {
 export const USAGE = `ttt — durable, batched messaging between windows of the current tmux session
 
 usage:
-  ttt send TARGET [options] -- MESSAGE          ttt TARGET -- MESSAGE (shorthand)
+  ttt send TARGET [options] -- 'MESSAGE'        ttt TARGET -- 'MESSAGE' (shorthand)
   ttt send TARGET [options] --file PATH         (or pipe the body on stdin)
-  ttt reply MESSAGE_ID [--to sender|receiver|both|thread] [options] -- MESSAGE
-  ttt broadcast TARGET... [options] -- MESSAGE  ttt broadcast --all [options] -- MESSAGE
-  ttt ack MESSAGE_ID [NOTE]                     ttt ack --all [-- NOTE]
+  ttt reply MESSAGE_ID [--to sender|receiver|both|thread] [options] -- 'MESSAGE'
+  ttt broadcast TARGET... [options] -- 'MESSAGE'  ttt broadcast --all [options] -- 'MESSAGE'
+  ttt ack MESSAGE_ID ['NOTE']                   ttt ack --all [-- 'NOTE']
   ttt cancel MESSAGE_ID... | ttt cancel --replace KEY
 
   ttt read [--max COUNT] [--peek] [--latest] [--headers-only]
@@ -69,6 +69,9 @@ message options:
   --file PATH     read the message body from PATH
   --wait          block until the recipient replies (or acks) in this thread, then print the reply
   --timeout SEC   how long --wait blocks (default settings.wait.seconds, max settings.wait.maxSeconds)
+
+Shell-quote bodies, ACK notes, and subjects. -- ends options, not shell parsing.
+Example: ttt ack --all -- 'FOO BAR; BIZ'. Use --file for complex message bodies.
 
 Normal messages are queued. A target gets one notification per burst and reads the batch with
 "ttt read". A recipient blocked in --wait gets no paste at all: the wait returns the mail itself. ACK is board state only; it sends nothing. Cancel retracts a message you sent from recipients who had not read it; the same --replace KEY you sent with retracts every pending one. Settings: ~/.ttt/settings.jsonc
