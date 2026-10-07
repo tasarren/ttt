@@ -256,7 +256,9 @@ errors.
   The paste lands in the recipient's seat -- the pane their name resolves to (a stamp anywhere in
   the session, else the window's first pane) -- never the active pane,
   which is whoever touched it last. Before clearing the input line the paste waits for 2 s of
-  screen quiet (a human typing or the agent streaming both defer it, silently, up to 15 s) --
+  screen quiet (a human typing or the agent streaming both defer it, silently, up to 15 s).
+  This wait holds no mailbox lock: reads, acknowledgements, and new sends can proceed. The notifier
+  rechecks its token, unread mail, and waiting receiver under the lock before pasting --
   no keystrokes are captured, only screen equality.
 - **Urgent.** `--urgent` immediately pastes one line: `ttt: URGENT from NAME [MESSAGE_ID]. Run: ttt read`.
   The body and reply instructions stay on the board until `ttt read`; message text is never pasted into

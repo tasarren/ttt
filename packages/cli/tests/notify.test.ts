@@ -19,6 +19,62 @@ after(async() => {
 
 const NO_WAIT: TmuxOptions = { inputSettleMs: 0, postPasteMs: 0, enterPresses: 1, postSendMs: 0 }
 
+for (const action of ["arrival", "read", "wait", "replacement"] as const) {
+  test(`mailbox stays available during screen quiet; delivery rechecks ${action}`, async() => {
+    const home = await mkdtemp(join(tmpdir(), "ttt-notify-"))
+    homes.push(home)
+    const sessionRoot = join(home, "boards", "work")
+    const board = new Board({ sessionRoot, notifySeconds: 0, lock: { timeoutMs: 200, staleMs: 60_000 } })
+    const options = { kind: MessageKind.Message, priority: MessagePriority.Normal, replyExpected: true }
+    const first = await board.send("A", ["B"], "first", options)
+    const token = first.notifications[0]!.token
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const pasted: string[] = []
+    const tmux = new Tmux(NO_WAIT, async(args) => {
+      if (args[0] === "list-windows") return "B\t@2\n"
+      if (args[0] === "list-panes") return "work\tB\t@2\t%5\t1\t1234\tB\n"
+      if (args[0] === "show-options") return ""
+      if (args[0] === "capture-pane") {
+        entered.resolve()
+        await release.promise
+        return "steady"
+      }
+      if (args[0] === "set-buffer") pasted.push(args.at(-1)!)
+      return ""
+    })
+    const ctx: Context = {
+      settings: defaultSettings(home), session: "work", senderName: "ttt", windowName: "ttt",
+      senderId: "", senderPane: "", claimed: false, actor: undefined, via: "override",
+      tmux, board, binPath: join(home, "no-such-bin.mjs"),
+    }
+    const delivering = notify(["--target", "B", "--token", token], ctx)
+    let withdraw: (() => Promise<void>) | undefined
+    let replacement: string | undefined
+    try {
+      await entered.promise
+      // These operations must finish while the screen gate is still blocked, not after it opens.
+      await board.ack("B", first.message.messageId, "done while screen busy")
+      await board.send("A", ["B"], "second", options)
+      if (action === "read") await board.read("B", { max: 10, peek: false, latest: false })
+      if (action === "wait") withdraw = await board.announcePresence("B", "any")
+      if (action === "replacement") {
+        await board.cancelNotification("B", token)
+        replacement = (await board.scheduleNotification("B"))!.token
+      }
+    } finally {
+      release.resolve()
+      await delivering
+      await withdraw?.()
+    }
+    assert.deepEqual(pasted, action === "arrival" ? ["ttt: 1 new from A(1); 1 unread. Run: ttt read"] : [])
+    if (replacement) {
+      const marker = JSON.parse(await readFile(join(sessionRoot, "state", "B.notification.json"), "utf8")) as { token: string }
+      assert.equal(marker.token, replacement, "the stale notifier leaves the replacement token alone")
+    }
+  })
+}
+
 /** A tmux server that lists window B but fails every paste. */
 function failingTmux(): Tmux {
   return new Tmux(NO_WAIT, async(args) => {

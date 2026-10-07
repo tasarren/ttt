@@ -117,6 +117,9 @@ windows with `V-`, and clean up after themselves via a trap.
    receipts notified. A newer marker means a
    newer child owns the burst; the old one exits silently. A failed paste cancels the dead token and re-arms
    a live notifier.
+   The optional `deliverNotification` preparation callback waits for screen quiet after batching,
+   outside the mailbox lock. Delivery then rechecks the token, fresh receipts, and presence under
+   the lock; the actual paste skips the already-completed quiet gate.
 5. `main.ts` runs `syncBadges(ctx)` for every non-read-only command (`packages/cli/src/badges.ts`).
 
 Context creation registers the caller's pane on any `ttt` run from inside tmux (never under

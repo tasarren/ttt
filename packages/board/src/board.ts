@@ -708,6 +708,7 @@ export class Board {
     target: string,
     token: string,
     deliver: (summary: NotificationSummary) => Promise<void>,
+    prepare?: () => Promise<void>,
   ): Promise<boolean> {
     const markerPath = this.markerPath(target)
     const pending = await readJsonIfExists<NotificationMarker>(markerPath)
@@ -725,6 +726,11 @@ export class Board {
       })
       if (!live) return false
     }
+
+    // Slow delivery preparation must not block reads, acknowledgements, or senders.
+    // The token, unread receipts, and presence are checked again under the lock below.
+    if ((await readJsonIfExists<NotificationMarker>(markerPath))?.token !== token) return false
+    await prepare?.()
 
     return this.withMailboxLock(target, async() => {
       const marker = await readJsonIfExists<NotificationMarker>(markerPath)
