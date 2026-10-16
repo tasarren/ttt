@@ -138,7 +138,10 @@ const PLACEHOLDER_WINDOW = "ttt-setup"
 
 /** The hook uses the absolute path of this executable: tmux's PATH is whatever the server started with. */
 export function hookCommand(ctx: TmuxVerbContext): string {
-  return `run-shell "${process.execPath} ${ctx.binPath} tmux _normalize-window #{window_id}"`
+  // Quote shell arguments, escape literal tmux formats, then quote for tmux's command parser.
+  const paths = [process.execPath, ctx.binPath].map((path) => `'${path.replaceAll("'", "'\\''").replaceAll("#", "##")}'`)
+  const command = `${paths.join(" ")} tmux _normalize-window #{window_id}`
+  return `run-shell ${JSON.stringify(command).replaceAll("$", "\\$")}`
 }
 
 export function formatReport(report: SetupReport): string {

@@ -4,6 +4,12 @@ dist/
 *.tsbuildinfo
 *.tgz
 /release/
+# Keep durable orchestrator files visible even when local excludes hide the directory.
+!/.orchestrator/
+/.orchestrator/*
+!/.orchestrator/.gitignore
+!/.orchestrator/plans/
+!/.orchestrator/scripts/
 # prepack copies for the published tarball (removed by postpack); the sources live at the root
 packages/cli/README.md
 packages/cli/LICENSE

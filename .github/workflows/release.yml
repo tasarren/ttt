@@ -11,13 +11,16 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y tmux
       - uses: pnpm/action-setup@v4
         with: { version: 11.24.0 }
       - uses: actions/setup-node@v4
-        with: { node-version-file: .node-version, cache: pnpm, registry-url: "https://registry.npmjs.org" }
+        with: { node-version: "24.11.0", cache: pnpm, registry-url: "https://registry.npmjs.org" }
       - run: pnpm install --frozen-lockfile
-      - run: node -e 'const t=process.env.GITHUB_REF_NAME.slice(1),v=require("./packages/cli/package.json").version;if(t!==v){console.error("tag v"+t+" != package "+v);process.exit(1)}'
-      - run: pnpm --filter @tasarren/ttt pack --dry-run # asserts dist + README + LICENSE land in the tarball
+      - run: node .orchestrator/scripts/verify-release.mjs "$RELEASE_TAG"
+        env: { RELEASE_TAG: "${{ github.event.release.tag_name }}" }
+      - run: pnpm run check
+      - run: pnpm run verify:packed
       - run: pnpm --filter @tasarren/ttt stage publish --access public --no-git-checks
         # Staged publishing: CI uploads, a maintainer approves on npmjs.com (or `pnpm stage approve`).
         # The trusted publisher entry is stage-only on purpose. --no-git-checks: release checkouts are

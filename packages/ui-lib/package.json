@@ -20,7 +20,7 @@
     "stories": "histoire dev",
     "test": "node --test tests/*.test.ts tests/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json",
-    "generate": "node scripts/generate-contracts.mjs && eslint src/contracts/types.ts --fix",
+    "generate": "node ../../.orchestrator/scripts/generate-contracts.mjs && eslint src/contracts/types.ts --fix",
     "build": "tsdown",
     "build:stories": "histoire build"
   },

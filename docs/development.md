@@ -77,6 +77,7 @@ pnpm run lint        # eslint (stylistic + typescript-eslint strict, copied from
 pnpm run test        # node --test packages/*/tests/*.test.ts
 pnpm run build       # CLI, tmux library, Vue UI library, and Webapp client/SSR
 pnpm run check       # all of the above, in order
+pnpm run verify:packed # inspect tarball and run CLI E2E + hook-path regression against it
 pnpm ttt --help      # run the CLI from source
 pnpm --filter @ttt/ui stories # Histoire components and page previews
 pnpm web             # localhost Hono/Vite development host
@@ -84,6 +85,16 @@ pnpm web:start       # localhost host with built client/SSR output
 ```
 
 ## Dev loop
+
+Reusable maintenance and verification scripts live in `.orchestrator/scripts/`. Scratch files,
+audit logs, downloads, and disposable checkouts belong in the ignored `.orchestrator/tmp/` directory.
+Release roadmaps live in `.orchestrator/plans/`. Record user-facing changes in root `CHANGELOG.md`.
+CI uses Node `24.11.0` and pnpm `11.24.0`, including packed tests on the minimum supported runtime.
+`verify-candidate.mjs [NODE]` checks a fresh snapshot of current tracked/unignored files;
+`verify-packed.mjs [NODE]` accepts a different Node executable for minimum-runtime checks;
+`verify-upgrade.mjs CANDIDATE_BIN [NODE]` downloads the integrity-checked `0.1.3` artifact and
+rehearses all-board migration, receipt preservation, re-seating, and backup restoration.
+All three keep evidence under `.orchestrator/tmp/`; they never publish or change repository refs.
 
 The package `bin` points at `src/ttt.ts`, so `pnpm add -g .` in `packages/cli` puts a `ttt` on your PATH
 that runs the current source. Edit, save, run: no build. `publishConfig.bin` swaps to `dist/ttt.mjs` for
@@ -96,7 +107,7 @@ Verify inside your own session with `ttt`, not with ad-hoc tmux servers: `.orche
 holds `verify-wait.sh`, `verify-seats.sh`, `verify-create.sh`, `verify-teammate-flow.sh`, and
 `verify-furniture.sh`, run
 from inside the
-live ttt session (`sh .orchestrator/scripts/verify-wait.sh`). They exercise the real verbs end
+live ttt session (`bash .orchestrator/scripts/verify-wait.sh`). They exercise the real verbs end
 to end, take an optional harness name (default: the settings' default), prefix their
 windows with `V-`, and clean up after themselves via a trap.
 
@@ -309,8 +320,9 @@ Source is ~5,030 lines across the four packages.
 ## Release
 
 Releases are owner-gated in two steps: publishing a GitHub Release (tag `vX.Y.Z`, matching
-`packages/cli` version) runs `.github/workflows/release.yml`, which verifies the tag, dry-runs the pack,
-and *stages* the package on npm via OIDC trusted publishing. A maintainer then approves it
+`packages/cli` version) runs `.github/workflows/release.yml`, which verifies version sync and the
+tag's exact checkout SHA, runs the full workspace check and packed CLI tests, then *stages* the
+package on npm via OIDC trusted publishing. A maintainer then approves it
 (`pnpm stage approve <id>` with 2FA, or the Approve button on npmjs.com) and only then does the version
 go live. Merging to `main` never publishes; neither does a bare tag push without a release. Prereleases
 are skipped by the workflow and never reach npm. The trusted publisher entry is stage-only on purpose:

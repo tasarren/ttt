@@ -26,11 +26,15 @@ built yet. An unstamped window's first pane still receives its messages; `TreeSe
 label that fallback, while `PanesView.seat` does. `TreePane.startCommand`, working directories,
 and message bodies should be treated as sensitive when designing Webapp access.
 
-Backend work still needed: ttt has no Webapp API or event stream, and its CLI has no JSON command
-to list all messages or receipts. A live view must compose tmux inventory with board queries and
-add a read-only history query plus refresh mechanism. `Board.read()` marks messages read unless
-called with `peek: true`, and even a peek can settle expired receipts; use a separate query if
-dashboard reads must not change state. Current writers use board version 7, receipt version 1,
+The experimental checkout-only host in `packages/cli/src/web.ts` composes tmux inventory with
+`Board.observe()` for read-only history. Its transport is documented in
+[`packages/webapp/openapi.json`](../packages/webapp/openapi.json): `/api/state` returns paged route
+state, `/api/events` streams SSE revision invalidations, and `/api/terminal` streams the selected
+window. `/api/input` and action endpoints validate writes separately. JSONC settings/layout writes
+check ETags under a lock and rename atomically. The published CLI does not include this host.
+`Board.read()` marks messages read unless called with `peek: true`, and even a peek can settle
+expired receipts; dashboard queries use `Board.observe()` instead and never change receipts or
+expiry. Current writers use board version 7, receipt version 1,
 layout version 1, and session-record version 1; older board messages may remain after migration.
 The CLI also enforces
 rules a JSON Schema cannot express here, including exactly one default harness when `harnesses`

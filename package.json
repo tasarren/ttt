@@ -10,8 +10,9 @@
     "lint": "eslint .",
     "test": "pnpm --filter @ttt/ui build && node --test packages/*/tests/*.test.ts packages/ui-lib/tests/*.test.mjs",
     "check": "pnpm run version:check && pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run build && pnpm --filter @ttt/ui build:stories",
-    "version:check": "node scripts/sync-version.mjs",
-    "version:sync": "node scripts/sync-version.mjs --write",
+    "version:check": "node .orchestrator/scripts/sync-version.mjs",
+    "version:sync": "node .orchestrator/scripts/sync-version.mjs --write",
+    "verify:packed": "node .orchestrator/scripts/verify-packed.mjs",
     "web": "pnpm --filter @ttt/webapp dev",
     "web:start": "pnpm --filter @ttt/webapp start"
   },

@@ -6,17 +6,20 @@
 set -u
 H=${1:-}
 step() { printf '\n== %s\n' "$*"; }
-cleanup() {
-  for w in $(ttt windows | awk '$1 ~ /^V-/ {print $1}'); do ttt tmux close "$w" >/dev/null 2>&1; done
-}
+created=""
+cleanup() { for w in $created; do ttt tmux close "$w" >/dev/null 2>&1; done; }
 trap cleanup EXIT
 
 step "registered shell window: listed, seat = pane 1, urgent lands there"
 ttt create --window V-SEAT || exit 1
+created="V-SEAT"
 ttt windows | grep V-SEAT
 ttt panes --window V-SEAT
-ttt send V-SEAT --no-reply --urgent -- "V: probe to a shell window"
-sleep 1; ttt capture V-SEAT --lines 4 | grep -c "probe to a shell" | sed 's/^/lines showing the probe: /'
+ttt send V-SEAT --no-reply --urgent -- "V: probe to a shell window" || exit 1
+ttt tmux wait V-SEAT --for 'ttt: URGENT from .*Run: ttt read' --timeout 5 || exit 1
+if ttt capture V-SEAT --lines 10 | grep -q 'probe to a shell'; then
+  echo 'FAIL: urgent pasted the body instead of a summary'; exit 1
+fi
 
 step "a new shell pane is V-SEAT-2 immediately; pane 1 keeps the window's name"
 ttt create --pane --in V-SEAT --shell >/dev/null

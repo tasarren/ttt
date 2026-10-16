@@ -1,6 +1,6 @@
 ---
 name: ttt
-version: 0.1.3
+version: 0.2.0
 description: Message teammate agents that share your tmux session. Use when you see a line starting with `ttt:`, when you need to contact, reply to, check on, or retract a message to another agent window, or when instructions mention `ttt send`, `ttt read`, `ttt ack`, `ttt cancel`, `ttt create`, windows or panes for teammates, or a teammate window name.
 ---
 

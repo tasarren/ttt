@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises"
-const schema = JSON.parse(await readFile(new URL("../../../docs/ttt-system.schema.json", import.meta.url), "utf8"))
+const schema = JSON.parse(await readFile(new URL("../../docs/ttt-system.schema.json", import.meta.url), "utf8"))
 const literal = x => JSON.stringify(x)
 function type(s) {
   if (s.$ref) return s.$ref.split("/").at(-1)
@@ -14,5 +14,5 @@ function type(s) {
   return { string: "string", integer: "number", number: "number", boolean: "boolean", null: "null" }[s.type] || "unknown"
 }
 const body = Object.entries(schema.$defs).map(([name, def]) => `${def.description ? `/** ${def.description} */\n` : ""}export type ${name} = ${type(def)}`).join("\n\n")
-await writeFile(new URL("../src/contracts/types.ts", import.meta.url), `// Generated from docs/ttt-system.schema.json. Run pnpm --filter @ttt/ui generate; do not hand-edit.\n\n${body}\n`)
+await writeFile(new URL("../../packages/ui-lib/src/contracts/types.ts", import.meta.url), `// Generated from docs/ttt-system.schema.json. Run pnpm --filter @ttt/ui generate; do not hand-edit.\n\n${body}\n`)
 console.log(`Generated ${Object.keys(schema.$defs).length} contract definitions`)

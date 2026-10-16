@@ -15,6 +15,7 @@ jobs:
       - uses: pnpm/action-setup@v4
         with: { version: 11.24.0 }
       - uses: actions/setup-node@v4
-        with: { node-version-file: .node-version, cache: pnpm, registry-url: "https://registry.npmjs.org" }
+        with: { node-version: "24.11.0", cache: pnpm, registry-url: "https://registry.npmjs.org" }
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check # typecheck, lint, tests (incl. tmux e2e), build, UI stories
+      - run: pnpm run verify:packed

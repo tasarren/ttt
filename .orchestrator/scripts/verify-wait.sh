@@ -8,19 +8,19 @@ set -u
 T=${TTT_BIN:-ttt}
 step() { printf '\n== %s\n' "$*"; }
 fail() { echo "FAIL: $*"; exit 1; }
-session() { $T whoami | awk '/^session:/ {print $2}'; }
+board=$($T whoami | sed -n 's/^board: //p')
+test -n "$board" || fail "cannot resolve the configured board"
+created=""
 cleanup() {
-  local s
-  s=$(session) || return 0
-  for w in $($T windows | awk '$1 ~ /^V-/ {print $1}'); do $T tmux close "$w" >/dev/null 2>&1; done
-  rm -f ~/.ttt/boards/"$s"/state/V-A.wait.json ~/.ttt/boards/"$s"/state/V-A.waiting.json ~/.ttt/boards/"$s"/state/V-A.notification.json
-  rm -rf ~/.ttt/boards/"$s"/mailboxes/V-A ~/.ttt/boards/"$s"/mailboxes/V-B
+  for w in $created; do $T tmux close "$w" >/dev/null 2>&1; done
 }
 trap cleanup EXIT
 
 step "two shell windows"
 $T create --window V-A || exit 1
+created="V-A"
 $T create --window V-B || exit 1
+created="$created V-B"
 
 step "a normal send during read --wait lands in the wait's output, never as a paste"
 $T tmux type V-A.1 -- "$T read --wait --timeout 15" >/dev/null
@@ -46,7 +46,7 @@ step "an empty wait leaves a streak that the next arrival removes"
 $T tmux type V-A.1 -- "$T read --wait --timeout 3" >/dev/null
 $T tmux press V-A.1 Enter >/dev/null
 sleep 5
-ST=~/.ttt/boards/$(session)/state/V-A.wait.json
+ST=$board/state/V-A.wait.json
 test -e "$ST" || fail "no streak file after an empty wait"
 echo "ok: streak present: $(cat "$ST")"
 $T send V-A --no-reply -- "V: streak reset" >/dev/null

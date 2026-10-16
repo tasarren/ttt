@@ -192,17 +192,20 @@ test("subjects tag threads; sender filter and thread triage stay unread", async(
   assert.equal(await ttt("B", "inbox", "--count"), "0")
 })
 
-test("group threads converge via reply --to thread", async() => {
+test("group threads converge via reply --to thread", async(t) => {
   await tmux("new-window", "-t", SESSION, "-n", "C", "sh")
   panes["C"] = (await tmux("display-message", "-p", "-t", `${SESSION}:C`, "#{pane_id}")).trim()
   await ttt("C", "whoami")
+  t.after(async() => {
+    for (const name of ["A", "B", "C"]) await ttt(name, "ack", "--all")
+  })
   const queued = await ttt("A", "broadcast", "B", "C", "--subject", "launch", "--", "group probe")
   const rootId = /^queued (ttt-\S+) -> B, C/.exec(queued)?.[1]
   assert.ok(rootId, `unexpected broadcast output: ${queued}`)
   const nested = await ttt("B", "reply", rootId, "--", "b nested")
-  assert.match(nested, /-> A \(notify in ~1s\) \(thread /)
+  assert.match(nested, new RegExp(`-> A \\((?:notify in ~1s|joins pending batch)\\) \\(thread ${rootId}\\)$`))
   const widened = await ttt("C", "reply", rootId, "--to", "thread", "--", "c widens")
-  assert.match(widened, /-> A, B \(notify in ~1s|joins pending batch\) \(thread /)
+  assert.match(widened, new RegExp(`-> A, B \\((?:notify in ~1s|joins pending batch)\\) \\(thread ${rootId}\\)$`))
   await assert.rejects(ttt("C", "reply", rootId, "--to", "everyone", "--", "x"), /--to must be sender, receiver, both, or thread/)
   const batchB = await ttt("B", "read")
   assert.match(batchB, /group probe/)
@@ -587,7 +590,7 @@ test("read --wait exits idle after maxIdle empty waits; pending mail still deliv
 
 test("tmux setup creates a normalized session, the hook normalizes new windows, doctor reads it back", async() => {
   // Outside tmux: no TMUX/TMUX_PANE, private server through TMUX_TMPDIR so nothing touches the developer's.
-  const tmpDir = await mkdtemp(join(tmpdir(), "ttt-e2e-tmuxdir-"))
+  const tmpDir = await mkdtemp(join(tmpdir(), "tm-")) // Keep tmux's Unix socket below its pathname limit in checkout-local scratch.
   const env: NodeJS.ProcessEnv = { ...process.env, TTT_HOME: home, TMUX_TMPDIR: tmpDir }
   delete env["TMUX"]
   delete env["TMUX_PANE"]

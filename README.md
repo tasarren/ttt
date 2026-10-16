@@ -61,6 +61,9 @@ node packages/cli/dist/ttt.mjs --help
 
 `pnpm pack` in `packages/cli` produces a tarball whose `bin` points at that file.
 
+See [CHANGELOG.md](https://github.com/tasarren/ttt/blob/main/CHANGELOG.md) for release history,
+unreleased changes, and upgrade notes.
+
 ## UI library
 
 `packages/ui-lib` is one private `@ttt/ui` workspace package. It exports Vue components, styles,
@@ -74,8 +77,9 @@ pnpm run check
 
 See [UI library usage](packages/ui-lib/README.md) and [component API](packages/ui-lib/docs/COMPONENT_API.md).
 
-## Local Webapp
+## Local Webapp (experimental)
 
+Checkout-only preview; not included in the published `@tasarren/ttt` CLI package.
 Desktop Webapp uses Hono SSR, Vue, Pinia, Vue Router, and the `@ttt/ui` library.
 Run from this checkout:
 
