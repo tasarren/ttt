@@ -113,6 +113,13 @@ export const ack: Handler = async(argv, ctx) => {
     const receipts = await ctx.board.ackAll(ctx.senderName, dashNote, ctx.actor)
     for (const receipt of receipts) process.stdout.write(`acked ${receipt.messageId}\n`)
     if (receipts.length === 0) process.stdout.write("ttt: nothing to ack.\n")
+    if (dashNote) {
+      // ponytail: one status read per acked message; batches this size are fine. Index replyExpected if ack --all ever gets hot.
+      for (const receipt of receipts) {
+        const sent = await ctx.board.messageStatus(receipt.messageId).catch(() => undefined)
+        if (sent?.message.replyExpected) process.stderr.write(replyLostInAck(sent.message.from, receipt.messageId))
+      }
+    }
     return
   }
   const [messageId, ...bareNote] = positionals
@@ -122,7 +129,13 @@ export const ack: Handler = async(argv, ctx) => {
   const receipt = await ctx.board.ack(ctx.senderName, messageId, note, ctx.actor)
   const wasUnread = prior?.receipts.find((item) => item.recipient === ctx.senderName)?.state === "unread"
   if (wasUnread) process.stderr.write("ttt: acked without read; the body was never marked read.\n")
+  if (note && prior?.message.replyExpected) process.stderr.write(replyLostInAck(prior.message.from, receipt.messageId))
   process.stdout.write(`acked ${receipt.messageId}\n`)
+}
+
+/** An ACK note stays in the acker's own mailbox; say so when the sender was owed an actual reply. */
+function replyLostInAck(from: string, messageId: string): string {
+  return `ttt: ${messageId} from ${from} expects a reply; an ACK note is not sent. Answer with: ttt reply ${messageId} -- 'MESSAGE'\n`
 }
 
 export const status: Handler = async(argv, ctx) => {
