@@ -33,7 +33,7 @@ test("settings.jsonc accepts comments, trailing commas, partial overrides, and ~
       "notifySeconds": 5,
       "notifyOverrides": { "WATCHER": 10 },
       "boardRoot": "~/boards-elsewhere",
-      "tmux": { "enterPresses": 1, },
+      "tmux": { "enterPresses": 1, "badges": false, },
     }`,
   })
   const settings = await resolveSettings({ TTT_HOME: dir })
@@ -41,6 +41,7 @@ test("settings.jsonc accepts comments, trailing commas, partial overrides, and ~
   assert.deepEqual(settings.notifyOverrides, { WATCHER: 10 })
   assert.equal(settings.tmux.enterPresses, 1)
   assert.equal(settings.tmux.postPasteMs, 500, "untouched keys keep their defaults")
+  assert.equal(settings.tmux.badges, false)
   assert.ok(settings.boardRoot.endsWith("/boards-elsewhere"))
   assert.ok(!settings.boardRoot.startsWith("~"))
 })
@@ -48,6 +49,13 @@ test("settings.jsonc accepts comments, trailing commas, partial overrides, and ~
 test("settings.json is the fallback when settings.jsonc is absent", async() => {
   const dir = await home({ "settings.json": "{\"readMax\": 3}" })
   assert.equal((await resolveSettings({ TTT_HOME: dir })).readMax, 3)
+})
+
+test("wait.maxIdle defaults to 5 and parses like its sibling keys", async() => {
+  const bare = await home()
+  assert.equal((await resolveSettings({ TTT_HOME: bare })).wait.maxIdle, 5)
+  const tuned = await home({ "settings.jsonc": "{\"wait\": {\"seconds\": 2, \"maxSeconds\": 4, \"maxIdle\": 2}}" })
+  assert.deepEqual((await resolveSettings({ TTT_HOME: tuned })).wait, { seconds: 2, maxSeconds: 4, maxIdle: 2 })
 })
 
 test("bad values, unknown keys, and syntax errors are exit-2 errors naming the file", async() => {
@@ -68,9 +76,11 @@ test("bad values, unknown keys, and syntax errors are exit-2 errors naming the f
   await bad("{\"notifyOverrides\": 5}", /notifyOverrides must be an object/)
   await bad("{\"readMax\": 0}", /readMax must be an integer of at least 1/)
   await bad("{\"capture\": {\"lines\": 0}}", /capture\.lines must be an integer of at least 1/)
+  await bad("{\"wait\": {\"maxIdle\": 0}}", /wait\.maxIdle must be an integer of at least 1/)
   await bad("{\"capture\": {\"maxLines\": 0}}", /capture\.maxLines must be an integer of at least 1/)
   await bad("{\"tmux\": {\"enterPreses\": 1}}", /unknown setting "tmux\.enterPreses"/)
   await bad("{\"typo\": 1}", /unknown setting "typo"/)
+  await bad("{\"tmux\": {\"badges\": \"yes\"}}", /tmux\.badges must be true or false/)
   await bad("{\"lock\": 5}", /lock must be an object/)
   await bad("{ oops ", /at offset/)
 })

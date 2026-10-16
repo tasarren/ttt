@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { setTimeout as sleep } from "node:timers/promises"
@@ -67,7 +67,7 @@ test("send -> read -> ack round trip, with status and thread", async() => {
 
   const status = await board.messageStatus(message.messageId)
   assert.equal(status.receipts[0]!.state, "acked")
-  assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 1, superseded: 0 })
+  assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 1, superseded: 0, cancelled: 0 })
 })
 
 test("reads and acks record the detected actor, whatever the mailbox claims", async() => {
@@ -94,28 +94,16 @@ test("peeks and system transitions record no actor; old receipts stay silent", a
   assert.deepEqual(plain.receipts[0]!.readBy, undefined, "actor is optional")
 })
 
-test("pane registry registers, resolves, prunes, and never breaks delivery", async() => {
+test("dropPaneRegistry removes the v6 registry once and counts honestly on dry-run", async() => {
   const { board, sessionRoot } = await freshSession()
-  assert.equal(await board.resolvePane("A"), undefined)
-  await board.registerPane("A", { paneId: "%7", windowId: "@3" })
-  const binding = await board.resolvePane("A")
-  assert.ok(binding)
-  assert.equal(binding.paneId, "%7")
-  assert.equal(binding.windowId, "@3")
-  assert.equal(typeof binding.updatedAt, "string")
-  assert.equal(binding.session, undefined, "same-session entries omit the session")
-  await board.registerPane("A", { paneId: "%8", windowId: "@3" })
-  assert.equal((await board.resolvePane("A"))?.paneId, "%8", "last writer wins")
-  await board.registerPane("B", { paneId: "%9", windowId: "@4", session: "other" })
-  assert.equal((await board.resolvePane("B"))?.session, "other")
-  await board.prunePane("A")
-  assert.equal(await board.resolvePane("A"), undefined)
-  await board.prunePane("A")
-  await writeFile(join(sessionRoot, "state", "panes.json"), "not json")
-  assert.equal(await board.resolvePane("B"), undefined, "corrupt registry falls back")
-  await board.registerPane("B", { paneId: "%9", windowId: "@4" })
-  assert.equal((await board.resolvePane("B"))?.paneId, "%9", "registry heals on next register")
-  await assert.rejects(board.registerPane("C", { paneId: "", windowId: "@5" }), /pane binding needs/)
+  assert.equal(await board.dropPaneRegistry({ dryRun: true }), false)
+  await mkdir(join(sessionRoot, "state"), { recursive: true })
+  await writeFile(join(sessionRoot, "state", "panes.json"), "{}")
+  assert.equal(await board.dropPaneRegistry({ dryRun: true }), true)
+  await assert.doesNotReject(access(join(sessionRoot, "state", "panes.json")), "dry-run leaves the file")
+  assert.equal(await board.dropPaneRegistry({ dryRun: false }), true)
+  await assert.rejects(access(join(sessionRoot, "state", "panes.json")))
+  assert.equal(await board.dropPaneRegistry({ dryRun: false }), false, "rerun is a no-op")
 })
 
 test("threadParticipants unions senders and recipients across nested replies", async() => {
@@ -209,7 +197,7 @@ test("unread index tracks mutations and heals when missing", async() => {
   await board.ack("B", batch.messages[0]!.messageId, "done")
   assert.equal(await board.unreadCount("B"), 0)
   await board.ackAll("B")
-  assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 2, superseded: 0 })
+  assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 2, superseded: 0, cancelled: 0 })
 })
 
 test("replace decrements the unread index via supersede", async() => {
@@ -218,7 +206,7 @@ test("replace decrements the unread index via supersede", async() => {
   assert.equal(await board.unreadCount("B"), 1)
   await board.send("A", ["B"], "status 2", { ...NORMAL, replaceKey: "status" })
   assert.equal(await board.unreadCount("B"), 1)
-  assert.deepEqual(await board.inboxSummary("B"), { unread: 1, read: 0, acked: 0, superseded: 1 })
+  assert.deepEqual(await board.inboxSummary("B"), { unread: 1, read: 0, acked: 0, superseded: 1, cancelled: 0 })
 })
 
 test("subjects live on the root only and reject empties and replies", async() => {
@@ -275,7 +263,7 @@ test("ackAll marks every unacked receipt in one lock with one note", async() => 
   assert.equal(acked.length, 2)
   assert.ok(acked.every((receipt) => receipt.state === "acked" && receipt.ackNote === "batch"))
   assert.deepEqual(await board.ackAll("B"), [])
-  assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 2, superseded: 0 })
+  assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 2, superseded: 0, cancelled: 0 })
 })
 
 test("thread resolves via the index and prune GCs only terminal history", async() => {
@@ -296,7 +284,7 @@ test("thread resolves via the index and prune GCs only terminal history", async(
   assert.equal(done.messages, 2)
   assert.equal(done.receipts, 2)
   assert.deepEqual(await board.thread(reply.message.messageId).catch(() => []), [])
-  assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 0, superseded: 0 })
+  assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 0, superseded: 0, cancelled: 0 })
 })
 
 test("per-window notify overrides resolve per target", async() => {
@@ -318,10 +306,220 @@ test("ttl lapses unread receipts to superseded on next access; acking expired re
   const batch = await board.read("B", { max: 10, peek: false, latest: false })
   assert.equal(batch.messages.length, 0, "expired messages never surface")
   assert.equal(batch.remaining, 0)
-  assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 0, superseded: 1 })
+  assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 0, superseded: 1, cancelled: 0 })
 
   const late = await board.send("A", ["B"], "ping2", { ...NORMAL, ttlMs: 200 })
   await sleep(400)
   await assert.rejects(board.ack("B", late.message.messageId), /expired/)
-  assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 0, superseded: 2 })
+  assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 0, superseded: 2, cancelled: 0 })
+})
+
+test("a live presence suppresses the notification marker; a dead or withdrawn one does not", async() => {
+  const { board, sessionRoot } = await freshSession({ notifySeconds: 5 })
+  const withdraw = await board.announcePresence("B", "any")
+  assert.deepEqual((await board.presence("B"))?.expect, "any")
+  const quiet = await board.send("A", ["B"], "while waiting", NORMAL)
+  assert.deepEqual(quiet.waiting, ["B"])
+  assert.equal(quiet.notifications.length, 0, "no marker while B is listening")
+  assert.equal(await board.unreadCount("B"), 1, "the receipt is still written")
+
+  await withdraw()
+  assert.equal(await board.presence("B"), undefined)
+  const loud = await board.send("A", ["B"], "after leaving", NORMAL)
+  assert.deepEqual(loud.waiting, [])
+  assert.equal(loud.notifications.length, 1)
+
+  // A crashed waiter leaves a file with a dead pid: senders treat it as absent and clean it up.
+  await writeFile(join(sessionRoot, "state", "B.waiting.json"), JSON.stringify({ pid: 2 ** 22 - 1, since: new Date().toISOString(), expect: "any" }))
+  assert.equal(await board.presence("B"), undefined)
+  await assert.rejects(access(join(sessionRoot, "state", "B.waiting.json")), "stale presence removed")
+
+  // A thread-scoped presence is reported as such so senders can detect mutual waits.
+  const rootId = quiet.message.threadId
+  const withdrawThread = await board.announcePresence("B", { threadId: rootId })
+  assert.deepEqual((await board.presence("B"))?.expect, { threadId: rootId })
+  await withdrawThread()
+})
+
+test("read with `only` flips just those receipts and reports the rest as remaining", async() => {
+  const { board } = await freshSession()
+  const first = await board.send("A", ["B"], "one", NORMAL)
+  await board.send("A", ["B"], "two", NORMAL)
+  const shown = await board.read("B", { max: 10, peek: false, latest: false, only: new Set([first.message.messageId]) })
+  assert.deepEqual(shown.messages.map((message) => message.body), ["one"])
+  assert.equal(shown.remaining, 1)
+  assert.equal(await board.unreadCount("B"), 1)
+})
+
+test("announcing a wait cancels a pending marker; its notifier then exits silently", async() => {
+  const board = await freshBoard()
+  const sent = await board.send("A", ["B"], "before the wait", NORMAL)
+  const token = sent.notifications[0]!.token
+  const withdraw = await board.announcePresence("B", "any")
+  assert.equal(await board.deliverNotification("B", token, async() => assert.fail("must not deliver")), false)
+  await withdraw()
+})
+
+test("a notifier that fires mid-wait delivers nothing and drops the marker", async() => {
+  const board = await freshBoard()
+  const sent = await board.send("A", ["B"], "hello", NORMAL)
+  const token = sent.notifications[0]!.token
+  const withdraw = await board.announcePresence("B", "any")
+  const delivered: NotificationSummary[] = []
+  assert.equal(await board.deliverNotification("B", token, async(summary) => { delivered.push(summary) }), false)
+  assert.equal(delivered.length, 0)
+  assert.equal(await board.unreadCount("B"), 1, "the waiter reads the receipt itself")
+  assert.equal((await board.messageStatus(sent.message.messageId)).receipts[0]!.notifiedAt, undefined)
+  await withdraw()
+  // The waiter left without reading: the next burst re-arms and delivers as before.
+  const rearmed = await board.scheduleNotification("B")
+  assert.ok(rearmed)
+  assert.equal(await board.deliverNotification("B", rearmed.token, async(summary) => { delivered.push(summary) }), true)
+  assert.equal(delivered.length, 1)
+})
+
+test("a thread-scoped wait skips only its own thread's mail", async() => {
+  const board = await freshBoard()
+  const first = await board.send("A", ["B"], "thread one", NORMAL)
+  const second = await board.send("C", ["B"], "other thread", NORMAL)
+  assert.notEqual(first.message.threadId, second.message.threadId)
+  const token = first.notifications[0]!.token
+  const withdraw = await board.announcePresence("B", { threadId: first.message.threadId })
+  assert.equal(await board.deliverNotification("B", token, async() => assert.fail("its own thread arrives via the wait")), false)
+  await withdraw()
+  const withdrawOther = await board.announcePresence("B", { threadId: "ttt-20000101-000000-00000000" })
+  const rearmed = await board.scheduleNotification("B")
+  assert.ok(rearmed)
+  let pasted = 0
+  assert.equal(await board.deliverNotification("B", rearmed.token, async() => { pasted += 1 }), true)
+  assert.equal(pasted, 1, "mail no waiter wakes for still gets pasted")
+  await withdrawOther()
+})
+
+test("urgent delivery skips a matching waiter and pastes otherwise", async() => {
+  const board = await freshBoard()
+  const first = await board.send("A", ["B"], "one", { ...NORMAL, priority: MessagePriority.Urgent })
+  const second = await board.send("A", ["B"], "two", { ...NORMAL, priority: MessagePriority.Urgent })
+  let pasted = 0
+  const withdraw = await board.announcePresence("B", "any")
+  await board.deliverUrgent(first.message, "B", async() => { pasted += 1 })
+  assert.equal(pasted, 0, "an `any` waiter wakes on the receipt itself")
+  assert.equal(await board.unreadCount("B"), 2)
+  await withdraw()
+  const withdrawThread = await board.announcePresence("B", { threadId: "ttt-20000101-000000-00000000" })
+  await board.deliverUrgent(second.message, "B", async() => { pasted += 1 })
+  assert.equal(pasted, 1, "a thread waiter never wakes for other-thread mail, so it gets pasted")
+  await withdrawThread()
+  await board.deliverUrgent(second.message, "B", async() => { pasted += 1 })
+  assert.equal(pasted, 2, "no waiter: pasted as before")
+})
+
+test("empty read-waits lengthen the next wait to the cap, then arrival resets", async() => {
+  const board = await freshBoard()
+  const input = { baseSeconds: 120, maxSeconds: 300 }
+  assert.deepEqual(await board.waitTimeout("B", input), { seconds: 120, emptyStreak: 0 })
+  await board.noteWait("B", true)
+  assert.deepEqual(await board.waitTimeout("B", input), { seconds: 180, emptyStreak: 1 })
+  await board.noteWait("B", true)
+  await board.noteWait("B", true)
+  assert.deepEqual(await board.waitTimeout("B", input), { seconds: 300, emptyStreak: 3 })
+  await board.noteWait("B", true)
+  assert.deepEqual(await board.waitTimeout("B", input), { seconds: 300, emptyStreak: 4 }, "past the cap the wait stays put")
+  await board.noteWait("B", false)
+  assert.deepEqual(await board.waitTimeout("B", input), { seconds: 120, emptyStreak: 0 }, "arrival restarts at base")
+})
+
+test("waitTimeout honors an explicit timeout, caps custom maxima, and forgets stale streaks", async() => {
+  const { board, sessionRoot } = await freshSession()
+  assert.deepEqual(await board.waitTimeout("B", { baseSeconds: 120, maxSeconds: 300, explicitSeconds: 45 }), { seconds: 45, emptyStreak: 0 })
+  assert.deepEqual(await board.waitTimeout("B", { baseSeconds: 2, maxSeconds: 4 }), { seconds: 2, emptyStreak: 0 })
+  await board.noteWait("B", true)
+  assert.deepEqual(await board.waitTimeout("B", { baseSeconds: 2, maxSeconds: 4 }), { seconds: 4, emptyStreak: 1 }, "the ramp caps at the max")
+  await writeFile(join(sessionRoot, "state", "B.wait.json"), JSON.stringify({ emptyStreak: 9, updatedAt: new Date(Date.now() - 10_000).toISOString() }))
+  assert.deepEqual(await board.waitTimeout("B", { baseSeconds: 2, maxSeconds: 4 }), { seconds: 2, emptyStreak: 0 }, "a streak older than the cap is a new idle period")
+  await writeFile(join(sessionRoot, "state", "B.wait.json"), JSON.stringify({ emptyStreak: "many", updatedAt: "yesterday" }))
+  assert.deepEqual(await board.waitTimeout("B", { baseSeconds: 2, maxSeconds: 4 }), { seconds: 2, emptyStreak: 0 }, "a corrupt file is no streak")
+})
+
+test("cancel retracts unread mail, sender only", async() => {
+  const board = await freshBoard()
+  const sent = await board.send("A", ["B"], "stale", NORMAL)
+  assert.equal(await board.unreadCount("B"), 1)
+
+  await assert.rejects(board.cancel(sent.message.messageId, "C"), /only the sender can cancel/)
+
+  const result = await board.cancel(sent.message.messageId, "A")
+  assert.deepEqual(result.cancelled, ["B"])
+  assert.deepEqual(result.skipped, [])
+  assert.equal(await board.unreadCount("B"), 0)
+
+  const read = await board.read("B", { max: 10, peek: false, latest: false })
+  assert.equal(read.messages.length, 0, "a cancelled message is never returned")
+  assert.equal(read.cancelled, 1, "the empty read reports the cancelled count")
+
+  const status = await board.messageStatus(sent.message.messageId)
+  assert.equal(status.receipts[0]!.state, "cancelled")
+  assert.ok(status.receipts[0]!.cancelledAt)
+  assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 0, superseded: 0, cancelled: 1 })
+})
+
+test("cancel is partial across recipients and idempotent", async() => {
+  const board = await freshBoard()
+  const sent = await board.send("A", ["B", "C"], "group", NORMAL)
+  await board.read("C", { max: 10, peek: false, latest: false })
+
+  const partial = await board.cancel(sent.message.messageId, "A")
+  assert.deepEqual(partial.cancelled, ["B"])
+  assert.deepEqual(partial.skipped, [{ recipient: "C", state: "read" }])
+
+  const again = await board.cancel(sent.message.messageId, "A")
+  assert.deepEqual(again.cancelled, [])
+  assert.deepEqual(again.skipped, [{ recipient: "B", state: "cancelled" }, { recipient: "C", state: "read" }])
+  assert.equal(await board.unreadCount("B"), 0, "no double decrement")
+})
+
+test("cancel is terminal: no paste fires, ack refuses, prune reaps", async() => {
+  const board = await freshBoard()
+  const sent = await board.send("A", ["B"], "gone", NORMAL)
+  const token = sent.notifications[0]!.token
+  await board.cancel(sent.message.messageId, "A")
+
+  let pasted = 0
+  assert.equal(await board.deliverNotification("B", token, async() => { pasted += 1 }), false)
+  assert.equal(pasted, 0, "a cancelled receipt is never delivered")
+  await assert.rejects(board.ack("B", sent.message.messageId), /cancelled/)
+
+  assert.equal((await board.prune({ olderThanMs: 0, dryRun: true })).messages, 1)
+  assert.equal((await board.prune({ olderThanMs: 0, dryRun: false })).messages, 1)
+  await assert.rejects(board.findMessage(sent.message.messageId), /not found/)
+  assert.deepEqual(await board.inboxSummary("B"), { unread: 0, read: 0, acked: 0, superseded: 0, cancelled: 0 })
+})
+
+test("cancel and read race to exactly one outcome, never a double decrement", async() => {
+  const board = await freshBoard()
+  for (let i = 0; i < 6; i += 1) {
+    const sent = await board.send("A", ["B"], `m${i}`, NORMAL)
+    const [result, read] = await Promise.all([
+      board.cancel(sent.message.messageId, "A"),
+      board.read("B", { max: 10, peek: false, latest: false }),
+    ])
+    const cancelWon = result.cancelled.length === 1 && read.messages.length === 0
+    const readWon = result.cancelled.length === 0 && read.messages.some((message) => message.messageId === sent.message.messageId)
+    assert.ok(cancelWon || readWon, "exactly one of cancel/read wins")
+    assert.equal(await board.unreadCount("B"), 0, "the counter never double-decrements")
+  }
+})
+
+test("messagesByReplaceKey finds every message a sender keyed, replies included", async() => {
+  const board = await freshBoard()
+  const root = await board.send("A", ["B"], "status 1", { ...NORMAL, replaceKey: "status" })
+  await board.send("A", ["B"], "status 2", { ...NORMAL, replaceKey: "status" })
+  await board.send("C", ["B"], "not mine", { ...NORMAL, replaceKey: "status" })
+
+  const found = await board.messagesByReplaceKey("A", "status")
+  assert.deepEqual(found.map((message) => message.body).sort(), ["status 1", "status 2"])
+  assert.equal((await board.messagesByReplaceKey("A", "missing")).length, 0)
+
+  await board.send("A", ["B"], "reply keyed", { ...NORMAL, kind: MessageKind.Reply, inReplyTo: root.message.messageId, replaceKey: "status" })
+  assert.deepEqual((await board.messagesByReplaceKey("A", "status")).map((message) => message.body).sort(), ["reply keyed", "status 1", "status 2"])
 })

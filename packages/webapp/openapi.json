@@ -1,0 +1,650 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "TTT local Webapp",
+    "version": "0.1.0",
+    "description": "Board files remain authoritative. SSE carries invalidations and pane output; no board read changes receipts."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:3000"
+    }
+  ],
+  "paths": {
+    "/api/state": {
+      "get": {
+        "summary": "Route-scoped, paged state",
+        "parameters": [
+          {
+            "name": "route",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Webapp route, including offset, q, urgent, receipt state, and view (all, threads, standalone, acknowledgements). Activity uses /activity/{session} and pages recorded events."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Validated WebState for SSR and hydration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events": {
+      "get": {
+        "summary": "SSE invalidation stream",
+        "responses": {
+          "200": {
+            "description": "event: invalidate (revision integer), heartbeat; reconnect refetches route state",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/terminal": {
+      "get": {
+        "summary": "SSE snapshots and output for every pane in visible window",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "window",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JSON TerminalEvent records in SSE data lines; no inactive-window output",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/TerminalEvent"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/input": {
+      "post": {
+        "summary": "Send xterm input to one live pane",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "session",
+                  "pane",
+                  "data"
+                ],
+                "properties": {
+                  "session": {
+                    "type": "string"
+                  },
+                  "pane": {
+                    "type": "string",
+                    "pattern": "^%[0-9]+$"
+                  },
+                  "data": {
+                    "type": "string",
+                    "maxLength": 8192
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Input accepted"
+          },
+          "400": {
+            "description": "Invalid or stale target"
+          },
+          "403": {
+            "description": "Origin or token denied"
+          }
+        }
+      }
+    },
+    "/api/actions": {
+      "post": {
+        "summary": "Validated TTT tmux lifecycle command",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Command completed"
+          },
+          "400": {
+            "description": "Validation or tmux failure"
+          },
+          "403": {
+            "description": "Origin or token denied"
+          }
+        }
+      }
+    },
+    "/api/settings": {
+      "put": {
+        "summary": "Atomically save JSONC settings if etag matches",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved"
+          },
+          "409": {
+            "description": "Disk changed since read"
+          }
+        }
+      }
+    },
+    "/api/layouts/{name}": {
+      "put": {
+        "summary": "Atomically save JSONC layout if etag matches",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved"
+          },
+          "409": {
+            "description": "Disk changed since read"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SourceWrite": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "etag"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "maxLength": 2000000
+          },
+          "etag": {
+            "type": "string"
+          }
+        }
+      },
+      "ActionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "action",
+          "session"
+        ],
+        "properties": {
+          "action": {
+            "enum": [
+              "create-window",
+              "create-pane",
+              "close",
+              "close-pane",
+              "rename",
+              "respawn",
+              "interrupt",
+              "save",
+              "restore",
+              "setup"
+            ]
+          },
+          "session": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "harness": {
+            "type": "string",
+            "minLength": 1
+          },
+          "command": {
+            "type": "string",
+            "minLength": 1
+          },
+          "cwd": {
+            "type": "string",
+            "minLength": 1
+          },
+          "horizontal": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TerminalEvent": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "pane",
+              "frame"
+            ],
+            "properties": {
+              "type": {
+                "const": "snapshot"
+              },
+              "pane": {
+                "type": "string"
+              },
+              "frame": {
+                "type": "object",
+                "required": [
+                  "epoch",
+                  "text",
+                  "cols",
+                  "rows"
+                ],
+                "properties": {
+                  "epoch": {
+                    "type": "integer"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "cols": {
+                    "type": "integer"
+                  },
+                  "rows": {
+                    "type": "integer"
+                  }
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "pane",
+              "epoch",
+              "text"
+            ],
+            "properties": {
+              "type": {
+                "const": "output"
+              },
+              "pane": {
+                "type": "string"
+              },
+              "epoch": {
+                "type": "integer"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "message"
+            ],
+            "properties": {
+              "type": {
+                "const": "error"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "WebState": {
+        "type": "object",
+        "description": "Route-scoped state, including only requested board page. Record shapes reuse docs/ttt-system.schema.json definitions.",
+        "required": [
+          "boards",
+          "board",
+          "sessions",
+          "geometry",
+          "layouts",
+          "settings",
+          "harnesses",
+          "findings",
+          "page",
+          "token",
+          "revision",
+          "unreadCounts"
+        ],
+        "properties": {
+          "boards": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name"
+              ],
+              "properties": {
+                "name": {
+                  "$ref": "../../docs/ttt-system.schema.json#/$defs/Name"
+                }
+              }
+            }
+          },
+          "board": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BoardView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "../../docs/ttt-system.schema.json#/$defs/TreeSession"
+            }
+          },
+          "geometry": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "layouts": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/LayoutDocument"
+            }
+          },
+          "settings": {
+            "$ref": "#/components/schemas/SettingsDocument"
+          },
+          "harnesses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "$ref": "../../docs/ttt-system.schema.json#/$defs/DoctorFinding"
+            }
+          },
+          "page": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "offset",
+              "limit",
+              "total"
+            ],
+            "properties": {
+              "offset": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "token": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "unreadCounts": {
+            "type": "object",
+            "description": "Recorded unread mailbox counts keyed by tmux session, window, and pane IDs. Pane counts resolve agent seats, window counts sum panes, session counts include every mailbox.",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "BoardView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "messages",
+          "receipts",
+          "threads",
+          "presences",
+          "streaks",
+          "notifications",
+          "counters",
+          "sequenceCounters",
+          "summaries",
+          "activity"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "../../docs/ttt-system.schema.json#/$defs/Name"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "../../docs/ttt-system.schema.json#/$defs/BoardMessage"
+            }
+          },
+          "receipts": {
+            "type": "array",
+            "items": {
+              "$ref": "../../docs/ttt-system.schema.json#/$defs/MessageReceipt"
+            }
+          },
+          "threads": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "../../docs/ttt-system.schema.json#/$defs/ThreadIndex"
+            }
+          },
+          "presences": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "../../docs/ttt-system.schema.json#/$defs/Presence"
+            }
+          },
+          "streaks": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "../../docs/ttt-system.schema.json#/$defs/WaitStreak"
+            }
+          },
+          "notifications": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "../../docs/ttt-system.schema.json#/$defs/NotificationMarker"
+            }
+          },
+          "counters": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "../../docs/ttt-system.schema.json#/$defs/UnreadCounter"
+            }
+          },
+          "sequenceCounters": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "../../docs/ttt-system.schema.json#/$defs/SequenceCounter"
+            }
+          },
+          "summaries": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "../../docs/ttt-system.schema.json#/$defs/InboxSummary"
+            }
+          },
+          "ledger": {
+            "$ref": "../../docs/ttt-system.schema.json#/$defs/SchemaLedger"
+          },
+          "activity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelineEntry"
+            }
+          }
+        }
+      },
+      "LayoutDocument": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "value",
+          "source",
+          "etag"
+        ],
+        "properties": {
+          "value": {
+            "$ref": "../../docs/ttt-system.schema.json#/$defs/LayoutFile"
+          },
+          "source": {
+            "type": "string"
+          },
+          "etag": {
+            "type": "string"
+          }
+        }
+      },
+      "SettingsDocument": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "value",
+          "source",
+          "etag"
+        ],
+        "properties": {
+          "value": {
+            "$ref": "../../docs/ttt-system.schema.json#/$defs/SettingsFile"
+          },
+          "source": {
+            "type": "string"
+          },
+          "etag": {
+            "type": "string"
+          }
+        }
+      },
+      "TimelineEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "timestamp",
+          "type",
+          "actor",
+          "messageId",
+          "detail"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "timestamp": {
+            "$ref": "../../docs/ttt-system.schema.json#/$defs/Timestamp"
+          },
+          "type": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "messageId": {
+            "$ref": "../../docs/ttt-system.schema.json#/$defs/MessageId"
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

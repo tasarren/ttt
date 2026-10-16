@@ -77,7 +77,8 @@ export default defineConfig(
       "**/dist/**",
       "**/node_modules/**",
       "**/*.tsbuildinfo",
-      ".orchestrator/**",
+      ".orchestrator/*",
+      "!.orchestrator/scripts/",
       "**/docs/**",
       // Predecessor single-file prototype, kept as reference; not part of the build.
       "talk-to-teammate.ts",

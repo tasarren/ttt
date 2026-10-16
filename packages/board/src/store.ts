@@ -18,7 +18,11 @@ async function readdirRecursive(root: string): Promise<Dirent[]> {
   }
 }
 
-/** Write via a sibling temp file + rename so readers never observe a half-written document. */
+/**
+ * Write via a sibling temp file + rename so readers never observe a half-written document.
+ * ponytail: no fsync on the file or its directory, so a power loss can lose the last write;
+ * every reader tolerates a missing or corrupt document, which is the ceiling we accept.
+ */
 export async function atomicWriteJson(path: string, value: unknown): Promise<void> {
   await mkdir(dirname(path), { recursive: true })
   const temporary = `${path}.tmp.${process.pid}.${randomUUID()}`

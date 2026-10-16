@@ -1,0 +1,421 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ttt-system.schema.json",
+  "title": "ttt data contracts",
+  "description": "Schema catalog for current ttt files and JSON views. Validate a record with the matching #/$defs/Name reference; the catalog root is not a data payload.",
+  "$defs": {
+    "Name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "description": "Board agent, window, session, or layout name accepted by assertName."
+    },
+    "MessageId": {
+      "type": "string",
+      "pattern": "^ttt-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$"
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "Actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["window", "session"],
+      "properties": {
+        "window": { "type": "string" },
+        "session": { "type": "string" }
+      }
+    },
+    "BoardMessage": {
+      "type": "object",
+      "description": "boards/<session>/messages/<YYYYMMDD>/<messageId>.json. Current writer uses version 7; earlier message versions may remain. One document per message, shared by all recipients.",
+      "additionalProperties": false,
+      "required": ["boardVersion", "messageId", "threadId", "kind", "timestamp", "from", "recipients", "replyExpected", "priority", "body"],
+      "properties": {
+        "boardVersion": { "type": "integer", "minimum": 1, "maximum": 7 },
+        "messageId": { "$ref": "#/$defs/MessageId" },
+        "threadId": { "$ref": "#/$defs/MessageId", "description": "Root message ID; same as messageId on the root." },
+        "kind": { "enum": ["message", "reply", "broadcast"] },
+        "timestamp": { "$ref": "#/$defs/Timestamp" },
+        "from": { "$ref": "#/$defs/Name" },
+        "recipients": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Name" } },
+        "inReplyTo": { "$ref": "#/$defs/MessageId" },
+        "replyExpected": { "type": "boolean" },
+        "priority": { "enum": ["normal", "urgent"] },
+        "replaceKey": { "type": "string", "minLength": 1 },
+        "subject": { "type": "string", "minLength": 1, "description": "Only the thread root stores a subject." },
+        "expiresAt": { "$ref": "#/$defs/Timestamp", "description": "Unread receipts expire lazily on mailbox access." },
+        "body": { "type": "string", "minLength": 1 }
+      }
+    },
+    "MessageReceipt": {
+      "type": "object",
+      "description": "Current writer output at boards/<session>/mailboxes/<recipient>/<messageId>.json. One receipt per recipient; its state changes independently.",
+      "additionalProperties": false,
+      "required": ["receiptVersion", "messageId", "recipient", "enqueuedAt", "state"],
+      "properties": {
+        "receiptVersion": { "const": 1 },
+        "messageId": { "$ref": "#/$defs/MessageId" },
+        "recipient": { "$ref": "#/$defs/Name" },
+        "enqueuedAt": { "$ref": "#/$defs/Timestamp" },
+        "state": { "enum": ["unread", "read", "acked", "superseded", "cancelled"] },
+        "seq": { "type": "integer", "minimum": 1, "description": "Per-mailbox enqueue order; older receipts may omit it." },
+        "notifiedAt": { "$ref": "#/$defs/Timestamp" },
+        "readAt": { "$ref": "#/$defs/Timestamp" },
+        "ackedAt": { "$ref": "#/$defs/Timestamp" },
+        "ackNote": { "type": "string" },
+        "supersededAt": { "$ref": "#/$defs/Timestamp" },
+        "supersededBy": { "$ref": "#/$defs/MessageId" },
+        "cancelledAt": { "$ref": "#/$defs/Timestamp" },
+        "cancelledBy": { "$ref": "#/$defs/Actor" },
+        "readBy": { "$ref": "#/$defs/Actor" },
+        "ackedBy": { "$ref": "#/$defs/Actor" }
+      }
+    },
+    "ThreadIndex": {
+      "type": "array",
+      "description": "boards/<session>/threads/<threadId>.json, in append order.",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/MessageId" }
+    },
+    "NotificationMarker": {
+      "type": "object",
+      "description": "Transient state/<agent>.notification.json; heartbeat updates createdAt while batching.",
+      "additionalProperties": false,
+      "required": ["token", "target", "createdAt", "delaySeconds"],
+      "properties": {
+        "token": { "type": "string", "format": "uuid" },
+        "target": { "$ref": "#/$defs/Name" },
+        "createdAt": { "$ref": "#/$defs/Timestamp" },
+        "delaySeconds": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "Presence": {
+      "type": "object",
+      "description": "Transient state/<agent>.waiting.json. Means a live process is blocked in --wait, not general online presence.",
+      "additionalProperties": false,
+      "required": ["pid", "since", "expect"],
+      "properties": {
+        "pid": { "type": "integer", "minimum": 1 },
+        "since": { "$ref": "#/$defs/Timestamp" },
+        "expect": {
+          "oneOf": [
+            { "const": "any" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["threadId"],
+              "properties": { "threadId": { "$ref": "#/$defs/MessageId" } }
+            }
+          ]
+        }
+      }
+    },
+    "WaitStreak": {
+      "type": "object",
+      "description": "Transient state/<agent>.wait.json, reset when mail arrives.",
+      "additionalProperties": false,
+      "required": ["emptyStreak", "updatedAt"],
+      "properties": {
+        "emptyStreak": { "type": "integer", "minimum": 0 },
+        "updatedAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "UnreadCounter": {
+      "type": "object",
+      "description": "state/<agent>.unread.json; a missing file is possible before index creation.",
+      "additionalProperties": false,
+      "required": ["count"],
+      "properties": { "count": { "type": "integer", "minimum": 0 } }
+    },
+    "SequenceCounter": {
+      "type": "object",
+      "description": "state/<agent>.seq.json; next per-mailbox sequence value.",
+      "additionalProperties": false,
+      "required": ["next"],
+      "properties": { "next": { "type": "integer", "minimum": 1 } }
+    },
+    "SchemaLedger": {
+      "type": "object",
+      "description": "state/schema.json; absent on old boards without a ledger.",
+      "additionalProperties": false,
+      "required": ["version"],
+      "properties": { "version": { "type": "integer", "minimum": 1, "maximum": 7 } }
+    },
+    "InboxSummary": {
+      "type": "object",
+      "description": "Board.inboxSummary(agent) result, counts of receipts by state.",
+      "additionalProperties": false,
+      "required": ["unread", "read", "acked", "superseded", "cancelled"],
+      "properties": {
+        "unread": { "type": "integer", "minimum": 0 },
+        "read": { "type": "integer", "minimum": 0 },
+        "acked": { "type": "integer", "minimum": 0 },
+        "superseded": { "type": "integer", "minimum": 0 },
+        "cancelled": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "ReadResult": {
+      "type": "object",
+      "description": "Board.read(agent, options) result. peek avoids the read flip, but even a peek settles expired receipts.",
+      "additionalProperties": false,
+      "required": ["messages", "remaining", "cancelled"],
+      "properties": {
+        "messages": { "type": "array", "items": { "$ref": "#/$defs/BoardMessage" } },
+        "remaining": { "type": "integer", "minimum": 0 },
+        "cancelled": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "MessageStatus": {
+      "type": "object",
+      "description": "Board.messageStatus(messageId) result; receipts can be missing during partial delivery.",
+      "additionalProperties": false,
+      "required": ["message", "receipts"],
+      "properties": {
+        "message": { "$ref": "#/$defs/BoardMessage" },
+        "receipts": { "type": "array", "items": { "$ref": "#/$defs/MessageReceipt" } }
+      }
+    },
+    "NotificationSummary": {
+      "type": "object",
+      "description": "Board.deliverNotification callback payload, not a persisted file.",
+      "additionalProperties": false,
+      "required": ["target", "newCount", "unreadTotal", "senders"],
+      "properties": {
+        "target": { "$ref": "#/$defs/Name" },
+        "newCount": { "type": "integer", "minimum": 0 },
+        "unreadTotal": { "type": "integer", "minimum": 0 },
+        "senders": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "count"],
+            "properties": {
+              "name": { "$ref": "#/$defs/Name" },
+              "count": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      }
+    },
+    "TreeSession": {
+      "type": "object",
+      "description": "Live ttt tmux tree --json output; not persisted. Undefined optional tmux fields are omitted by JSON.stringify.",
+      "additionalProperties": false,
+      "required": ["id", "name", "attached", "windows"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^\\$[0-9]+$" },
+        "name": { "type": "string", "minLength": 1 },
+        "attached": { "type": "boolean" },
+        "group": { "type": "string", "minLength": 1 },
+        "windows": { "type": "array", "items": { "$ref": "#/$defs/TreeWindow" } }
+      }
+    },
+    "TreeWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "id", "index", "active", "panes"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "id": { "type": "string", "pattern": "^@[0-9]+$" },
+        "index": { "type": "integer", "minimum": 0 },
+        "active": { "type": "boolean" },
+        "panes": { "type": "array", "items": { "$ref": "#/$defs/TreePane" } }
+      }
+    },
+    "TreePane": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session", "window", "windowId", "pane", "index", "pid", "active", "dead", "cwd", "command", "title", "historyLimit"],
+      "properties": {
+        "session": { "type": "string" },
+        "window": { "type": "string" },
+        "windowId": { "type": "string", "pattern": "^@[0-9]+$" },
+        "pane": { "type": "string", "pattern": "^%[0-9]+$" },
+        "index": { "type": "integer", "minimum": 0 },
+        "pid": { "type": "integer", "minimum": 0 },
+        "agent": { "type": "string", "minLength": 1 },
+        "active": { "type": "boolean" },
+        "dead": { "type": "boolean" },
+        "cwd": { "type": "string" },
+        "command": { "type": "string" },
+        "title": { "type": "string" },
+        "harness": { "type": "string", "minLength": 1 },
+        "startCommand": { "type": "string" },
+        "historyLimit": { "type": "integer", "minimum": 0 },
+        "paneTitle": { "type": "string" }
+      }
+    },
+    "PanesView": {
+      "type": "object",
+      "description": "Live ttt panes --json output for one window. A missing agent property means a helper pane.",
+      "additionalProperties": false,
+      "required": ["window", "id", "panes"],
+      "properties": {
+        "window": { "type": "string", "minLength": 1 },
+        "id": { "type": "string", "pattern": "^@[0-9]+$" },
+        "panes": { "type": "array", "items": { "$ref": "#/$defs/PaneRow" } }
+      }
+    },
+    "PaneRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "pane", "seat", "registered", "runs", "dead"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "pane": { "type": "string", "pattern": "^%[0-9]+$" },
+        "agent": { "type": "string", "minLength": 1 },
+        "seat": { "type": "boolean" },
+        "registered": { "type": "boolean" },
+        "runs": { "type": "string" },
+        "dead": { "type": "boolean" }
+      }
+    },
+    "DoctorFindings": {
+      "type": "array",
+      "description": "Live ttt tmux doctor --json output.",
+      "items": { "$ref": "#/$defs/DoctorFinding" }
+    },
+    "DoctorFinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "subject", "detail"],
+      "properties": {
+        "severity": { "enum": ["ok", "warn", "fail"] },
+        "subject": { "type": "string" },
+        "detail": { "type": "string" },
+        "fix": { "type": "string" }
+      }
+    },
+    "SessionRecord": {
+      "type": "object",
+      "description": "~/.ttt/sessions/<session>/session.json written by ttt tmux setup; may be absent for an existing tmux session.",
+      "additionalProperties": false,
+      "required": ["version", "session", "profile", "hookBin", "createdAt"],
+      "properties": {
+        "version": { "const": 1 },
+        "session": { "$ref": "#/$defs/Name" },
+        "profile": { "type": "string", "minLength": 1 },
+        "hookBin": { "type": "string", "minLength": 1 },
+        "layout": { "type": "string", "minLength": 1 },
+        "createdAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "LayoutFile": {
+      "type": "object",
+      "description": "~/.ttt/layouts/<name>.jsonc input. JSONC comments and trailing commas must be removed before JSON Schema validation.",
+      "additionalProperties": false,
+      "required": ["version", "windows"],
+      "properties": {
+        "version": { "const": 1 },
+        "session": { "type": "string", "minLength": 1, "description": "Informational; restore ignores it." },
+        "cwd": { "type": "string", "minLength": 1 },
+        "profile": { "type": "string", "minLength": 1, "default": "agents" },
+        "windows": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/LayoutWindow" } }
+      }
+    },
+    "LayoutWindow": {
+      "type": "object",
+      "description": "Without panes, ttt creates one shell pane with agent=true. Multiple panes require a matching tmux layout string.",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "$ref": "#/$defs/Name" },
+        "layout": { "type": "string", "minLength": 1 },
+        "panes": { "type": "array", "items": { "$ref": "#/$defs/LayoutPane" } }
+      }
+    },
+    "LayoutPane": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }],
+          "description": "Absent or null starts a plain shell; a string is its launch line."
+        },
+        "agent": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "$ref": "#/$defs/Name" }
+          ],
+          "description": "true seats the window's main agent; a name seats a second agent; false/absent leaves it unstamped."
+        },
+        "title": { "type": "string", "minLength": 1, "description": "Helper pane only; cannot coexist with a true or named agent." },
+        "harness": { "type": "string", "minLength": 1 },
+        "cwd": { "type": "string", "minLength": 1 },
+        "source": { "enum": ["process", "tree"] }
+      }
+    },
+    "SettingsFile": {
+      "type": "object",
+      "description": "~/.ttt/settings.jsonc or settings.json input. Every key is optional; ttt fills defaults. JSONC must be parsed before schema validation.",
+      "additionalProperties": false,
+      "properties": {
+        "boardRoot": { "type": "string", "minLength": 1, "description": "Defaults to <TTT_HOME>/boards; leading ~/ expands to the OS home." },
+        "notifySeconds": { "type": "integer", "minimum": 0, "default": 20 },
+        "notifyOverrides": {
+          "type": "object",
+          "default": {},
+          "propertyNames": { "$ref": "#/$defs/Name" },
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "readMax": { "type": "integer", "minimum": 1, "default": 10 },
+        "wait": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "seconds": { "type": "integer", "minimum": 1, "default": 120 },
+            "maxSeconds": { "type": "integer", "minimum": 1, "default": 300 },
+            "maxIdle": { "type": "integer", "minimum": 1, "default": 5 }
+          }
+        },
+        "capture": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "lines": { "type": "integer", "minimum": 1, "default": 40 },
+            "maxLines": { "type": "integer", "minimum": 1, "default": 500 }
+          }
+        },
+        "lock": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "timeoutMs": { "type": "integer", "minimum": 0, "default": 10000 },
+            "staleMs": { "type": "integer", "minimum": 0, "default": 60000 }
+          }
+        },
+        "tmux": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "inputSettleMs": { "type": "integer", "minimum": 0, "default": 800 },
+            "postPasteMs": { "type": "integer", "minimum": 0, "default": 500 },
+            "enterPresses": { "type": "integer", "minimum": 0, "default": 3 },
+            "postSendMs": { "type": "integer", "minimum": 0, "default": 300 },
+            "badges": { "type": "boolean", "default": true }
+          }
+        },
+        "harnesses": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "Absent: all shipped presets allowed, none default. Present: only listed harnesses allowed; exactly one entry must set default=true (checked by ttt).",
+          "propertyNames": { "$ref": "#/$defs/Name" },
+          "additionalProperties": { "$ref": "#/$defs/HarnessEntry" }
+        }
+      }
+    },
+    "HarnessEntry": {
+      "type": "object",
+      "description": "Shipped presets may omit bin/ready; a new harness must provide both. ttt validates regular expression text at runtime.",
+      "additionalProperties": false,
+      "properties": {
+        "bin": { "type": "string", "minLength": 1 },
+        "ready": { "type": "string", "minLength": 1 },
+        "limited": { "type": "string", "minLength": 1, "description": "Parsed but not yet matched by ttt." },
+        "default": { "type": "boolean" }
+      }
+    }
+  }
+}

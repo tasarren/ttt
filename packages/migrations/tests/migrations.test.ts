@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtemp, rm } from "node:fs/promises"
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { after, test } from "node:test"
@@ -25,12 +25,14 @@ async function oldBoard(): Promise<string> {
   await board.send("B", ["A"], "a", { ...NORMAL, kind: MessageKind.Reply, inReplyTo: first.message.messageId })
   // Simulate a pre-index board: the index did not exist before v5.
   await rm(join(sessionRoot, "threads"), { recursive: true, force: true })
+  // v6 boards carried a pane registry that v7 drops.
+  await writeFile(join(sessionRoot, "state", "panes.json"), "{}")
   return sessionRoot
 }
 
 test("manifest holds ordered steps ending at the current version", () => {
-  assert.deepEqual(MIGRATION_STEPS.map((step) => [step.from, step.to]), [[4, 5], [5, 6]])
-  assert.equal(CURRENT_SCHEMA_VERSION, 6)
+  assert.deepEqual(MIGRATION_STEPS.map((step) => [step.from, step.to]), [[4, 5], [5, 6], [6, 7]])
+  assert.equal(CURRENT_SCHEMA_VERSION, 7)
 })
 
 test("dry-run counts without writing; migrate indexes and ledgers; reruns are no-ops", async() => {
@@ -41,20 +43,23 @@ test("dry-run counts without writing; migrate indexes and ledgers; reruns are no
   await assert.rejects(unmigrated.thread(anyId), /run ttt migrate/)
   const dry = await migrateSession(boards, { dryRun: true })
   assert.equal(dry.from, 4)
-  assert.equal(dry.to, 6)
+  assert.equal(dry.to, 7)
   assert.equal(dry.threads, 1)
   assert.equal(dry.mailboxes, 2)
-  assert.equal((await migrateSession(boards, { dryRun: true })).threads, 1, "dry-run writes nothing")
+  assert.equal(dry.files, 1)
+  assert.equal((await migrateSession(boards, { dryRun: true })).files, 1, "dry-run writes nothing")
 
   const done = await migrateSession(boards, { dryRun: false })
-  assert.deepEqual([done.threads, done.mailboxes], [1, 2])
+  assert.deepEqual([done.threads, done.mailboxes, done.files], [1, 2, 1])
   const again = await migrateSession(boards, { dryRun: false })
-  assert.equal(again.from, 6)
-  assert.equal(again.to, 6)
+  assert.equal(again.from, 7)
+  assert.equal(again.to, 7)
   assert.equal(again.threads, 0)
+  assert.equal(again.files, 0)
 
   const board = new Board({ sessionRoot, notifySeconds: 0, lock: LOCK })
-  assert.equal(await board.schemaVersion(), 6)
+  assert.equal(await board.schemaVersion(), 7)
+  await assert.rejects(access(join(sessionRoot, "state", "panes.json")), "the registry is gone")
   assert.equal((await board.thread((await board.read("A", { max: 10, peek: true, latest: false })).messages[0]!.messageId)).length, 2)
 })
 

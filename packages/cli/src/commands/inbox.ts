@@ -1,24 +1,75 @@
 import { assertName } from "@ttt/board"
 import type { BoardMessage, MessageReceipt } from "@ttt/board"
+import { OptionScope, UserOption } from "@ttt/tmux"
 
 import { boundedInt, parseCommandArgs, splitAtTerminator } from "../args.ts"
 import { usageError } from "../cli-error.ts"
-import type { Handler } from "../context.ts"
+import type { Context, Handler } from "../context.ts"
+import { WaitOutcome, waitForMail } from "../wait.ts"
 
 const READ_OPTIONS = {
   max: { type: "string" },
   peek: { type: "boolean", default: false },
   latest: { type: "boolean", default: false },
   "headers-only": { type: "boolean", default: false },
+  wait: { type: "boolean", default: false },
+  gui: { type: "boolean", default: false },
+  timeout: { type: "string" },
 } as const
+
+/** `--gui` stamps this pane `@ttt_gui`: the notifier pastes nothing here, mail waits for `read`. Best-effort and idempotent — a background shell loop restamps on every call. */
+async function stampGuiSeat(ctx: Context): Promise<void> {
+  if (ctx.senderPane === "") return
+  try {
+    await ctx.tmux.options.set({ scope: OptionScope.Pane, target: ctx.senderPane, key: UserOption.Gui }, "1")
+  } catch {
+    // A failed stamp only means notification pastes continue; the read itself still works.
+  }
+}
 
 export const read: Handler = async(argv, ctx) => {
   const { values, positionals } = parseCommandArgs(argv, READ_OPTIONS)
   if (positionals.length > 0) throw usageError("read takes no positional arguments")
+  if (values.gui) await stampGuiSeat(ctx)
   const max = boundedInt(values.max, "--max", ctx.settings.readMax, 1_000)
   const headersOnly = values["headers-only"]
-  const { messages, remaining } = await ctx.board.read(ctx.senderName, { max, peek: values.peek || headersOnly, latest: values.latest, ...(ctx.actor ? { actor: ctx.actor } : {}) })
-  process.stdout.write(`${headersOnly ? formatHeaders(messages, remaining) : formatBatch(messages, remaining, values.peek)}\n`)
+  if (values.timeout !== undefined && !values.wait) throw usageError("--timeout needs --wait")
+  if (values.wait) {
+    if (values.peek || values.latest || headersOnly) throw usageError("--wait cannot be combined with --peek, --latest, or --headers-only")
+    // No explicit timeout: consecutive empty waits lengthen the wait (120, 180, 240, 300 …), so an
+    // idle agent burns fewer turns; any arrival restarts at the base.
+    const explicit = values.timeout === undefined
+      ? undefined
+      : boundedInt(values.timeout, "--timeout", ctx.settings.wait.seconds, ctx.settings.wait.maxSeconds)
+    const timeout = await ctx.board.waitTimeout(ctx.senderName, {
+      baseSeconds: ctx.settings.wait.seconds,
+      maxSeconds: ctx.settings.wait.maxSeconds,
+      ...(explicit !== undefined ? { explicitSeconds: explicit } : {}),
+    })
+    if (timeout.emptyStreak > 0) {
+      process.stderr.write(`ttt: waiting ${timeout.seconds}s after ${timeout.emptyStreak} empty wait${timeout.emptyStreak === 1 ? "" : "s"}; any arrival resets it\n`)
+    }
+    if (explicit === undefined && timeout.emptyStreak >= ctx.settings.wait.maxIdle) {
+      // Idle, not waiting — unless mail is already here, in which case the wait below
+      // returns at once and the arrival clears the streak. The streak stays on a true
+      // idle exit, so a prompt re-run exits at once too. The words below address the
+      // waiting agent itself.
+      if ((await ctx.board.unreadCount(ctx.senderName)) === 0) {
+        process.stdout.write(`ttt: nothing arrived after ${timeout.emptyStreak} empty waits. End your turn here. Do not run ttt read --wait again. New mail wakes you with a notification.\n`)
+        return
+      }
+    }
+    const waited = await waitForMail(ctx, { expect: "any", timeoutMs: timeout.seconds * 1_000 })
+    await ctx.board.noteWait(ctx.senderName, waited.outcome === WaitOutcome.TimedOut)
+    if (waited.outcome !== WaitOutcome.Arrived) {
+      const unread = await ctx.board.unreadCount(ctx.senderName)
+      process.stdout.write(`ttt: ${waited.outcome === WaitOutcome.TimedOut ? `nothing arrived within ${timeout.seconds}s` : "wait interrupted"}; ${unread} unread.\n`)
+      return
+    }
+  }
+  const { messages, remaining, cancelled } = await ctx.board.read(ctx.senderName, { max, peek: values.peek || headersOnly, latest: values.latest, ...(ctx.actor ? { actor: ctx.actor } : {}) })
+  const note = cancelledNote(cancelled)
+  process.stdout.write(`${headersOnly ? formatHeaders(messages, remaining, note) : formatBatch(messages, remaining, values.peek, note)}\n`)
 }
 
 const INBOX_OPTIONS = {
@@ -50,16 +101,16 @@ export const inbox: Handler = async(argv, ctx) => {
   }
   if (values.detail) {
     const max = boundedInt(values.max, "--max", ctx.settings.readMax, 1_000)
-    const { messages, remaining } = await ctx.board.read(ctx.senderName, { max, peek: true, latest: false, ...(ctx.actor ? { actor: ctx.actor } : {}) })
+    const { messages, remaining, cancelled } = await ctx.board.read(ctx.senderName, { max, peek: true, latest: false, ...(ctx.actor ? { actor: ctx.actor } : {}) })
     const filtered = values.from === undefined
       ? messages
       : messages.filter((message) => message.from === values.from)
-    process.stdout.write(`${formatHeaders(filtered, remaining)}\n`)
+    process.stdout.write(`${formatHeaders(filtered, remaining, cancelledNote(cancelled))}\n`)
     return
   }
   if (values.max !== undefined) throw usageError("--max needs --detail")
   const summary = await ctx.board.inboxSummary(ctx.senderName)
-  process.stdout.write(`ttt inbox for ${ctx.senderName}: unread ${summary.unread}, read ${summary.read}, acked ${summary.acked}, superseded ${summary.superseded}\n`)
+  process.stdout.write(`ttt inbox for ${ctx.senderName}: unread ${summary.unread}, read ${summary.read}, acked ${summary.acked}, superseded ${summary.superseded}, cancelled ${summary.cancelled}\n`)
 }
 
 const ACK_OPTIONS = {
@@ -75,6 +126,13 @@ export const ack: Handler = async(argv, ctx) => {
     const receipts = await ctx.board.ackAll(ctx.senderName, dashNote, ctx.actor)
     for (const receipt of receipts) process.stdout.write(`acked ${receipt.messageId}\n`)
     if (receipts.length === 0) process.stdout.write("ttt: nothing to ack.\n")
+    if (dashNote) {
+      // ponytail: one status read per acked message; batches this size are fine. Index replyExpected if ack --all ever gets hot.
+      for (const receipt of receipts) {
+        const sent = await ctx.board.messageStatus(receipt.messageId).catch(() => undefined)
+        if (sent?.message.replyExpected) process.stderr.write(replyLostInAck(sent.message.from, receipt.messageId))
+      }
+    }
     return
   }
   const [messageId, ...bareNote] = positionals
@@ -84,7 +142,13 @@ export const ack: Handler = async(argv, ctx) => {
   const receipt = await ctx.board.ack(ctx.senderName, messageId, note, ctx.actor)
   const wasUnread = prior?.receipts.find((item) => item.recipient === ctx.senderName)?.state === "unread"
   if (wasUnread) process.stderr.write("ttt: acked without read; the body was never marked read.\n")
+  if (note && prior?.message.replyExpected) process.stderr.write(replyLostInAck(prior.message.from, receipt.messageId))
   process.stdout.write(`acked ${receipt.messageId}\n`)
+}
+
+/** An ACK note stays in the acker's own mailbox; say so when the sender was owed an actual reply. */
+function replyLostInAck(from: string, messageId: string): string {
+  return `ttt: ${messageId} from ${from} expects a reply; an ACK note is not sent. Answer with: ttt reply ${messageId} -- 'MESSAGE'\n`
 }
 
 export const status: Handler = async(argv, ctx) => {
@@ -138,9 +202,19 @@ function messageTags(message: BoardMessage, includeReplyExpected: boolean): stri
   ]
 }
 
+/** "no unread messages", plus an optional note explaining what vanished before it could be read. */
+function emptyLine(extraInfo?: string): string {
+  return extraInfo ? `ttt: no unread messages (${extraInfo}).` : "ttt: no unread messages."
+}
+
+/** Note for an empty read: mail a sender retracted before it was read. */
+export function cancelledNote(cancelled: number): string | undefined {
+  return cancelled > 0 ? `${cancelled} cancelled` : undefined
+}
+
 /** Headers + one-line previews, without bodies and without marking anything read. */
-export function formatHeaders(messages: BoardMessage[], remaining: number): string {
-  if (messages.length === 0) return "ttt: no unread messages."
+export function formatHeaders(messages: BoardMessage[], remaining: number, extraInfo?: string): string {
+  if (messages.length === 0) return emptyLine(extraInfo)
   const lines = [`ttt: ${plural(messages.length, "message")} (headers; still unread)`]
   messages.forEach((message, index) => {
     const tags = messageTags(message, true)
@@ -165,11 +239,11 @@ function remainingLine(shown: number, remaining: number, peek: boolean): string 
   return `${plural(remaining, "unread message")} remain${remaining === 1 ? "s" : ""}.`
 }
 
-export function formatBatch(messages: BoardMessage[], remaining: number, peek: boolean): string {
-  if (messages.length === 0) return "ttt: no unread messages."
+export function formatBatch(messages: BoardMessage[], remaining: number, peek: boolean, extraInfo?: string): string {
+  if (messages.length === 0) return emptyLine(extraInfo)
   const lines = [`ttt: ${plural(messages.length, "message")}${peek ? " (peek; still unread)" : ""}`]
   messages.forEach((message, index) => {
-    const reply = message.replyExpected ? `reply: ttt reply ${message.messageId} -- MESSAGE` : "reply: none needed"
+    const reply = message.replyExpected ? `reply: ttt reply ${message.messageId} -- 'MESSAGE'` : "reply: none needed"
     const tags = messageTags(message, false)
     lines.push(
       "",
@@ -195,12 +269,13 @@ export function formatStatus(message: BoardMessage, receipts: MessageReceipt[]):
       lines.push(`${recipient}: missing receipt`)
       continue
     }
-    const foreign = [receipt.readBy, receipt.ackedBy].find((actor) => actor && actor.window !== recipient)?.window
+    const foreign = [receipt.readBy, receipt.ackedBy, receipt.cancelledBy].find((actor) => actor && actor.window !== recipient)?.window
     const stamps = [
       `q ${shortStamp(receipt.enqueuedAt)}`,
       ...(receipt.notifiedAt ? [`n ${shortStamp(receipt.notifiedAt)}`] : []),
       ...(receipt.readAt ? [`r ${shortStamp(receipt.readAt)}`] : []),
       ...(receipt.ackedAt ? [`a ${shortStamp(receipt.ackedAt)}`] : []),
+      ...(receipt.cancelledAt ? [`cancelled ${shortStamp(receipt.cancelledAt)}`] : []),
       ...(receipt.ackNote ? [`note ${JSON.stringify(receipt.ackNote)}`] : []),
       ...(foreign ? [`by ${foreign}`] : []),
       ...(receipt.supersededBy ? [`superseded by ${receipt.supersededBy}`] : []),
@@ -221,7 +296,7 @@ export function formatThread(messages: BoardMessage[], members: string[]): strin
   if (!first) return "ttt: empty thread."
   const lines = [`thread ${first.threadId} (${plural(messages.length, "message")}) topic: ${topicOf(first)} members: ${members.join(", ")}`]
   for (const message of messages) {
-    const reply = message.replyExpected ? `reply: ttt reply ${message.messageId} -- MESSAGE` : "reply: none needed"
+    const reply = message.replyExpected ? `reply: ttt reply ${message.messageId} -- 'MESSAGE'` : "reply: none needed"
     lines.push(
       "",
       `${shortStamp(message.timestamp)} ${message.from} -> ${message.recipients.join(", ")} [${message.messageId}]${message.inReplyTo ? ` re: ${message.inReplyTo}` : ""}`,
@@ -239,7 +314,7 @@ export function formatThreadHeaders(messages: BoardMessage[], members: string[])
   if (!first) return "ttt: empty thread."
   const lines = [`thread ${first.threadId} (${plural(messages.length, "message")}) topic: ${topicOf(first)} members: ${members.join(", ")} (headers)`]
   messages.forEach((message, index) => {
-    const reply = message.replyExpected ? `reply: ttt reply ${message.messageId} -- MESSAGE` : "reply: none needed"
+    const reply = message.replyExpected ? `reply: ttt reply ${message.messageId} -- 'MESSAGE'` : "reply: none needed"
     lines.push(
       `[${index + 1}/${messages.length}] ${shortStamp(message.timestamp)} ${message.from} [${message.messageId}]`,
       `  ${previewBody(message.body)}`,

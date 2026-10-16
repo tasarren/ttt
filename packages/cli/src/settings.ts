@@ -10,6 +10,8 @@ import { assertName, isErrno } from "@ttt/board"
 import type { LockOptions } from "@ttt/board"
 
 import { CliError } from "./cli-error.ts"
+import { parseHarnesses, shippedHarnesses } from "./harnesses.ts"
+import type { HarnessSettings } from "./harnesses.ts"
 
 export interface Settings {
   /** `$TTT_HOME`, default `~/.ttt`. Holds the settings file and, by default, the boards. */
@@ -20,11 +22,23 @@ export interface Settings {
   /** Per-window batching windows; a missing name falls back to `notifySeconds`. */
   notifyOverrides: Record<string, number>
   readMax: number
+  /**
+   * `--wait` defaults: how long a wait lasts without `--timeout`, the most any wait may last,
+   * and after how many consecutive empty `read --wait`s the next wait exits at once.
+   */
+  wait: { seconds: number; maxSeconds: number; maxIdle: number }
   capture: { lines: number; maxLines: number }
   lock: LockOptions
-  tmux: TmuxOptions
+  tmux: TmuxOptions & {
+    /** Mirror unread counts into `@ttt_unread` window options after each command. */
+    badges: boolean
+  }
+  /** Harnesses `ttt create --harness` may start, and which one a bare `--harness` means. */
+  harnesses: HarnessSettings
   /** `$TMUX_PANE`: the pane this process was started in, needed to identify the caller's window. */
   currentPane: string | undefined
+  /** `$PATH`, for doctor's harness binary lookup. */
+  path: string | undefined
 }
 
 export const SETTINGS_FILES = ["settings.jsonc", "settings.json"] as const
@@ -36,10 +50,13 @@ export function defaultSettings(home: string): Settings {
     notifySeconds: 20,
     notifyOverrides: {},
     readMax: 10,
+    wait: { seconds: 120, maxSeconds: 300, maxIdle: 5 },
     capture: { lines: 40, maxLines: 500 },
     lock: { timeoutMs: 10_000, staleMs: 60_000 },
-    tmux: { ...DEFAULT_TMUX_OPTIONS },
+    tmux: { ...DEFAULT_TMUX_OPTIONS, badges: true },
+    harnesses: shippedHarnesses(),
     currentPane: undefined,
+    path: undefined,
   }
 }
 
@@ -49,10 +66,10 @@ export async function resolveSettings(env: NodeJS.ProcessEnv = process.env): Pro
   const defaults = defaultSettings(home)
   const found = await readSettingsFile(home)
   const settings = found ? applySettings(defaults, found.file, found.text) : defaults
-  return { ...settings, currentPane: env["TMUX_PANE"] }
+  return { ...settings, currentPane: env["TMUX_PANE"], path: env["PATH"] }
 }
 
-async function readSettingsFile(home: string): Promise<{ file: string; text: string } | undefined> {
+export async function readSettingsFile(home: string): Promise<{ file: string; text: string } | undefined> {
   for (const name of SETTINGS_FILES) {
     const file = join(home, name)
     try {
@@ -64,16 +81,17 @@ async function readSettingsFile(home: string): Promise<{ file: string; text: str
   return undefined
 }
 
-function applySettings(defaults: Settings, file: string, text: string): Settings {
+export function applySettings(defaults: Settings, file: string, text: string): Settings {
   const errors: ParseError[] = []
   const raw: unknown = parse(text, errors, { allowTrailingComma: true })
   if (errors[0]) {
     throw new CliError(`${file}: ${printParseErrorCode(errors[0].error)} at offset ${errors[0].offset}`, 2)
   }
-  const root = section(raw, file, "settings", ["boardRoot", "notifySeconds", "notifyOverrides", "readMax", "capture", "lock", "tmux"])
+  const root = section(raw, file, "settings", ["boardRoot", "notifySeconds", "notifyOverrides", "readMax", "wait", "capture", "lock", "tmux", "harnesses"])
+  const wait = section(root["wait"], file, "wait", ["seconds", "maxSeconds", "maxIdle"])
   const capture = section(root["capture"], file, "capture", ["lines", "maxLines"])
   const lock = section(root["lock"], file, "lock", ["timeoutMs", "staleMs"])
-  const tmux = section(root["tmux"], file, "tmux", ["inputSettleMs", "postPasteMs", "enterPresses", "postSendMs"])
+  const tmux = section(root["tmux"], file, "tmux", ["inputSettleMs", "postPasteMs", "enterPresses", "postSendMs", "badges"])
   const int = (value: unknown, path: string, fallback: number): number => positiveInt(value, file, path, fallback)
   const atLeastOne = (value: unknown, path: string, fallback: number): number => {
     const parsed = int(value, path, fallback)
@@ -87,6 +105,11 @@ function applySettings(defaults: Settings, file: string, text: string): Settings
     notifySeconds: int(root["notifySeconds"], "notifySeconds", defaults.notifySeconds),
     notifyOverrides: notifyOverrides(root["notifyOverrides"], file),
     readMax: atLeastOne(root["readMax"], "readMax", defaults.readMax),
+    wait: {
+      seconds: atLeastOne(wait["seconds"], "wait.seconds", defaults.wait.seconds),
+      maxSeconds: atLeastOne(wait["maxSeconds"], "wait.maxSeconds", defaults.wait.maxSeconds),
+      maxIdle: atLeastOne(wait["maxIdle"], "wait.maxIdle", defaults.wait.maxIdle),
+    },
     capture: {
       lines: atLeastOne(capture["lines"], "capture.lines", defaults.capture.lines),
       maxLines: atLeastOne(capture["maxLines"], "capture.maxLines", defaults.capture.maxLines),
@@ -100,8 +123,11 @@ function applySettings(defaults: Settings, file: string, text: string): Settings
       postPasteMs: int(tmux["postPasteMs"], "tmux.postPasteMs", defaults.tmux.postPasteMs),
       enterPresses: int(tmux["enterPresses"], "tmux.enterPresses", defaults.tmux.enterPresses),
       postSendMs: int(tmux["postSendMs"], "tmux.postSendMs", defaults.tmux.postSendMs),
+      badges: bool(tmux["badges"], file, "tmux.badges", defaults.tmux.badges),
     },
+    harnesses: parseHarnesses(root["harnesses"], file),
     currentPane: defaults.currentPane,
+    path: defaults.path,
   }
 }
 
@@ -143,6 +169,12 @@ function notifyOverrides(value: unknown, file: string): Record<string, number> {
     overrides[name] = seconds
   }
   return overrides
+}
+
+function bool(value: unknown, file: string, path: string, fallback: boolean): boolean {
+  if (value === undefined) return fallback
+  if (typeof value !== "boolean") throw new CliError(`${file}: ${path} must be true or false`, 2)
+  return value
 }
 
 function text_(value: unknown, file: string, path: string, fallback: string): string {

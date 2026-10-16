@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { formatBatch, formatHeaders, formatStatus, formatThread, formatThreadHeaders, previewBody, shortStamp, topicOf } from "../src/commands/inbox.ts"
+import { cancelledNote, formatBatch, formatHeaders, formatStatus, formatThread, formatThreadHeaders, previewBody, shortStamp, topicOf } from "../src/commands/inbox.ts"
 import { BOARD_VERSION, MessageKind } from "@ttt/board"
 import type { BoardMessage, MessageReceipt } from "@ttt/board"
 
@@ -40,6 +40,26 @@ test("formatHeaders triages without bodies", () => {
   assert.match(text, /first line/)
   assert.doesNotMatch(text, /second line/)
   assert.equal(formatHeaders([], 0), "ttt: no unread messages.")
+  assert.equal(formatHeaders([], 0, "2 cancelled"), "ttt: no unread messages (2 cancelled).")
+  assert.equal(formatBatch([], 0, false, "1 cancelled"), "ttt: no unread messages (1 cancelled).")
+})
+
+test("cancelledNote is present only when mail was retracted", () => {
+  assert.equal(cancelledNote(0), undefined)
+  assert.equal(cancelledNote(2), "2 cancelled")
+})
+
+test("status reports a cancelled receipt with its canceller", () => {
+  const root = message({ recipients: ["B"] })
+  const cancelled: MessageReceipt = {
+    receiptVersion: 1, messageId: root.messageId, recipient: "B",
+    enqueuedAt: "2026-09-02T12:00:00.000Z", state: "cancelled",
+    cancelledAt: "2026-09-02T12:02:00.000Z", cancelledBy: { window: "A", session: "work" },
+  }
+  const text = formatStatus(root, [cancelled])
+  assert.match(text, /B: cancelled/)
+  assert.match(text, /cancelled 09-02 12:02:00/)
+  assert.match(text, /\bby A\b/)
 })
 
 test("threads resolve topic and members in full and triage views", () => {
@@ -64,11 +84,11 @@ test("topic falls back to the root first line without a subject", () => {
 test("reply obligation is explicit in every message view", () => {
   const owed = message()
   const quiet = message({ messageId: "ttt-20260902-120001-bbbbbbbb", replyExpected: false })
-  assert.match(formatBatch([owed], 0, false), /reply: ttt reply ttt-20260902-120000-aaaaaaaa -- MESSAGE/)
+  assert.match(formatBatch([owed], 0, false), /reply: ttt reply ttt-20260902-120000-aaaaaaaa -- 'MESSAGE'/)
   assert.match(formatBatch([quiet], 0, false), /reply: none needed/)
   assert.match(formatHeaders([owed], 1), /\(needs reply\)/)
   assert.match(formatHeaders([quiet], 1), /\(no-reply\)/)
-  assert.match(formatThread([owed, quiet], ["A", "B"]), /reply: ttt reply ttt-20260902-120000-aaaaaaaa -- MESSAGE/)
+  assert.match(formatThread([owed, quiet], ["A", "B"]), /reply: ttt reply ttt-20260902-120000-aaaaaaaa -- 'MESSAGE'/)
   assert.match(formatThread([owed, quiet], ["A", "B"]), /reply: none needed/)
   assert.match(formatThreadHeaders([owed], ["A", "B"]), /reply: ttt reply/)
   assert.match(formatThreadHeaders([quiet], ["A", "B"]), /reply: none needed/)

@@ -2,19 +2,28 @@ name: ci
 on:
   push: { branches: [main] }
   pull_request: {}
+  workflow_call: {}
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  check:
+  verify:
+    name: check (tmux ${{ matrix.tmux }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        tmux: ["3.2", "3.4", "3.8"]
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y tmux # e2e uses a real private tmux server
-      - uses: pnpm/action-setup@v4
-        with: { version: 11.24.0 }
-      - uses: actions/setup-node@v4
-        with: { node-version-file: .node-version, cache: pnpm, registry-url: "https://registry.npmjs.org" }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run check # runtime pins + typecheck + lint + tests (incl. tmux e2e) + build
+      - run: sh .orchestrator/scripts/verify-container.sh "$TMUX_VERSION"
+        env: { TMUX_VERSION: "${{ matrix.tmux }}" }
+  check:
+    if: always()
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - run: test "$RESULT" = success
+        env: { RESULT: "${{ needs.verify.result }}" }

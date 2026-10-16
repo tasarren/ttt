@@ -14,6 +14,8 @@ export interface MigrateResult {
   to: number
   threads: number
   mailboxes: number
+  /** Obsolete state files removed. */
+  files: number
   dryRun: boolean
 }
 
@@ -31,14 +33,16 @@ export async function migrateSession(boards: SessionBoards, options: MigrateOpti
   }
   let threads = 0
   let mailboxes = 0
+  let files = 0
   let to = from
   for (const step of MIGRATION_STEPS) {
     if (step.from !== to || step.to > CURRENT_SCHEMA_VERSION) continue
     const counted = await step.migrate(board, { dryRun: options.dryRun })
     threads += counted.threads ?? 0
     mailboxes += counted.mailboxes ?? 0
+    files += counted.files ?? 0
     to = step.to
   }
   if (!options.dryRun && to !== from) await board.setSchemaVersion(to)
-  return { sessionRoot: boards.sessionRoot, from, to, threads, mailboxes, dryRun: options.dryRun }
+  return { sessionRoot: boards.sessionRoot, from, to, threads, mailboxes, files, dryRun: options.dryRun }
 }

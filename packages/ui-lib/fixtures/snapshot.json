@@ -1,0 +1,3218 @@
+{
+  "boards": [
+    {
+      "name": "alpha",
+      "messages": [
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-140000-00000000",
+          "threadId": "ttt-20260925-140000-00000000",
+          "kind": "message",
+          "timestamp": "2026-09-25T14:00:00Z",
+          "from": "planner",
+          "recipients": [
+            "reviewer",
+            "builder",
+            "qa",
+            "docs",
+            "deploy",
+            "monitor"
+          ],
+          "replyExpected": true,
+          "priority": "urgent",
+          "subject": "Preserve recipient state during replacement",
+          "body": "Replacement must not reset receipts that have already been read. Keep each recipient’s state independent and link the replacement through its recorded message ID.\n\nThe human reader must remain observational. Opening a thread must not mark an agent’s mailbox as read.",
+          "replaceKey": "receipt-policy",
+          "expiresAt": "2026-09-26T14:00:00Z"
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-140100-00000001",
+          "threadId": "ttt-20260925-140000-00000000",
+          "inReplyTo": "ttt-20260925-140000-00000000",
+          "kind": "reply",
+          "timestamp": "2026-09-25T14:01:00Z",
+          "from": "reviewer",
+          "recipients": [
+            "planner"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "body": "Confirmed. I’ll add coverage for partial delivery and for a missing receipt record. A read receipt must stay read when the replacement is delivered."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-140200-00000002",
+          "threadId": "ttt-20260925-140200-00000002",
+          "kind": "message",
+          "timestamp": "2026-09-25T14:02:00Z",
+          "from": "builder",
+          "recipients": [
+            "reviewer",
+            "builder",
+            "qa",
+            "docs",
+            "deploy",
+            "monitor"
+          ],
+          "replyExpected": true,
+          "priority": "normal",
+          "subject": "Match saved pane geometry to window panes",
+          "body": "The saved layout has five panes, but the window layout string describes four. Rebuild the split geometry from the pane list and validate the checksum before saving.\n\n```json\n{ \"agent\": true, \"command\": \"node planner.mjs\" }\n```"
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-140300-00000003",
+          "threadId": "ttt-20260925-140200-00000002",
+          "inReplyTo": "ttt-20260925-140200-00000002",
+          "kind": "reply",
+          "timestamp": "2026-09-25T14:03:00Z",
+          "from": "reviewer",
+          "recipients": [
+            "builder"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "body": "Reviewed. The record shape matches the catalog. I’ll verify the edge cases and report the results in this thread."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-140400-00000004",
+          "threadId": "ttt-20260925-140400-00000004",
+          "kind": "message",
+          "timestamp": "2026-09-25T14:04:00Z",
+          "from": "planner",
+          "recipients": [
+            "reviewer",
+            "builder",
+            "qa",
+            "docs",
+            "deploy",
+            "monitor"
+          ],
+          "replyExpected": true,
+          "priority": "normal",
+          "subject": "Keep the thread reader stable during live updates",
+          "body": "New messages should append without moving the reader away from earlier replies. When the view is not at the bottom, show a new-message count and keep keyboard focus on the current item."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-140500-00000005",
+          "threadId": "ttt-20260925-140400-00000004",
+          "inReplyTo": "ttt-20260925-140400-00000004",
+          "kind": "reply",
+          "timestamp": "2026-09-25T14:05:00Z",
+          "from": "reviewer",
+          "recipients": [
+            "planner"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "body": "Reviewed. The record shape matches the catalog. I’ll verify the edge cases and report the results in this thread."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-140600-00000006",
+          "threadId": "ttt-20260925-140600-00000006",
+          "kind": "message",
+          "timestamp": "2026-09-25T14:06:00Z",
+          "from": "builder",
+          "recipients": [
+            "reviewer",
+            "builder",
+            "qa",
+            "docs",
+            "deploy",
+            "monitor"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "subject": "Separate waiting records from online status",
+          "body": "A waiting record means a process is blocked in --wait. It is not an online flag. Missing state must remain distinguishable from a recorded zero or false."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-140700-00000007",
+          "threadId": "ttt-20260925-140600-00000006",
+          "inReplyTo": "ttt-20260925-140600-00000006",
+          "kind": "reply",
+          "timestamp": "2026-09-25T14:07:00Z",
+          "from": "reviewer",
+          "recipients": [
+            "builder"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "body": "Reviewed. The record shape matches the catalog. I’ll verify the edge cases and report the results in this thread."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-140800-00000008",
+          "threadId": "ttt-20260925-140800-00000008",
+          "kind": "message",
+          "timestamp": "2026-09-25T14:08:00Z",
+          "from": "planner",
+          "recipients": [
+            "reviewer",
+            "builder",
+            "qa",
+            "docs",
+            "deploy",
+            "monitor"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "subject": "Schema ledger missing on an older board",
+          "body": "This board predates the schema ledger. The viewer should display “Not recorded” rather than invent a current version or migration history."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-140900-00000009",
+          "threadId": "ttt-20260925-140800-00000008",
+          "inReplyTo": "ttt-20260925-140800-00000008",
+          "kind": "reply",
+          "timestamp": "2026-09-25T14:09:00Z",
+          "from": "reviewer",
+          "recipients": [
+            "planner"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "body": "Reviewed. The record shape matches the catalog. I’ll verify the edge cases and report the results in this thread."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-141000-0000000a",
+          "threadId": "ttt-20260925-141000-0000000a",
+          "kind": "broadcast",
+          "timestamp": "2026-09-25T14:10:00Z",
+          "from": "builder",
+          "recipients": [
+            "reviewer",
+            "builder",
+            "qa",
+            "docs",
+            "deploy",
+            "monitor"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "subject": "Verify notification batching after reconnect",
+          "body": "NotificationMarker.createdAt is refreshed while batching. Display the marker and callback payload separately; the callback is not a persisted event log."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-141100-0000000b",
+          "threadId": "ttt-20260925-141000-0000000a",
+          "inReplyTo": "ttt-20260925-141000-0000000a",
+          "kind": "reply",
+          "timestamp": "2026-09-25T14:11:00Z",
+          "from": "reviewer",
+          "recipients": [
+            "builder"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "body": "Reviewed. The record shape matches the catalog. I’ll verify the edge cases and report the results in this thread."
+        }
+      ],
+      "threads": {
+        "ttt-20260925-140000-00000000": [
+          "ttt-20260925-140000-00000000",
+          "ttt-20260925-140100-00000001"
+        ],
+        "ttt-20260925-140200-00000002": [
+          "ttt-20260925-140200-00000002",
+          "ttt-20260925-140300-00000003"
+        ],
+        "ttt-20260925-140400-00000004": [
+          "ttt-20260925-140400-00000004",
+          "ttt-20260925-140500-00000005"
+        ],
+        "ttt-20260925-140600-00000006": [
+          "ttt-20260925-140600-00000006",
+          "ttt-20260925-140700-00000007"
+        ],
+        "ttt-20260925-140800-00000008": [
+          "ttt-20260925-140800-00000008",
+          "ttt-20260925-140900-00000009"
+        ],
+        "ttt-20260925-141000-0000000a": [
+          "ttt-20260925-141000-0000000a",
+          "ttt-20260925-141100-0000000b"
+        ]
+      },
+      "receipts": [
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140000-00000000",
+          "recipient": "reviewer",
+          "enqueuedAt": "2026-09-25T14:00:00Z",
+          "state": "acked",
+          "seq": 10,
+          "notifiedAt": "2026-09-25T14:00:00Z",
+          "readAt": "2026-09-25T14:01:00Z",
+          "ackedAt": "2026-09-25T14:01:00Z",
+          "ackNote": "Tests added for partial delivery.",
+          "readBy": {
+            "window": "reviewer",
+            "session": "alpha"
+          },
+          "ackedBy": {
+            "window": "reviewer",
+            "session": "alpha"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140000-00000000",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:00:00Z",
+          "state": "read",
+          "seq": 11,
+          "notifiedAt": "2026-09-25T14:00:00Z",
+          "readAt": "2026-09-25T14:01:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140000-00000000",
+          "recipient": "qa",
+          "enqueuedAt": "2026-09-25T14:00:00Z",
+          "state": "unread",
+          "seq": 12,
+          "notifiedAt": "2026-09-25T14:00:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140000-00000000",
+          "recipient": "docs",
+          "enqueuedAt": "2026-09-25T14:00:00Z",
+          "state": "superseded",
+          "seq": 13,
+          "notifiedAt": "2026-09-25T14:00:00Z",
+          "supersededAt": "2026-09-25T14:01:00Z",
+          "supersededBy": "ttt-20260925-140100-00000001"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140000-00000000",
+          "recipient": "deploy",
+          "enqueuedAt": "2026-09-25T14:00:00Z",
+          "state": "cancelled",
+          "seq": 14,
+          "cancelledAt": "2026-09-25T14:01:00Z",
+          "cancelledBy": {
+            "window": "planner",
+            "session": "alpha"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140100-00000001",
+          "recipient": "planner",
+          "enqueuedAt": "2026-09-25T14:01:00Z",
+          "state": "unread",
+          "seq": 1
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140200-00000002",
+          "recipient": "reviewer",
+          "enqueuedAt": "2026-09-25T14:02:00Z",
+          "state": "acked",
+          "seq": 20,
+          "notifiedAt": "2026-09-25T14:02:00Z",
+          "readAt": "2026-09-25T14:03:00Z",
+          "ackedAt": "2026-09-25T14:03:00Z",
+          "ackNote": "Tests added for partial delivery.",
+          "readBy": {
+            "window": "reviewer",
+            "session": "alpha"
+          },
+          "ackedBy": {
+            "window": "reviewer",
+            "session": "alpha"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140200-00000002",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:02:00Z",
+          "state": "read",
+          "seq": 21,
+          "notifiedAt": "2026-09-25T14:02:00Z",
+          "readAt": "2026-09-25T14:03:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140200-00000002",
+          "recipient": "qa",
+          "enqueuedAt": "2026-09-25T14:02:00Z",
+          "state": "unread",
+          "seq": 22,
+          "notifiedAt": "2026-09-25T14:02:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140200-00000002",
+          "recipient": "docs",
+          "enqueuedAt": "2026-09-25T14:02:00Z",
+          "state": "superseded",
+          "seq": 23,
+          "notifiedAt": "2026-09-25T14:02:00Z",
+          "supersededAt": "2026-09-25T14:03:00Z",
+          "supersededBy": "ttt-20260925-140300-00000003"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140200-00000002",
+          "recipient": "deploy",
+          "enqueuedAt": "2026-09-25T14:02:00Z",
+          "state": "cancelled",
+          "seq": 24,
+          "cancelledAt": "2026-09-25T14:03:00Z",
+          "cancelledBy": {
+            "window": "planner",
+            "session": "alpha"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140300-00000003",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:03:00Z",
+          "state": "unread",
+          "seq": 2
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140400-00000004",
+          "recipient": "reviewer",
+          "enqueuedAt": "2026-09-25T14:04:00Z",
+          "state": "acked",
+          "seq": 30,
+          "notifiedAt": "2026-09-25T14:04:00Z",
+          "readAt": "2026-09-25T14:05:00Z",
+          "ackedAt": "2026-09-25T14:05:00Z",
+          "ackNote": "Tests added for partial delivery.",
+          "readBy": {
+            "window": "reviewer",
+            "session": "alpha"
+          },
+          "ackedBy": {
+            "window": "reviewer",
+            "session": "alpha"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140400-00000004",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:04:00Z",
+          "state": "read",
+          "seq": 31,
+          "notifiedAt": "2026-09-25T14:04:00Z",
+          "readAt": "2026-09-25T14:05:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140400-00000004",
+          "recipient": "qa",
+          "enqueuedAt": "2026-09-25T14:04:00Z",
+          "state": "unread",
+          "seq": 32,
+          "notifiedAt": "2026-09-25T14:04:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140400-00000004",
+          "recipient": "docs",
+          "enqueuedAt": "2026-09-25T14:04:00Z",
+          "state": "superseded",
+          "seq": 33,
+          "notifiedAt": "2026-09-25T14:04:00Z",
+          "supersededAt": "2026-09-25T14:05:00Z",
+          "supersededBy": "ttt-20260925-140500-00000005"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140400-00000004",
+          "recipient": "deploy",
+          "enqueuedAt": "2026-09-25T14:04:00Z",
+          "state": "cancelled",
+          "seq": 34,
+          "cancelledAt": "2026-09-25T14:05:00Z",
+          "cancelledBy": {
+            "window": "planner",
+            "session": "alpha"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140500-00000005",
+          "recipient": "planner",
+          "enqueuedAt": "2026-09-25T14:05:00Z",
+          "state": "unread",
+          "seq": 3
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140600-00000006",
+          "recipient": "reviewer",
+          "enqueuedAt": "2026-09-25T14:06:00Z",
+          "state": "acked",
+          "seq": 40,
+          "notifiedAt": "2026-09-25T14:06:00Z",
+          "readAt": "2026-09-25T14:07:00Z",
+          "ackedAt": "2026-09-25T14:07:00Z",
+          "ackNote": "Tests added for partial delivery.",
+          "readBy": {
+            "window": "reviewer",
+            "session": "alpha"
+          },
+          "ackedBy": {
+            "window": "reviewer",
+            "session": "alpha"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140600-00000006",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:06:00Z",
+          "state": "read",
+          "seq": 41,
+          "notifiedAt": "2026-09-25T14:06:00Z",
+          "readAt": "2026-09-25T14:07:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140600-00000006",
+          "recipient": "qa",
+          "enqueuedAt": "2026-09-25T14:06:00Z",
+          "state": "unread",
+          "seq": 42,
+          "notifiedAt": "2026-09-25T14:06:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140600-00000006",
+          "recipient": "docs",
+          "enqueuedAt": "2026-09-25T14:06:00Z",
+          "state": "superseded",
+          "seq": 43,
+          "notifiedAt": "2026-09-25T14:06:00Z",
+          "supersededAt": "2026-09-25T14:07:00Z",
+          "supersededBy": "ttt-20260925-140700-00000007"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140600-00000006",
+          "recipient": "deploy",
+          "enqueuedAt": "2026-09-25T14:06:00Z",
+          "state": "cancelled",
+          "seq": 44,
+          "cancelledAt": "2026-09-25T14:07:00Z",
+          "cancelledBy": {
+            "window": "planner",
+            "session": "alpha"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140700-00000007",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:07:00Z",
+          "state": "unread",
+          "seq": 4
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140800-00000008",
+          "recipient": "reviewer",
+          "enqueuedAt": "2026-09-25T14:08:00Z",
+          "state": "acked",
+          "seq": 50,
+          "notifiedAt": "2026-09-25T14:08:00Z",
+          "readAt": "2026-09-25T14:09:00Z",
+          "ackedAt": "2026-09-25T14:09:00Z",
+          "ackNote": "Tests added for partial delivery.",
+          "readBy": {
+            "window": "reviewer",
+            "session": "alpha"
+          },
+          "ackedBy": {
+            "window": "reviewer",
+            "session": "alpha"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140800-00000008",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:08:00Z",
+          "state": "read",
+          "seq": 51,
+          "notifiedAt": "2026-09-25T14:08:00Z",
+          "readAt": "2026-09-25T14:09:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140800-00000008",
+          "recipient": "qa",
+          "enqueuedAt": "2026-09-25T14:08:00Z",
+          "state": "unread",
+          "seq": 52,
+          "notifiedAt": "2026-09-25T14:08:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140800-00000008",
+          "recipient": "docs",
+          "enqueuedAt": "2026-09-25T14:08:00Z",
+          "state": "superseded",
+          "seq": 53,
+          "notifiedAt": "2026-09-25T14:08:00Z",
+          "supersededAt": "2026-09-25T14:09:00Z",
+          "supersededBy": "ttt-20260925-140900-00000009"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140800-00000008",
+          "recipient": "deploy",
+          "enqueuedAt": "2026-09-25T14:08:00Z",
+          "state": "cancelled",
+          "seq": 54,
+          "cancelledAt": "2026-09-25T14:09:00Z",
+          "cancelledBy": {
+            "window": "planner",
+            "session": "alpha"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-140900-00000009",
+          "recipient": "planner",
+          "enqueuedAt": "2026-09-25T14:09:00Z",
+          "state": "unread",
+          "seq": 5
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141000-0000000a",
+          "recipient": "reviewer",
+          "enqueuedAt": "2026-09-25T14:10:00Z",
+          "state": "acked",
+          "seq": 60,
+          "notifiedAt": "2026-09-25T14:10:00Z",
+          "readAt": "2026-09-25T14:11:00Z",
+          "ackedAt": "2026-09-25T14:11:00Z",
+          "ackNote": "Tests added for partial delivery.",
+          "readBy": {
+            "window": "reviewer",
+            "session": "alpha"
+          },
+          "ackedBy": {
+            "window": "reviewer",
+            "session": "alpha"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141000-0000000a",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:10:00Z",
+          "state": "read",
+          "seq": 61,
+          "notifiedAt": "2026-09-25T14:10:00Z",
+          "readAt": "2026-09-25T14:11:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141000-0000000a",
+          "recipient": "qa",
+          "enqueuedAt": "2026-09-25T14:10:00Z",
+          "state": "unread",
+          "seq": 62,
+          "notifiedAt": "2026-09-25T14:10:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141000-0000000a",
+          "recipient": "docs",
+          "enqueuedAt": "2026-09-25T14:10:00Z",
+          "state": "superseded",
+          "seq": 63,
+          "notifiedAt": "2026-09-25T14:10:00Z",
+          "supersededAt": "2026-09-25T14:11:00Z",
+          "supersededBy": "ttt-20260925-141100-0000000b"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141000-0000000a",
+          "recipient": "deploy",
+          "enqueuedAt": "2026-09-25T14:10:00Z",
+          "state": "cancelled",
+          "seq": 64,
+          "cancelledAt": "2026-09-25T14:11:00Z",
+          "cancelledBy": {
+            "window": "planner",
+            "session": "alpha"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141100-0000000b",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:11:00Z",
+          "state": "unread",
+          "seq": 6
+        }
+      ],
+      "presences": {
+        "reviewer": {
+          "pid": 24108,
+          "since": "2026-09-25T14:10:00Z",
+          "expect": {
+            "threadId": "ttt-20260925-140000-00000000"
+          }
+        },
+        "qa": {
+          "pid": 24112,
+          "since": "2026-09-25T14:09:00Z",
+          "expect": "any"
+        }
+      },
+      "streaks": {
+        "reviewer": {
+          "emptyStreak": 0,
+          "updatedAt": "2026-09-25T14:10:00Z"
+        },
+        "qa": {
+          "emptyStreak": 3,
+          "updatedAt": "2026-09-25T14:09:00Z"
+        }
+      },
+      "notifications": {
+        "reviewer": {
+          "token": "ac088f91-b5de-4aeb-b52e-3e2b739ec229",
+          "target": "reviewer",
+          "createdAt": "2026-09-25T14:12:00Z",
+          "delaySeconds": 20
+        }
+      },
+      "notificationSummaries": {
+        "reviewer": {
+          "target": "reviewer",
+          "newCount": 3,
+          "unreadTotal": 7,
+          "senders": [
+            {
+              "name": "planner",
+              "count": 2
+            },
+            {
+              "name": "builder",
+              "count": 1
+            }
+          ]
+        }
+      },
+      "counters": {
+        "reviewer": {
+          "count": 0
+        },
+        "qa": {
+          "count": 6
+        }
+      },
+      "sequenceCounters": {
+        "reviewer": {
+          "next": 61
+        }
+      },
+      "ledger": {
+        "version": 7
+      },
+      "readResults": {
+        "reviewer": {
+          "messages": [
+            {
+              "boardVersion": 7,
+              "messageId": "ttt-20260925-140000-00000000",
+              "threadId": "ttt-20260925-140000-00000000",
+              "kind": "message",
+              "timestamp": "2026-09-25T14:00:00Z",
+              "from": "planner",
+              "recipients": [
+                "reviewer",
+                "builder",
+                "qa",
+                "docs",
+                "deploy",
+                "monitor"
+              ],
+              "replyExpected": true,
+              "priority": "urgent",
+              "subject": "Preserve recipient state during replacement",
+              "body": "Replacement must not reset receipts that have already been read. Keep each recipient’s state independent and link the replacement through its recorded message ID.\n\nThe human reader must remain observational. Opening a thread must not mark an agent’s mailbox as read.",
+              "replaceKey": "receipt-policy",
+              "expiresAt": "2026-09-26T14:00:00Z"
+            },
+            {
+              "boardVersion": 7,
+              "messageId": "ttt-20260925-140100-00000001",
+              "threadId": "ttt-20260925-140000-00000000",
+              "inReplyTo": "ttt-20260925-140000-00000000",
+              "kind": "reply",
+              "timestamp": "2026-09-25T14:01:00Z",
+              "from": "reviewer",
+              "recipients": [
+                "planner"
+              ],
+              "replyExpected": false,
+              "priority": "normal",
+              "body": "Confirmed. I’ll add coverage for partial delivery and for a missing receipt record. A read receipt must stay read when the replacement is delivered."
+            }
+          ],
+          "remaining": 0,
+          "cancelled": 0
+        }
+      }
+    },
+    {
+      "name": "platform",
+      "messages": [
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-141400-0000000e",
+          "threadId": "ttt-20260925-141400-0000000e",
+          "kind": "message",
+          "timestamp": "2026-09-25T14:14:00Z",
+          "from": "planner",
+          "recipients": [
+            "reviewer",
+            "builder",
+            "qa",
+            "docs",
+            "deploy",
+            "monitor"
+          ],
+          "replyExpected": true,
+          "priority": "urgent",
+          "subject": "Preserve recipient state during replacement",
+          "body": "Replacement must not reset receipts that have already been read. Keep each recipient’s state independent and link the replacement through its recorded message ID.\n\nThe human reader must remain observational. Opening a thread must not mark an agent’s mailbox as read.",
+          "replaceKey": "receipt-policy",
+          "expiresAt": "2026-09-26T14:00:00Z"
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-141500-0000000f",
+          "threadId": "ttt-20260925-141400-0000000e",
+          "inReplyTo": "ttt-20260925-141400-0000000e",
+          "kind": "reply",
+          "timestamp": "2026-09-25T14:15:00Z",
+          "from": "reviewer",
+          "recipients": [
+            "planner"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "body": "Confirmed. I’ll add coverage for partial delivery and for a missing receipt record. A read receipt must stay read when the replacement is delivered."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-141600-00000010",
+          "threadId": "ttt-20260925-141600-00000010",
+          "kind": "message",
+          "timestamp": "2026-09-25T14:16:00Z",
+          "from": "builder",
+          "recipients": [
+            "reviewer",
+            "builder",
+            "qa",
+            "docs",
+            "deploy",
+            "monitor"
+          ],
+          "replyExpected": true,
+          "priority": "normal",
+          "subject": "Match saved pane geometry to window panes",
+          "body": "The saved layout has five panes, but the window layout string describes four. Rebuild the split geometry from the pane list and validate the checksum before saving.\n\n```json\n{ \"agent\": true, \"command\": \"node planner.mjs\" }\n```"
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-141700-00000011",
+          "threadId": "ttt-20260925-141600-00000010",
+          "inReplyTo": "ttt-20260925-141600-00000010",
+          "kind": "reply",
+          "timestamp": "2026-09-25T14:17:00Z",
+          "from": "reviewer",
+          "recipients": [
+            "builder"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "body": "Reviewed. The record shape matches the catalog. I’ll verify the edge cases and report the results in this thread."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-141800-00000012",
+          "threadId": "ttt-20260925-141800-00000012",
+          "kind": "message",
+          "timestamp": "2026-09-25T14:18:00Z",
+          "from": "planner",
+          "recipients": [
+            "reviewer",
+            "builder",
+            "qa",
+            "docs",
+            "deploy",
+            "monitor"
+          ],
+          "replyExpected": true,
+          "priority": "normal",
+          "subject": "Keep the thread reader stable during live updates",
+          "body": "New messages should append without moving the reader away from earlier replies. When the view is not at the bottom, show a new-message count and keep keyboard focus on the current item."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-141900-00000013",
+          "threadId": "ttt-20260925-141800-00000012",
+          "inReplyTo": "ttt-20260925-141800-00000012",
+          "kind": "reply",
+          "timestamp": "2026-09-25T14:19:00Z",
+          "from": "reviewer",
+          "recipients": [
+            "planner"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "body": "Reviewed. The record shape matches the catalog. I’ll verify the edge cases and report the results in this thread."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-142000-00000014",
+          "threadId": "ttt-20260925-142000-00000014",
+          "kind": "message",
+          "timestamp": "2026-09-25T14:20:00Z",
+          "from": "builder",
+          "recipients": [
+            "reviewer",
+            "builder",
+            "qa",
+            "docs",
+            "deploy",
+            "monitor"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "subject": "Separate waiting records from online status",
+          "body": "A waiting record means a process is blocked in --wait. It is not an online flag. Missing state must remain distinguishable from a recorded zero or false."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-142100-00000015",
+          "threadId": "ttt-20260925-142000-00000014",
+          "inReplyTo": "ttt-20260925-142000-00000014",
+          "kind": "reply",
+          "timestamp": "2026-09-25T14:21:00Z",
+          "from": "reviewer",
+          "recipients": [
+            "builder"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "body": "Reviewed. The record shape matches the catalog. I’ll verify the edge cases and report the results in this thread."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-142200-00000016",
+          "threadId": "ttt-20260925-142200-00000016",
+          "kind": "message",
+          "timestamp": "2026-09-25T14:22:00Z",
+          "from": "planner",
+          "recipients": [
+            "reviewer",
+            "builder",
+            "qa",
+            "docs",
+            "deploy",
+            "monitor"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "subject": "Schema ledger missing on an older board",
+          "body": "This board predates the schema ledger. The viewer should display “Not recorded” rather than invent a current version or migration history."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-142300-00000017",
+          "threadId": "ttt-20260925-142200-00000016",
+          "inReplyTo": "ttt-20260925-142200-00000016",
+          "kind": "reply",
+          "timestamp": "2026-09-25T14:23:00Z",
+          "from": "reviewer",
+          "recipients": [
+            "planner"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "body": "Reviewed. The record shape matches the catalog. I’ll verify the edge cases and report the results in this thread."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-142400-00000018",
+          "threadId": "ttt-20260925-142400-00000018",
+          "kind": "broadcast",
+          "timestamp": "2026-09-25T14:24:00Z",
+          "from": "builder",
+          "recipients": [
+            "reviewer",
+            "builder",
+            "qa",
+            "docs",
+            "deploy",
+            "monitor"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "subject": "Verify notification batching after reconnect",
+          "body": "NotificationMarker.createdAt is refreshed while batching. Display the marker and callback payload separately; the callback is not a persisted event log."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-142500-00000019",
+          "threadId": "ttt-20260925-142400-00000018",
+          "inReplyTo": "ttt-20260925-142400-00000018",
+          "kind": "reply",
+          "timestamp": "2026-09-25T14:25:00Z",
+          "from": "reviewer",
+          "recipients": [
+            "builder"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "body": "Reviewed. The record shape matches the catalog. I’ll verify the edge cases and report the results in this thread."
+        }
+      ],
+      "threads": {
+        "ttt-20260925-141400-0000000e": [
+          "ttt-20260925-141400-0000000e",
+          "ttt-20260925-141500-0000000f"
+        ],
+        "ttt-20260925-141600-00000010": [
+          "ttt-20260925-141600-00000010",
+          "ttt-20260925-141700-00000011"
+        ],
+        "ttt-20260925-141800-00000012": [
+          "ttt-20260925-141800-00000012",
+          "ttt-20260925-141900-00000013"
+        ],
+        "ttt-20260925-142000-00000014": [
+          "ttt-20260925-142000-00000014",
+          "ttt-20260925-142100-00000015"
+        ],
+        "ttt-20260925-142200-00000016": [
+          "ttt-20260925-142200-00000016",
+          "ttt-20260925-142300-00000017"
+        ],
+        "ttt-20260925-142400-00000018": [
+          "ttt-20260925-142400-00000018",
+          "ttt-20260925-142500-00000019"
+        ]
+      },
+      "receipts": [
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141400-0000000e",
+          "recipient": "reviewer",
+          "enqueuedAt": "2026-09-25T14:14:00Z",
+          "state": "acked",
+          "seq": 10,
+          "notifiedAt": "2026-09-25T14:14:00Z",
+          "readAt": "2026-09-25T14:15:00Z",
+          "ackedAt": "2026-09-25T14:15:00Z",
+          "ackNote": "Tests added for partial delivery.",
+          "readBy": {
+            "window": "reviewer",
+            "session": "platform"
+          },
+          "ackedBy": {
+            "window": "reviewer",
+            "session": "platform"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141400-0000000e",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:14:00Z",
+          "state": "read",
+          "seq": 11,
+          "notifiedAt": "2026-09-25T14:14:00Z",
+          "readAt": "2026-09-25T14:15:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141400-0000000e",
+          "recipient": "qa",
+          "enqueuedAt": "2026-09-25T14:14:00Z",
+          "state": "unread",
+          "seq": 12,
+          "notifiedAt": "2026-09-25T14:14:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141400-0000000e",
+          "recipient": "docs",
+          "enqueuedAt": "2026-09-25T14:14:00Z",
+          "state": "superseded",
+          "seq": 13,
+          "notifiedAt": "2026-09-25T14:14:00Z",
+          "supersededAt": "2026-09-25T14:15:00Z",
+          "supersededBy": "ttt-20260925-141500-0000000f"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141400-0000000e",
+          "recipient": "deploy",
+          "enqueuedAt": "2026-09-25T14:14:00Z",
+          "state": "cancelled",
+          "seq": 14,
+          "cancelledAt": "2026-09-25T14:15:00Z",
+          "cancelledBy": {
+            "window": "planner",
+            "session": "platform"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141500-0000000f",
+          "recipient": "planner",
+          "enqueuedAt": "2026-09-25T14:15:00Z",
+          "state": "unread",
+          "seq": 1
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141600-00000010",
+          "recipient": "reviewer",
+          "enqueuedAt": "2026-09-25T14:16:00Z",
+          "state": "acked",
+          "seq": 20,
+          "notifiedAt": "2026-09-25T14:16:00Z",
+          "readAt": "2026-09-25T14:17:00Z",
+          "ackedAt": "2026-09-25T14:17:00Z",
+          "ackNote": "Tests added for partial delivery.",
+          "readBy": {
+            "window": "reviewer",
+            "session": "platform"
+          },
+          "ackedBy": {
+            "window": "reviewer",
+            "session": "platform"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141600-00000010",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:16:00Z",
+          "state": "read",
+          "seq": 21,
+          "notifiedAt": "2026-09-25T14:16:00Z",
+          "readAt": "2026-09-25T14:17:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141600-00000010",
+          "recipient": "qa",
+          "enqueuedAt": "2026-09-25T14:16:00Z",
+          "state": "unread",
+          "seq": 22,
+          "notifiedAt": "2026-09-25T14:16:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141600-00000010",
+          "recipient": "docs",
+          "enqueuedAt": "2026-09-25T14:16:00Z",
+          "state": "superseded",
+          "seq": 23,
+          "notifiedAt": "2026-09-25T14:16:00Z",
+          "supersededAt": "2026-09-25T14:17:00Z",
+          "supersededBy": "ttt-20260925-141700-00000011"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141600-00000010",
+          "recipient": "deploy",
+          "enqueuedAt": "2026-09-25T14:16:00Z",
+          "state": "cancelled",
+          "seq": 24,
+          "cancelledAt": "2026-09-25T14:17:00Z",
+          "cancelledBy": {
+            "window": "planner",
+            "session": "platform"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141700-00000011",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:17:00Z",
+          "state": "unread",
+          "seq": 2
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141800-00000012",
+          "recipient": "reviewer",
+          "enqueuedAt": "2026-09-25T14:18:00Z",
+          "state": "acked",
+          "seq": 30,
+          "notifiedAt": "2026-09-25T14:18:00Z",
+          "readAt": "2026-09-25T14:19:00Z",
+          "ackedAt": "2026-09-25T14:19:00Z",
+          "ackNote": "Tests added for partial delivery.",
+          "readBy": {
+            "window": "reviewer",
+            "session": "platform"
+          },
+          "ackedBy": {
+            "window": "reviewer",
+            "session": "platform"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141800-00000012",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:18:00Z",
+          "state": "read",
+          "seq": 31,
+          "notifiedAt": "2026-09-25T14:18:00Z",
+          "readAt": "2026-09-25T14:19:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141800-00000012",
+          "recipient": "qa",
+          "enqueuedAt": "2026-09-25T14:18:00Z",
+          "state": "unread",
+          "seq": 32,
+          "notifiedAt": "2026-09-25T14:18:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141800-00000012",
+          "recipient": "docs",
+          "enqueuedAt": "2026-09-25T14:18:00Z",
+          "state": "superseded",
+          "seq": 33,
+          "notifiedAt": "2026-09-25T14:18:00Z",
+          "supersededAt": "2026-09-25T14:19:00Z",
+          "supersededBy": "ttt-20260925-141900-00000013"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141800-00000012",
+          "recipient": "deploy",
+          "enqueuedAt": "2026-09-25T14:18:00Z",
+          "state": "cancelled",
+          "seq": 34,
+          "cancelledAt": "2026-09-25T14:19:00Z",
+          "cancelledBy": {
+            "window": "planner",
+            "session": "platform"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-141900-00000013",
+          "recipient": "planner",
+          "enqueuedAt": "2026-09-25T14:19:00Z",
+          "state": "unread",
+          "seq": 3
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142000-00000014",
+          "recipient": "reviewer",
+          "enqueuedAt": "2026-09-25T14:20:00Z",
+          "state": "acked",
+          "seq": 40,
+          "notifiedAt": "2026-09-25T14:20:00Z",
+          "readAt": "2026-09-25T14:21:00Z",
+          "ackedAt": "2026-09-25T14:21:00Z",
+          "ackNote": "Tests added for partial delivery.",
+          "readBy": {
+            "window": "reviewer",
+            "session": "platform"
+          },
+          "ackedBy": {
+            "window": "reviewer",
+            "session": "platform"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142000-00000014",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:20:00Z",
+          "state": "read",
+          "seq": 41,
+          "notifiedAt": "2026-09-25T14:20:00Z",
+          "readAt": "2026-09-25T14:21:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142000-00000014",
+          "recipient": "qa",
+          "enqueuedAt": "2026-09-25T14:20:00Z",
+          "state": "unread",
+          "seq": 42,
+          "notifiedAt": "2026-09-25T14:20:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142000-00000014",
+          "recipient": "docs",
+          "enqueuedAt": "2026-09-25T14:20:00Z",
+          "state": "superseded",
+          "seq": 43,
+          "notifiedAt": "2026-09-25T14:20:00Z",
+          "supersededAt": "2026-09-25T14:21:00Z",
+          "supersededBy": "ttt-20260925-142100-00000015"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142000-00000014",
+          "recipient": "deploy",
+          "enqueuedAt": "2026-09-25T14:20:00Z",
+          "state": "cancelled",
+          "seq": 44,
+          "cancelledAt": "2026-09-25T14:21:00Z",
+          "cancelledBy": {
+            "window": "planner",
+            "session": "platform"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142100-00000015",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:21:00Z",
+          "state": "unread",
+          "seq": 4
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142200-00000016",
+          "recipient": "reviewer",
+          "enqueuedAt": "2026-09-25T14:22:00Z",
+          "state": "acked",
+          "seq": 50,
+          "notifiedAt": "2026-09-25T14:22:00Z",
+          "readAt": "2026-09-25T14:23:00Z",
+          "ackedAt": "2026-09-25T14:23:00Z",
+          "ackNote": "Tests added for partial delivery.",
+          "readBy": {
+            "window": "reviewer",
+            "session": "platform"
+          },
+          "ackedBy": {
+            "window": "reviewer",
+            "session": "platform"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142200-00000016",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:22:00Z",
+          "state": "read",
+          "seq": 51,
+          "notifiedAt": "2026-09-25T14:22:00Z",
+          "readAt": "2026-09-25T14:23:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142200-00000016",
+          "recipient": "qa",
+          "enqueuedAt": "2026-09-25T14:22:00Z",
+          "state": "unread",
+          "seq": 52,
+          "notifiedAt": "2026-09-25T14:22:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142200-00000016",
+          "recipient": "docs",
+          "enqueuedAt": "2026-09-25T14:22:00Z",
+          "state": "superseded",
+          "seq": 53,
+          "notifiedAt": "2026-09-25T14:22:00Z",
+          "supersededAt": "2026-09-25T14:23:00Z",
+          "supersededBy": "ttt-20260925-142300-00000017"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142200-00000016",
+          "recipient": "deploy",
+          "enqueuedAt": "2026-09-25T14:22:00Z",
+          "state": "cancelled",
+          "seq": 54,
+          "cancelledAt": "2026-09-25T14:23:00Z",
+          "cancelledBy": {
+            "window": "planner",
+            "session": "platform"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142300-00000017",
+          "recipient": "planner",
+          "enqueuedAt": "2026-09-25T14:23:00Z",
+          "state": "unread",
+          "seq": 5
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142400-00000018",
+          "recipient": "reviewer",
+          "enqueuedAt": "2026-09-25T14:24:00Z",
+          "state": "acked",
+          "seq": 60,
+          "notifiedAt": "2026-09-25T14:24:00Z",
+          "readAt": "2026-09-25T14:25:00Z",
+          "ackedAt": "2026-09-25T14:25:00Z",
+          "ackNote": "Tests added for partial delivery.",
+          "readBy": {
+            "window": "reviewer",
+            "session": "platform"
+          },
+          "ackedBy": {
+            "window": "reviewer",
+            "session": "platform"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142400-00000018",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:24:00Z",
+          "state": "read",
+          "seq": 61,
+          "notifiedAt": "2026-09-25T14:24:00Z",
+          "readAt": "2026-09-25T14:25:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142400-00000018",
+          "recipient": "qa",
+          "enqueuedAt": "2026-09-25T14:24:00Z",
+          "state": "unread",
+          "seq": 62,
+          "notifiedAt": "2026-09-25T14:24:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142400-00000018",
+          "recipient": "docs",
+          "enqueuedAt": "2026-09-25T14:24:00Z",
+          "state": "superseded",
+          "seq": 63,
+          "notifiedAt": "2026-09-25T14:24:00Z",
+          "supersededAt": "2026-09-25T14:25:00Z",
+          "supersededBy": "ttt-20260925-142500-00000019"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142400-00000018",
+          "recipient": "deploy",
+          "enqueuedAt": "2026-09-25T14:24:00Z",
+          "state": "cancelled",
+          "seq": 64,
+          "cancelledAt": "2026-09-25T14:25:00Z",
+          "cancelledBy": {
+            "window": "planner",
+            "session": "platform"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142500-00000019",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:25:00Z",
+          "state": "unread",
+          "seq": 6
+        }
+      ],
+      "presences": {
+        "reviewer": {
+          "pid": 24108,
+          "since": "2026-09-25T14:10:00Z",
+          "expect": {
+            "threadId": "ttt-20260925-141400-0000000e"
+          }
+        },
+        "qa": {
+          "pid": 24112,
+          "since": "2026-09-25T14:09:00Z",
+          "expect": "any"
+        }
+      },
+      "streaks": {
+        "reviewer": {
+          "emptyStreak": 0,
+          "updatedAt": "2026-09-25T14:10:00Z"
+        },
+        "qa": {
+          "emptyStreak": 3,
+          "updatedAt": "2026-09-25T14:09:00Z"
+        }
+      },
+      "notifications": {
+        "reviewer": {
+          "token": "ac088f91-b5de-4aeb-b52e-3e2b739ec229",
+          "target": "reviewer",
+          "createdAt": "2026-09-25T14:12:00Z",
+          "delaySeconds": 20
+        }
+      },
+      "notificationSummaries": {
+        "reviewer": {
+          "target": "reviewer",
+          "newCount": 3,
+          "unreadTotal": 7,
+          "senders": [
+            {
+              "name": "planner",
+              "count": 2
+            },
+            {
+              "name": "builder",
+              "count": 1
+            }
+          ]
+        }
+      },
+      "counters": {
+        "reviewer": {
+          "count": 0
+        },
+        "qa": {
+          "count": 6
+        }
+      },
+      "sequenceCounters": {
+        "reviewer": {
+          "next": 61
+        }
+      },
+      "readResults": {
+        "reviewer": {
+          "messages": [
+            {
+              "boardVersion": 7,
+              "messageId": "ttt-20260925-141400-0000000e",
+              "threadId": "ttt-20260925-141400-0000000e",
+              "kind": "message",
+              "timestamp": "2026-09-25T14:14:00Z",
+              "from": "planner",
+              "recipients": [
+                "reviewer",
+                "builder",
+                "qa",
+                "docs",
+                "deploy",
+                "monitor"
+              ],
+              "replyExpected": true,
+              "priority": "urgent",
+              "subject": "Preserve recipient state during replacement",
+              "body": "Replacement must not reset receipts that have already been read. Keep each recipient’s state independent and link the replacement through its recorded message ID.\n\nThe human reader must remain observational. Opening a thread must not mark an agent’s mailbox as read.",
+              "replaceKey": "receipt-policy",
+              "expiresAt": "2026-09-26T14:00:00Z"
+            },
+            {
+              "boardVersion": 7,
+              "messageId": "ttt-20260925-141500-0000000f",
+              "threadId": "ttt-20260925-141400-0000000e",
+              "inReplyTo": "ttt-20260925-141400-0000000e",
+              "kind": "reply",
+              "timestamp": "2026-09-25T14:15:00Z",
+              "from": "reviewer",
+              "recipients": [
+                "planner"
+              ],
+              "replyExpected": false,
+              "priority": "normal",
+              "body": "Confirmed. I’ll add coverage for partial delivery and for a missing receipt record. A read receipt must stay read when the replacement is delivered."
+            }
+          ],
+          "remaining": 0,
+          "cancelled": 0
+        }
+      }
+    },
+    {
+      "name": "release",
+      "messages": [
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-142800-0000001c",
+          "threadId": "ttt-20260925-142800-0000001c",
+          "kind": "message",
+          "timestamp": "2026-09-25T14:28:00Z",
+          "from": "planner",
+          "recipients": [
+            "reviewer",
+            "builder",
+            "qa",
+            "docs",
+            "deploy",
+            "monitor"
+          ],
+          "replyExpected": true,
+          "priority": "urgent",
+          "subject": "Preserve recipient state during replacement",
+          "body": "Replacement must not reset receipts that have already been read. Keep each recipient’s state independent and link the replacement through its recorded message ID.\n\nThe human reader must remain observational. Opening a thread must not mark an agent’s mailbox as read.",
+          "replaceKey": "receipt-policy",
+          "expiresAt": "2026-09-26T14:00:00Z"
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-142900-0000001d",
+          "threadId": "ttt-20260925-142800-0000001c",
+          "inReplyTo": "ttt-20260925-142800-0000001c",
+          "kind": "reply",
+          "timestamp": "2026-09-25T14:29:00Z",
+          "from": "reviewer",
+          "recipients": [
+            "planner"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "body": "Confirmed. I’ll add coverage for partial delivery and for a missing receipt record. A read receipt must stay read when the replacement is delivered."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-143000-0000001e",
+          "threadId": "ttt-20260925-143000-0000001e",
+          "kind": "message",
+          "timestamp": "2026-09-25T14:30:00Z",
+          "from": "builder",
+          "recipients": [
+            "reviewer",
+            "builder",
+            "qa",
+            "docs",
+            "deploy",
+            "monitor"
+          ],
+          "replyExpected": true,
+          "priority": "normal",
+          "subject": "Match saved pane geometry to window panes",
+          "body": "The saved layout has five panes, but the window layout string describes four. Rebuild the split geometry from the pane list and validate the checksum before saving.\n\n```json\n{ \"agent\": true, \"command\": \"node planner.mjs\" }\n```"
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-143100-0000001f",
+          "threadId": "ttt-20260925-143000-0000001e",
+          "inReplyTo": "ttt-20260925-143000-0000001e",
+          "kind": "reply",
+          "timestamp": "2026-09-25T14:31:00Z",
+          "from": "reviewer",
+          "recipients": [
+            "builder"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "body": "Reviewed. The record shape matches the catalog. I’ll verify the edge cases and report the results in this thread."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-143200-00000020",
+          "threadId": "ttt-20260925-143200-00000020",
+          "kind": "message",
+          "timestamp": "2026-09-25T14:32:00Z",
+          "from": "planner",
+          "recipients": [
+            "reviewer",
+            "builder",
+            "qa",
+            "docs",
+            "deploy",
+            "monitor"
+          ],
+          "replyExpected": true,
+          "priority": "normal",
+          "subject": "Keep the thread reader stable during live updates",
+          "body": "New messages should append without moving the reader away from earlier replies. When the view is not at the bottom, show a new-message count and keep keyboard focus on the current item."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-143300-00000021",
+          "threadId": "ttt-20260925-143200-00000020",
+          "inReplyTo": "ttt-20260925-143200-00000020",
+          "kind": "reply",
+          "timestamp": "2026-09-25T14:33:00Z",
+          "from": "reviewer",
+          "recipients": [
+            "planner"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "body": "Reviewed. The record shape matches the catalog. I’ll verify the edge cases and report the results in this thread."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-143400-00000022",
+          "threadId": "ttt-20260925-143400-00000022",
+          "kind": "message",
+          "timestamp": "2026-09-25T14:34:00Z",
+          "from": "builder",
+          "recipients": [
+            "reviewer",
+            "builder",
+            "qa",
+            "docs",
+            "deploy",
+            "monitor"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "subject": "Separate waiting records from online status",
+          "body": "A waiting record means a process is blocked in --wait. It is not an online flag. Missing state must remain distinguishable from a recorded zero or false."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-143500-00000023",
+          "threadId": "ttt-20260925-143400-00000022",
+          "inReplyTo": "ttt-20260925-143400-00000022",
+          "kind": "reply",
+          "timestamp": "2026-09-25T14:35:00Z",
+          "from": "reviewer",
+          "recipients": [
+            "builder"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "body": "Reviewed. The record shape matches the catalog. I’ll verify the edge cases and report the results in this thread."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-143600-00000024",
+          "threadId": "ttt-20260925-143600-00000024",
+          "kind": "message",
+          "timestamp": "2026-09-25T14:36:00Z",
+          "from": "planner",
+          "recipients": [
+            "reviewer",
+            "builder",
+            "qa",
+            "docs",
+            "deploy",
+            "monitor"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "subject": "Schema ledger missing on an older board",
+          "body": "This board predates the schema ledger. The viewer should display “Not recorded” rather than invent a current version or migration history."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-143700-00000025",
+          "threadId": "ttt-20260925-143600-00000024",
+          "inReplyTo": "ttt-20260925-143600-00000024",
+          "kind": "reply",
+          "timestamp": "2026-09-25T14:37:00Z",
+          "from": "reviewer",
+          "recipients": [
+            "planner"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "body": "Reviewed. The record shape matches the catalog. I’ll verify the edge cases and report the results in this thread."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-143800-00000026",
+          "threadId": "ttt-20260925-143800-00000026",
+          "kind": "broadcast",
+          "timestamp": "2026-09-25T14:38:00Z",
+          "from": "builder",
+          "recipients": [
+            "reviewer",
+            "builder",
+            "qa",
+            "docs",
+            "deploy",
+            "monitor"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "subject": "Verify notification batching after reconnect",
+          "body": "NotificationMarker.createdAt is refreshed while batching. Display the marker and callback payload separately; the callback is not a persisted event log."
+        },
+        {
+          "boardVersion": 7,
+          "messageId": "ttt-20260925-143900-00000027",
+          "threadId": "ttt-20260925-143800-00000026",
+          "inReplyTo": "ttt-20260925-143800-00000026",
+          "kind": "reply",
+          "timestamp": "2026-09-25T14:39:00Z",
+          "from": "reviewer",
+          "recipients": [
+            "builder"
+          ],
+          "replyExpected": false,
+          "priority": "normal",
+          "body": "Reviewed. The record shape matches the catalog. I’ll verify the edge cases and report the results in this thread."
+        }
+      ],
+      "threads": {
+        "ttt-20260925-142800-0000001c": [
+          "ttt-20260925-142800-0000001c",
+          "ttt-20260925-142900-0000001d"
+        ],
+        "ttt-20260925-143000-0000001e": [
+          "ttt-20260925-143000-0000001e",
+          "ttt-20260925-143100-0000001f"
+        ],
+        "ttt-20260925-143200-00000020": [
+          "ttt-20260925-143200-00000020",
+          "ttt-20260925-143300-00000021"
+        ],
+        "ttt-20260925-143400-00000022": [
+          "ttt-20260925-143400-00000022",
+          "ttt-20260925-143500-00000023"
+        ],
+        "ttt-20260925-143600-00000024": [
+          "ttt-20260925-143600-00000024",
+          "ttt-20260925-143700-00000025"
+        ],
+        "ttt-20260925-143800-00000026": [
+          "ttt-20260925-143800-00000026",
+          "ttt-20260925-143900-00000027"
+        ]
+      },
+      "receipts": [
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142800-0000001c",
+          "recipient": "reviewer",
+          "enqueuedAt": "2026-09-25T14:28:00Z",
+          "state": "acked",
+          "seq": 10,
+          "notifiedAt": "2026-09-25T14:28:00Z",
+          "readAt": "2026-09-25T14:29:00Z",
+          "ackedAt": "2026-09-25T14:29:00Z",
+          "ackNote": "Tests added for partial delivery.",
+          "readBy": {
+            "window": "reviewer",
+            "session": "release"
+          },
+          "ackedBy": {
+            "window": "reviewer",
+            "session": "release"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142800-0000001c",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:28:00Z",
+          "state": "read",
+          "seq": 11,
+          "notifiedAt": "2026-09-25T14:28:00Z",
+          "readAt": "2026-09-25T14:29:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142800-0000001c",
+          "recipient": "qa",
+          "enqueuedAt": "2026-09-25T14:28:00Z",
+          "state": "unread",
+          "seq": 12,
+          "notifiedAt": "2026-09-25T14:28:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142800-0000001c",
+          "recipient": "docs",
+          "enqueuedAt": "2026-09-25T14:28:00Z",
+          "state": "superseded",
+          "seq": 13,
+          "notifiedAt": "2026-09-25T14:28:00Z",
+          "supersededAt": "2026-09-25T14:29:00Z",
+          "supersededBy": "ttt-20260925-142900-0000001d"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142800-0000001c",
+          "recipient": "deploy",
+          "enqueuedAt": "2026-09-25T14:28:00Z",
+          "state": "cancelled",
+          "seq": 14,
+          "cancelledAt": "2026-09-25T14:29:00Z",
+          "cancelledBy": {
+            "window": "planner",
+            "session": "release"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-142900-0000001d",
+          "recipient": "planner",
+          "enqueuedAt": "2026-09-25T14:29:00Z",
+          "state": "unread",
+          "seq": 1
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143000-0000001e",
+          "recipient": "reviewer",
+          "enqueuedAt": "2026-09-25T14:30:00Z",
+          "state": "acked",
+          "seq": 20,
+          "notifiedAt": "2026-09-25T14:30:00Z",
+          "readAt": "2026-09-25T14:31:00Z",
+          "ackedAt": "2026-09-25T14:31:00Z",
+          "ackNote": "Tests added for partial delivery.",
+          "readBy": {
+            "window": "reviewer",
+            "session": "release"
+          },
+          "ackedBy": {
+            "window": "reviewer",
+            "session": "release"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143000-0000001e",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:30:00Z",
+          "state": "read",
+          "seq": 21,
+          "notifiedAt": "2026-09-25T14:30:00Z",
+          "readAt": "2026-09-25T14:31:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143000-0000001e",
+          "recipient": "qa",
+          "enqueuedAt": "2026-09-25T14:30:00Z",
+          "state": "unread",
+          "seq": 22,
+          "notifiedAt": "2026-09-25T14:30:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143000-0000001e",
+          "recipient": "docs",
+          "enqueuedAt": "2026-09-25T14:30:00Z",
+          "state": "superseded",
+          "seq": 23,
+          "notifiedAt": "2026-09-25T14:30:00Z",
+          "supersededAt": "2026-09-25T14:31:00Z",
+          "supersededBy": "ttt-20260925-143100-0000001f"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143000-0000001e",
+          "recipient": "deploy",
+          "enqueuedAt": "2026-09-25T14:30:00Z",
+          "state": "cancelled",
+          "seq": 24,
+          "cancelledAt": "2026-09-25T14:31:00Z",
+          "cancelledBy": {
+            "window": "planner",
+            "session": "release"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143100-0000001f",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:31:00Z",
+          "state": "unread",
+          "seq": 2
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143200-00000020",
+          "recipient": "reviewer",
+          "enqueuedAt": "2026-09-25T14:32:00Z",
+          "state": "acked",
+          "seq": 30,
+          "notifiedAt": "2026-09-25T14:32:00Z",
+          "readAt": "2026-09-25T14:33:00Z",
+          "ackedAt": "2026-09-25T14:33:00Z",
+          "ackNote": "Tests added for partial delivery.",
+          "readBy": {
+            "window": "reviewer",
+            "session": "release"
+          },
+          "ackedBy": {
+            "window": "reviewer",
+            "session": "release"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143200-00000020",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:32:00Z",
+          "state": "read",
+          "seq": 31,
+          "notifiedAt": "2026-09-25T14:32:00Z",
+          "readAt": "2026-09-25T14:33:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143200-00000020",
+          "recipient": "qa",
+          "enqueuedAt": "2026-09-25T14:32:00Z",
+          "state": "unread",
+          "seq": 32,
+          "notifiedAt": "2026-09-25T14:32:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143200-00000020",
+          "recipient": "docs",
+          "enqueuedAt": "2026-09-25T14:32:00Z",
+          "state": "superseded",
+          "seq": 33,
+          "notifiedAt": "2026-09-25T14:32:00Z",
+          "supersededAt": "2026-09-25T14:33:00Z",
+          "supersededBy": "ttt-20260925-143300-00000021"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143200-00000020",
+          "recipient": "deploy",
+          "enqueuedAt": "2026-09-25T14:32:00Z",
+          "state": "cancelled",
+          "seq": 34,
+          "cancelledAt": "2026-09-25T14:33:00Z",
+          "cancelledBy": {
+            "window": "planner",
+            "session": "release"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143300-00000021",
+          "recipient": "planner",
+          "enqueuedAt": "2026-09-25T14:33:00Z",
+          "state": "unread",
+          "seq": 3
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143400-00000022",
+          "recipient": "reviewer",
+          "enqueuedAt": "2026-09-25T14:34:00Z",
+          "state": "acked",
+          "seq": 40,
+          "notifiedAt": "2026-09-25T14:34:00Z",
+          "readAt": "2026-09-25T14:35:00Z",
+          "ackedAt": "2026-09-25T14:35:00Z",
+          "ackNote": "Tests added for partial delivery.",
+          "readBy": {
+            "window": "reviewer",
+            "session": "release"
+          },
+          "ackedBy": {
+            "window": "reviewer",
+            "session": "release"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143400-00000022",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:34:00Z",
+          "state": "read",
+          "seq": 41,
+          "notifiedAt": "2026-09-25T14:34:00Z",
+          "readAt": "2026-09-25T14:35:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143400-00000022",
+          "recipient": "qa",
+          "enqueuedAt": "2026-09-25T14:34:00Z",
+          "state": "unread",
+          "seq": 42,
+          "notifiedAt": "2026-09-25T14:34:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143400-00000022",
+          "recipient": "docs",
+          "enqueuedAt": "2026-09-25T14:34:00Z",
+          "state": "superseded",
+          "seq": 43,
+          "notifiedAt": "2026-09-25T14:34:00Z",
+          "supersededAt": "2026-09-25T14:35:00Z",
+          "supersededBy": "ttt-20260925-143500-00000023"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143400-00000022",
+          "recipient": "deploy",
+          "enqueuedAt": "2026-09-25T14:34:00Z",
+          "state": "cancelled",
+          "seq": 44,
+          "cancelledAt": "2026-09-25T14:35:00Z",
+          "cancelledBy": {
+            "window": "planner",
+            "session": "release"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143500-00000023",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:35:00Z",
+          "state": "unread",
+          "seq": 4
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143600-00000024",
+          "recipient": "reviewer",
+          "enqueuedAt": "2026-09-25T14:36:00Z",
+          "state": "acked",
+          "seq": 50,
+          "notifiedAt": "2026-09-25T14:36:00Z",
+          "readAt": "2026-09-25T14:37:00Z",
+          "ackedAt": "2026-09-25T14:37:00Z",
+          "ackNote": "Tests added for partial delivery.",
+          "readBy": {
+            "window": "reviewer",
+            "session": "release"
+          },
+          "ackedBy": {
+            "window": "reviewer",
+            "session": "release"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143600-00000024",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:36:00Z",
+          "state": "read",
+          "seq": 51,
+          "notifiedAt": "2026-09-25T14:36:00Z",
+          "readAt": "2026-09-25T14:37:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143600-00000024",
+          "recipient": "qa",
+          "enqueuedAt": "2026-09-25T14:36:00Z",
+          "state": "unread",
+          "seq": 52,
+          "notifiedAt": "2026-09-25T14:36:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143600-00000024",
+          "recipient": "docs",
+          "enqueuedAt": "2026-09-25T14:36:00Z",
+          "state": "superseded",
+          "seq": 53,
+          "notifiedAt": "2026-09-25T14:36:00Z",
+          "supersededAt": "2026-09-25T14:37:00Z",
+          "supersededBy": "ttt-20260925-143700-00000025"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143600-00000024",
+          "recipient": "deploy",
+          "enqueuedAt": "2026-09-25T14:36:00Z",
+          "state": "cancelled",
+          "seq": 54,
+          "cancelledAt": "2026-09-25T14:37:00Z",
+          "cancelledBy": {
+            "window": "planner",
+            "session": "release"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143700-00000025",
+          "recipient": "planner",
+          "enqueuedAt": "2026-09-25T14:37:00Z",
+          "state": "unread",
+          "seq": 5
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143800-00000026",
+          "recipient": "reviewer",
+          "enqueuedAt": "2026-09-25T14:38:00Z",
+          "state": "acked",
+          "seq": 60,
+          "notifiedAt": "2026-09-25T14:38:00Z",
+          "readAt": "2026-09-25T14:39:00Z",
+          "ackedAt": "2026-09-25T14:39:00Z",
+          "ackNote": "Tests added for partial delivery.",
+          "readBy": {
+            "window": "reviewer",
+            "session": "release"
+          },
+          "ackedBy": {
+            "window": "reviewer",
+            "session": "release"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143800-00000026",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:38:00Z",
+          "state": "read",
+          "seq": 61,
+          "notifiedAt": "2026-09-25T14:38:00Z",
+          "readAt": "2026-09-25T14:39:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143800-00000026",
+          "recipient": "qa",
+          "enqueuedAt": "2026-09-25T14:38:00Z",
+          "state": "unread",
+          "seq": 62,
+          "notifiedAt": "2026-09-25T14:38:00Z"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143800-00000026",
+          "recipient": "docs",
+          "enqueuedAt": "2026-09-25T14:38:00Z",
+          "state": "superseded",
+          "seq": 63,
+          "notifiedAt": "2026-09-25T14:38:00Z",
+          "supersededAt": "2026-09-25T14:39:00Z",
+          "supersededBy": "ttt-20260925-143900-00000027"
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143800-00000026",
+          "recipient": "deploy",
+          "enqueuedAt": "2026-09-25T14:38:00Z",
+          "state": "cancelled",
+          "seq": 64,
+          "cancelledAt": "2026-09-25T14:39:00Z",
+          "cancelledBy": {
+            "window": "planner",
+            "session": "release"
+          }
+        },
+        {
+          "receiptVersion": 1,
+          "messageId": "ttt-20260925-143900-00000027",
+          "recipient": "builder",
+          "enqueuedAt": "2026-09-25T14:39:00Z",
+          "state": "unread",
+          "seq": 6
+        }
+      ],
+      "presences": {
+        "reviewer": {
+          "pid": 24108,
+          "since": "2026-09-25T14:10:00Z",
+          "expect": {
+            "threadId": "ttt-20260925-142800-0000001c"
+          }
+        },
+        "qa": {
+          "pid": 24112,
+          "since": "2026-09-25T14:09:00Z",
+          "expect": "any"
+        }
+      },
+      "streaks": {
+        "reviewer": {
+          "emptyStreak": 0,
+          "updatedAt": "2026-09-25T14:10:00Z"
+        },
+        "qa": {
+          "emptyStreak": 3,
+          "updatedAt": "2026-09-25T14:09:00Z"
+        }
+      },
+      "notifications": {
+        "reviewer": {
+          "token": "ac088f91-b5de-4aeb-b52e-3e2b739ec229",
+          "target": "reviewer",
+          "createdAt": "2026-09-25T14:12:00Z",
+          "delaySeconds": 20
+        }
+      },
+      "notificationSummaries": {
+        "reviewer": {
+          "target": "reviewer",
+          "newCount": 3,
+          "unreadTotal": 7,
+          "senders": [
+            {
+              "name": "planner",
+              "count": 2
+            },
+            {
+              "name": "builder",
+              "count": 1
+            }
+          ]
+        }
+      },
+      "counters": {
+        "reviewer": {
+          "count": 0
+        },
+        "qa": {
+          "count": 6
+        }
+      },
+      "sequenceCounters": {
+        "reviewer": {
+          "next": 61
+        }
+      },
+      "ledger": {
+        "version": 7
+      },
+      "readResults": {
+        "reviewer": {
+          "messages": [
+            {
+              "boardVersion": 7,
+              "messageId": "ttt-20260925-142800-0000001c",
+              "threadId": "ttt-20260925-142800-0000001c",
+              "kind": "message",
+              "timestamp": "2026-09-25T14:28:00Z",
+              "from": "planner",
+              "recipients": [
+                "reviewer",
+                "builder",
+                "qa",
+                "docs",
+                "deploy",
+                "monitor"
+              ],
+              "replyExpected": true,
+              "priority": "urgent",
+              "subject": "Preserve recipient state during replacement",
+              "body": "Replacement must not reset receipts that have already been read. Keep each recipient’s state independent and link the replacement through its recorded message ID.\n\nThe human reader must remain observational. Opening a thread must not mark an agent’s mailbox as read.",
+              "replaceKey": "receipt-policy",
+              "expiresAt": "2026-09-26T14:00:00Z"
+            },
+            {
+              "boardVersion": 7,
+              "messageId": "ttt-20260925-142900-0000001d",
+              "threadId": "ttt-20260925-142800-0000001c",
+              "inReplyTo": "ttt-20260925-142800-0000001c",
+              "kind": "reply",
+              "timestamp": "2026-09-25T14:29:00Z",
+              "from": "reviewer",
+              "recipients": [
+                "planner"
+              ],
+              "replyExpected": false,
+              "priority": "normal",
+              "body": "Confirmed. I’ll add coverage for partial delivery and for a missing receipt record. A read receipt must stay read when the replacement is delivered."
+            }
+          ],
+          "remaining": 0,
+          "cancelled": 0
+        }
+      }
+    }
+  ],
+  "sessions": [
+    {
+      "id": "$0",
+      "name": "alpha",
+      "attached": true,
+      "windows": [
+        {
+          "name": "main",
+          "id": "@0",
+          "index": 0,
+          "active": true,
+          "panes": [
+            {
+              "session": "alpha",
+              "window": "main",
+              "windowId": "@0",
+              "pane": "%0",
+              "index": 0,
+              "pid": 24001,
+              "active": true,
+              "dead": false,
+              "cwd": "/workspace/alpha",
+              "command": "node",
+              "title": "planner",
+              "historyLimit": 2000,
+              "agent": "planner",
+              "harness": "local",
+              "startCommand": "node planner.mjs"
+            },
+            {
+              "session": "alpha",
+              "window": "main",
+              "windowId": "@0",
+              "pane": "%1",
+              "index": 1,
+              "pid": 24002,
+              "active": false,
+              "dead": false,
+              "cwd": "/workspace/alpha",
+              "command": "nvim",
+              "title": "notes",
+              "historyLimit": 2000
+            },
+            {
+              "session": "alpha",
+              "window": "main",
+              "windowId": "@0",
+              "pane": "%2",
+              "index": 2,
+              "pid": 24003,
+              "active": false,
+              "dead": false,
+              "cwd": "/workspace/alpha",
+              "command": "node",
+              "title": "reviewer",
+              "historyLimit": 2000,
+              "agent": "reviewer",
+              "harness": "local",
+              "startCommand": "node reviewer.mjs"
+            },
+            {
+              "session": "alpha",
+              "window": "main",
+              "windowId": "@0",
+              "pane": "%3",
+              "index": 3,
+              "pid": 24004,
+              "active": false,
+              "dead": false,
+              "cwd": "/workspace/alpha",
+              "command": "tail",
+              "title": "logs",
+              "historyLimit": 2000
+            },
+            {
+              "session": "alpha",
+              "window": "main",
+              "windowId": "@0",
+              "pane": "%4",
+              "index": 4,
+              "pid": 24005,
+              "active": false,
+              "dead": false,
+              "cwd": "/workspace/alpha",
+              "command": "node",
+              "title": "qa",
+              "historyLimit": 2000,
+              "agent": "qa",
+              "harness": "local",
+              "startCommand": "node qa.mjs"
+            }
+          ]
+        },
+        {
+          "name": "tests",
+          "id": "@1",
+          "index": 1,
+          "active": false,
+          "panes": [
+            {
+              "session": "alpha",
+              "window": "tests",
+              "windowId": "@1",
+              "pane": "%5",
+              "index": 0,
+              "pid": 24006,
+              "active": true,
+              "dead": false,
+              "cwd": "/workspace/alpha",
+              "command": "node",
+              "title": "planner",
+              "historyLimit": 2000,
+              "agent": "planner",
+              "harness": "local",
+              "startCommand": "node planner.mjs"
+            },
+            {
+              "session": "alpha",
+              "window": "tests",
+              "windowId": "@1",
+              "pane": "%6",
+              "index": 1,
+              "pid": 24007,
+              "active": false,
+              "dead": false,
+              "cwd": "/workspace/alpha",
+              "command": "nvim",
+              "title": "notes",
+              "historyLimit": 2000
+            }
+          ]
+        },
+        {
+          "name": "notes",
+          "id": "@2",
+          "index": 2,
+          "active": false,
+          "panes": [
+            {
+              "session": "alpha",
+              "window": "notes",
+              "windowId": "@2",
+              "pane": "%7",
+              "index": 0,
+              "pid": 24008,
+              "active": true,
+              "dead": false,
+              "cwd": "/workspace/alpha",
+              "command": "node",
+              "title": "planner",
+              "historyLimit": 2000,
+              "agent": "planner",
+              "harness": "local",
+              "startCommand": "node planner.mjs"
+            },
+            {
+              "session": "alpha",
+              "window": "notes",
+              "windowId": "@2",
+              "pane": "%8",
+              "index": 1,
+              "pid": 24009,
+              "active": false,
+              "dead": false,
+              "cwd": "/workspace/alpha",
+              "command": "nvim",
+              "title": "notes",
+              "historyLimit": 2000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "$1",
+      "name": "platform",
+      "attached": false,
+      "windows": [
+        {
+          "name": "main",
+          "id": "@3",
+          "index": 0,
+          "active": true,
+          "panes": [
+            {
+              "session": "platform",
+              "window": "main",
+              "windowId": "@3",
+              "pane": "%9",
+              "index": 0,
+              "pid": 24010,
+              "active": true,
+              "dead": false,
+              "cwd": "/workspace/platform",
+              "command": "node",
+              "title": "planner",
+              "historyLimit": 2000,
+              "agent": "planner",
+              "harness": "local",
+              "startCommand": "node planner.mjs"
+            },
+            {
+              "session": "platform",
+              "window": "main",
+              "windowId": "@3",
+              "pane": "%10",
+              "index": 1,
+              "pid": 24011,
+              "active": false,
+              "dead": false,
+              "cwd": "/workspace/platform",
+              "command": "nvim",
+              "title": "notes",
+              "historyLimit": 2000
+            },
+            {
+              "session": "platform",
+              "window": "main",
+              "windowId": "@3",
+              "pane": "%11",
+              "index": 2,
+              "pid": 24012,
+              "active": false,
+              "dead": false,
+              "cwd": "/workspace/platform",
+              "command": "node",
+              "title": "reviewer",
+              "historyLimit": 2000,
+              "agent": "reviewer",
+              "harness": "local",
+              "startCommand": "node reviewer.mjs"
+            }
+          ]
+        },
+        {
+          "name": "tests",
+          "id": "@4",
+          "index": 1,
+          "active": false,
+          "panes": [
+            {
+              "session": "platform",
+              "window": "tests",
+              "windowId": "@4",
+              "pane": "%12",
+              "index": 0,
+              "pid": 24013,
+              "active": true,
+              "dead": false,
+              "cwd": "/workspace/platform",
+              "command": "node",
+              "title": "planner",
+              "historyLimit": 2000,
+              "agent": "planner",
+              "harness": "local",
+              "startCommand": "node planner.mjs"
+            },
+            {
+              "session": "platform",
+              "window": "tests",
+              "windowId": "@4",
+              "pane": "%13",
+              "index": 1,
+              "pid": 24014,
+              "active": false,
+              "dead": false,
+              "cwd": "/workspace/platform",
+              "command": "nvim",
+              "title": "notes",
+              "historyLimit": 2000
+            }
+          ]
+        },
+        {
+          "name": "notes",
+          "id": "@5",
+          "index": 2,
+          "active": false,
+          "panes": [
+            {
+              "session": "platform",
+              "window": "notes",
+              "windowId": "@5",
+              "pane": "%14",
+              "index": 0,
+              "pid": 24015,
+              "active": true,
+              "dead": false,
+              "cwd": "/workspace/platform",
+              "command": "node",
+              "title": "planner",
+              "historyLimit": 2000,
+              "agent": "planner",
+              "harness": "local",
+              "startCommand": "node planner.mjs"
+            },
+            {
+              "session": "platform",
+              "window": "notes",
+              "windowId": "@5",
+              "pane": "%15",
+              "index": 1,
+              "pid": 24016,
+              "active": false,
+              "dead": false,
+              "cwd": "/workspace/platform",
+              "command": "nvim",
+              "title": "notes",
+              "historyLimit": 2000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "$2",
+      "name": "release",
+      "attached": false,
+      "windows": [
+        {
+          "name": "main",
+          "id": "@6",
+          "index": 0,
+          "active": true,
+          "panes": [
+            {
+              "session": "release",
+              "window": "main",
+              "windowId": "@6",
+              "pane": "%16",
+              "index": 0,
+              "pid": 24017,
+              "active": true,
+              "dead": false,
+              "cwd": "/workspace/release",
+              "command": "node",
+              "title": "planner",
+              "historyLimit": 2000,
+              "agent": "planner",
+              "harness": "local",
+              "startCommand": "node planner.mjs"
+            },
+            {
+              "session": "release",
+              "window": "main",
+              "windowId": "@6",
+              "pane": "%17",
+              "index": 1,
+              "pid": 24018,
+              "active": false,
+              "dead": false,
+              "cwd": "/workspace/release",
+              "command": "nvim",
+              "title": "notes",
+              "historyLimit": 2000
+            },
+            {
+              "session": "release",
+              "window": "main",
+              "windowId": "@6",
+              "pane": "%18",
+              "index": 2,
+              "pid": 24019,
+              "active": false,
+              "dead": false,
+              "cwd": "/workspace/release",
+              "command": "node",
+              "title": "reviewer",
+              "historyLimit": 2000,
+              "agent": "reviewer",
+              "harness": "local",
+              "startCommand": "node reviewer.mjs"
+            }
+          ]
+        },
+        {
+          "name": "tests",
+          "id": "@7",
+          "index": 1,
+          "active": false,
+          "panes": [
+            {
+              "session": "release",
+              "window": "tests",
+              "windowId": "@7",
+              "pane": "%19",
+              "index": 0,
+              "pid": 24020,
+              "active": true,
+              "dead": false,
+              "cwd": "/workspace/release",
+              "command": "node",
+              "title": "planner",
+              "historyLimit": 2000,
+              "agent": "planner",
+              "harness": "local",
+              "startCommand": "node planner.mjs"
+            },
+            {
+              "session": "release",
+              "window": "tests",
+              "windowId": "@7",
+              "pane": "%20",
+              "index": 1,
+              "pid": 24021,
+              "active": false,
+              "dead": false,
+              "cwd": "/workspace/release",
+              "command": "nvim",
+              "title": "notes",
+              "historyLimit": 2000
+            }
+          ]
+        },
+        {
+          "name": "notes",
+          "id": "@8",
+          "index": 2,
+          "active": false,
+          "panes": [
+            {
+              "session": "release",
+              "window": "notes",
+              "windowId": "@8",
+              "pane": "%21",
+              "index": 0,
+              "pid": 24022,
+              "active": true,
+              "dead": false,
+              "cwd": "/workspace/release",
+              "command": "node",
+              "title": "planner",
+              "historyLimit": 2000,
+              "agent": "planner",
+              "harness": "local",
+              "startCommand": "node planner.mjs"
+            },
+            {
+              "session": "release",
+              "window": "notes",
+              "windowId": "@8",
+              "pane": "%22",
+              "index": 1,
+              "pid": 24023,
+              "active": false,
+              "dead": false,
+              "cwd": "/workspace/release",
+              "command": "nvim",
+              "title": "notes",
+              "historyLimit": 2000
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "sessionRecords": [
+    {
+      "version": 1,
+      "session": "alpha",
+      "profile": "agents",
+      "hookBin": "/usr/local/bin/ttt",
+      "createdAt": "2026-09-25T13:00:00Z",
+      "layout": "research"
+    },
+    {
+      "version": 1,
+      "session": "platform",
+      "profile": "agents",
+      "hookBin": "/usr/local/bin/ttt",
+      "createdAt": "2026-09-25T13:00:00Z",
+      "layout": "research"
+    },
+    {
+      "version": 1,
+      "session": "release",
+      "profile": "agents",
+      "hookBin": "/usr/local/bin/ttt",
+      "createdAt": "2026-09-25T13:00:00Z",
+      "layout": "research"
+    }
+  ],
+  "panesViews": [
+    {
+      "window": "main",
+      "id": "@0",
+      "panes": [
+        {
+          "index": 0,
+          "pane": "%0",
+          "agent": "planner",
+          "seat": true,
+          "registered": true,
+          "runs": "node",
+          "dead": false
+        },
+        {
+          "index": 1,
+          "pane": "%1",
+          "seat": false,
+          "registered": false,
+          "runs": "nvim",
+          "dead": false
+        },
+        {
+          "index": 2,
+          "pane": "%2",
+          "agent": "reviewer",
+          "seat": true,
+          "registered": true,
+          "runs": "node",
+          "dead": false
+        },
+        {
+          "index": 3,
+          "pane": "%3",
+          "seat": false,
+          "registered": false,
+          "runs": "tail",
+          "dead": false
+        },
+        {
+          "index": 4,
+          "pane": "%4",
+          "agent": "qa",
+          "seat": true,
+          "registered": true,
+          "runs": "node",
+          "dead": false
+        }
+      ]
+    },
+    {
+      "window": "tests",
+      "id": "@1",
+      "panes": [
+        {
+          "index": 0,
+          "pane": "%5",
+          "agent": "planner",
+          "seat": true,
+          "registered": true,
+          "runs": "node",
+          "dead": false
+        },
+        {
+          "index": 1,
+          "pane": "%6",
+          "seat": false,
+          "registered": false,
+          "runs": "nvim",
+          "dead": false
+        }
+      ]
+    },
+    {
+      "window": "notes",
+      "id": "@2",
+      "panes": [
+        {
+          "index": 0,
+          "pane": "%7",
+          "agent": "planner",
+          "seat": true,
+          "registered": true,
+          "runs": "node",
+          "dead": false
+        },
+        {
+          "index": 1,
+          "pane": "%8",
+          "seat": false,
+          "registered": false,
+          "runs": "nvim",
+          "dead": false
+        }
+      ]
+    },
+    {
+      "window": "main",
+      "id": "@3",
+      "panes": [
+        {
+          "index": 0,
+          "pane": "%9",
+          "agent": "planner",
+          "seat": true,
+          "registered": true,
+          "runs": "node",
+          "dead": false
+        },
+        {
+          "index": 1,
+          "pane": "%10",
+          "seat": false,
+          "registered": false,
+          "runs": "nvim",
+          "dead": false
+        },
+        {
+          "index": 2,
+          "pane": "%11",
+          "agent": "reviewer",
+          "seat": true,
+          "registered": true,
+          "runs": "node",
+          "dead": false
+        }
+      ]
+    },
+    {
+      "window": "tests",
+      "id": "@4",
+      "panes": [
+        {
+          "index": 0,
+          "pane": "%12",
+          "agent": "planner",
+          "seat": true,
+          "registered": true,
+          "runs": "node",
+          "dead": false
+        },
+        {
+          "index": 1,
+          "pane": "%13",
+          "seat": false,
+          "registered": false,
+          "runs": "nvim",
+          "dead": false
+        }
+      ]
+    },
+    {
+      "window": "notes",
+      "id": "@5",
+      "panes": [
+        {
+          "index": 0,
+          "pane": "%14",
+          "agent": "planner",
+          "seat": true,
+          "registered": true,
+          "runs": "node",
+          "dead": false
+        },
+        {
+          "index": 1,
+          "pane": "%15",
+          "seat": false,
+          "registered": false,
+          "runs": "nvim",
+          "dead": false
+        }
+      ]
+    },
+    {
+      "window": "main",
+      "id": "@6",
+      "panes": [
+        {
+          "index": 0,
+          "pane": "%16",
+          "agent": "planner",
+          "seat": true,
+          "registered": true,
+          "runs": "node",
+          "dead": false
+        },
+        {
+          "index": 1,
+          "pane": "%17",
+          "seat": false,
+          "registered": false,
+          "runs": "nvim",
+          "dead": false
+        },
+        {
+          "index": 2,
+          "pane": "%18",
+          "agent": "reviewer",
+          "seat": true,
+          "registered": true,
+          "runs": "node",
+          "dead": false
+        }
+      ]
+    },
+    {
+      "window": "tests",
+      "id": "@7",
+      "panes": [
+        {
+          "index": 0,
+          "pane": "%19",
+          "agent": "planner",
+          "seat": true,
+          "registered": true,
+          "runs": "node",
+          "dead": false
+        },
+        {
+          "index": 1,
+          "pane": "%20",
+          "seat": false,
+          "registered": false,
+          "runs": "nvim",
+          "dead": false
+        }
+      ]
+    },
+    {
+      "window": "notes",
+      "id": "@8",
+      "panes": [
+        {
+          "index": 0,
+          "pane": "%21",
+          "agent": "planner",
+          "seat": true,
+          "registered": true,
+          "runs": "node",
+          "dead": false
+        },
+        {
+          "index": 1,
+          "pane": "%22",
+          "seat": false,
+          "registered": false,
+          "runs": "nvim",
+          "dead": false
+        }
+      ]
+    }
+  ],
+  "layouts": {
+    "research": {
+      "version": 1,
+      "cwd": "/workspace/alpha",
+      "profile": "agents",
+      "session": "alpha",
+      "windows": [
+        {
+          "name": "main",
+          "layout": "7434,160x48,0,0[160x27,0,0{79x27,0,0,0,80x27,80,0,1},160x20,0,28{52x20,0,28,2,53x20,53,28,3,53x20,107,28,4}]",
+          "panes": [
+            {
+              "agent": true,
+              "command": "node planner.mjs",
+              "harness": "local",
+              "source": "tree"
+            },
+            {
+              "agent": false,
+              "title": "notes",
+              "command": "nvim README.md",
+              "source": "process"
+            },
+            {
+              "agent": "reviewer",
+              "command": "node reviewer.mjs",
+              "harness": "local"
+            },
+            {
+              "agent": false,
+              "title": "logs",
+              "command": "tail -f ./logs/agent.log"
+            },
+            {
+              "agent": "qa",
+              "command": "node qa.mjs",
+              "harness": "local"
+            }
+          ]
+        },
+        {
+          "name": "tests"
+        }
+      ]
+    },
+    "minimal": {
+      "version": 1,
+      "profile": "agents",
+      "windows": [
+        {
+          "name": "main"
+        }
+      ]
+    },
+    "review": {
+      "version": 1,
+      "cwd": "/workspace/alpha",
+      "profile": "agents",
+      "session": "alpha",
+      "windows": [
+        {
+          "name": "review",
+          "layout": "8b5f,160x48,0,0{80x48,0,0,0,79x48,81,0,1}",
+          "panes": [
+            {
+              "agent": true,
+              "command": "node reviewer.mjs"
+            },
+            {
+              "title": "notes",
+              "command": "nvim"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "settings": {
+    "notifySeconds": 20,
+    "readMax": 10,
+    "wait": {
+      "seconds": 120,
+      "maxSeconds": 300,
+      "maxIdle": 5
+    },
+    "capture": {
+      "lines": 40,
+      "maxLines": 500
+    },
+    "tmux": {
+      "badges": true
+    },
+    "harnesses": {
+      "local": {
+        "bin": "node",
+        "ready": "ready|Waiting",
+        "default": true
+      }
+    }
+  },
+  "findings": [
+    {
+      "severity": "ok",
+      "subject": "Session records",
+      "detail": "Three live session trees were read without missing required fields."
+    },
+    {
+      "severity": "ok",
+      "subject": "Receipt state",
+      "detail": "Each recipient keeps an independent receipt. Five supported states."
+    },
+    {
+      "severity": "warn",
+      "subject": "Schema ledger",
+      "detail": "platform has no state/schema.json. Its recorded version is unknown.",
+      "fix": "Keep the absent ledger visible; do not write a fabricated version."
+    },
+    {
+      "severity": "ok",
+      "subject": "Saved layouts",
+      "detail": "All saved layouts have matching pane counts and valid checksums."
+    },
+    {
+      "severity": "warn",
+      "subject": "Partial delivery",
+      "detail": "A monitor receipt is not yet recorded for the selected message.",
+      "fix": "Inspect MessageStatus.receipts and preserve the missing recipient row."
+    }
+  ],
+  "captures": {
+    "%0": "$ node planner.mjs\n\n[14:12:00] Inspecting mailbox records\n[14:12:03] Thread index: 12 entries\n[14:12:04] Preserving append order\n[14:12:06] Message prepared for reviewer\n\nWaiting for the next message…",
+    "%1": "# Alpha\n\n## Record boundaries\n\n- Shared message body\n- Independent recipient receipt\n- Viewer selection stays local\n\nNo account state.",
+    "%2": "$ node reviewer.mjs\n\nRead: receipt replacement policy\nChecks: partial delivery\nChecks: older records without seq\n\nAcknowledged with note.",
+    "%3": "14:12:03 message written\n14:12:03 receipt enqueued\n14:12:23 recipient notified\n14:13:10 recipient read",
+    "%4": "$ node qa.mjs\n\nPASS append order\nPASS missing receipt\nPASS preserve zero\nPASS helper pane title\n\n4 tests passed"
+  },
+  "geometry": {
+    "@0": "7434,160x48,0,0[160x27,0,0{79x27,0,0,0,80x27,80,0,1},160x20,0,28{52x20,0,28,2,53x20,53,28,3,53x20,107,28,4}]"
+  }
+}

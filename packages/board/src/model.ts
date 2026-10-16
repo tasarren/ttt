@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto"
 
-export const BOARD_VERSION = 6
+export const BOARD_VERSION = 7
 export const RECEIPT_VERSION = 1
 
 export const MessageKind = {
@@ -21,6 +21,7 @@ export const ReceiptState = {
   Read: "read",
   Acked: "acked",
   Superseded: "superseded",
+  Cancelled: "cancelled",
 } as const
 export type ReceiptState = (typeof ReceiptState)[keyof typeof ReceiptState]
 
@@ -58,6 +59,10 @@ export interface MessageReceipt {
   ackNote?: string
   supersededAt?: string
   supersededBy?: string
+  /** Set when the sender retracted this receipt before it was read. */
+  cancelledAt?: string
+  /** Detected performer of the cancel; absent when undetectable. */
+  cancelledBy?: Actor
   /** Detected performer of the read flip; absent on peeks, system transitions, and old receipts. */
   readBy?: Actor
   /** Detected performer of the ack; absent when acked before actors existed. */
@@ -79,16 +84,29 @@ export interface NotificationMarker {
 }
 
 /**
- * Last-known pane binding for a window: which exact pane its agent sends from.
- * `session` is absent for same-board entries (the file's own session) and names
- * the origin board whenever an entry comes from elsewhere.
+ * A mailbox owner blocked in `--wait`. While the pid is alive and the record fresh, senders skip
+ * the paste: the waiter itself delivers. `expect` narrows what wakes it.
  */
-export interface PaneBinding {
-  paneId: string
-  windowId: string
-  updatedAt: string
-  session?: string
+export interface Presence {
+  pid: number
+  since: string
+  expect: { threadId: string } | "any"
 }
+
+/** A waiter older than this is treated as gone even if its pid lives on. */
+export const PRESENCE_STALE_AFTER_MS = 10 * 60_000
+
+/**
+ * Consecutive empty `read --wait` outcomes for one agent. Each one lengthens the next wait;
+ * deleted on arrival, so an agent that hears anything starts over at the base timeout.
+ */
+export interface WaitStreak {
+  emptyStreak: number
+  updatedAt: string
+}
+
+/** How many seconds longer each consecutive empty `read --wait` lasts, up to `wait.maxSeconds`. */
+export const WAIT_RAMP_STEP_S = 60
 
 /** Window, agent, and session names double as directory names, so keep them to a safe charset. */
 export const NAME_RE = /^[A-Za-z0-9_-]+$/

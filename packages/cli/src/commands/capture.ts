@@ -1,8 +1,6 @@
-import { resolveAgentPane } from "@ttt/tmux"
-
 import { boundedInt, parseCommandArgs } from "../args.ts"
 import { usageError } from "../cli-error.ts"
-import { requireWindow } from "../context.ts"
+import { requireAgent } from "../context.ts"
 import type { Handler } from "../context.ts"
 
 const CAPTURE_OPTIONS = {
@@ -25,14 +23,11 @@ export const capture: Handler = async(argv, ctx) => {
     throw usageError("--grep and --around cannot be combined")
   }
   const lines = boundedInt(values.lines, "--lines", ctx.settings.capture.lines, ctx.settings.capture.maxLines)
-  const window = await requireWindow(ctx, target)
-  // Same pane truth as notify delivery: the agent's pane, never the window's
-  // active pane (which is whoever touched it last). Dead bindings are pruned.
-  const live = await ctx.tmux.listAllPanes().catch(() => [])
-  const binding = await ctx.board.resolvePane(target)
-  const hit = binding && live.some((pane) => pane.pane === binding.paneId && pane.windowId === binding.windowId)
-  if (binding && !hit) await ctx.board.prunePane(target)
-  const raw = await ctx.tmux.capture(resolveAgentPane(live, window.id, hit ? binding : undefined), lines, !values.raw)
+  // Same pane truth as notify delivery: the agent's seat, never the window's active pane
+  // (which is whoever touched it last). Any other pane: `ttt tmux capture NAME.N`.
+  const { seat } = await requireAgent(ctx, target)
+  const paneId = seat.paneId
+  const raw = await ctx.tmux.screen.capture(paneId, lines, !values.raw)
   const text = values.raw ? raw : normalizePane(raw)
   if (values.around !== undefined) {
     const context = boundedInt(values.context, "--context", 3, ctx.settings.capture.maxLines)

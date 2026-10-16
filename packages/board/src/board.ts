@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto"
-import { readdir, rm } from "node:fs/promises"
+import { mkdir, readdir, rm, stat } from "node:fs/promises"
 import { join } from "node:path"
 import { setTimeout as sleep } from "node:timers/promises"
 
 import {
   BOARD_VERSION,
   MessagePriority,
+  PRESENCE_STALE_AFTER_MS,
   RECEIPT_VERSION,
   ReceiptState,
+  WAIT_RAMP_STEP_S,
   assertName,
   makeMessageId,
   messageDay,
@@ -18,7 +20,8 @@ import type {
   MessageKind,
   MessageReceipt,
   NotificationMarker,
-  PaneBinding,
+  Presence,
+  WaitStreak,
 } from "./model.ts"
 import { atomicWriteJson, isErrno, readJsonIfExists, readJsonTree, sweepTempFiles, withDirectoryLock } from "./store.ts"
 import type { LockOptions } from "./store.ts"
@@ -31,6 +34,21 @@ export interface BoardOptions {
   /** Per-window batching windows; a missing name falls back to `notifySeconds`. */
   notifyOverrides?: Record<string, number>
   lock: LockOptions
+}
+
+export interface WaitTimeoutInput {
+  /** The wait with no history behind it (`wait.seconds`). */
+  baseSeconds: number
+  /** The most any wait may last (`wait.maxSeconds`); also caps the streak's memory. */
+  maxSeconds: number
+  /** A `--timeout` value skips the ramp; validated by the caller. */
+  explicitSeconds?: number
+}
+
+export interface WaitTimeout {
+  seconds: number
+  /** Consecutive empty waits behind this timeout; 0 when explicit or fresh. */
+  emptyStreak: number
 }
 
 export interface SendOptions {
@@ -49,6 +67,8 @@ export interface SendResult {
   message: BoardMessage
   /** Notification markers created by this send; the caller schedules a notifier per marker. */
   notifications: NotificationMarker[]
+  /** Recipients blocked in `--wait`: they deliver to themselves, so no marker and no paste. */
+  waiting: string[]
 }
 
 export interface ReadOptions {
@@ -59,11 +79,15 @@ export interface ReadOptions {
   latest: boolean
   /** Detected performer, recorded as `readBy` on flipped receipts. */
   actor?: Actor
+  /** Restrict to these message ids (a `--wait` reply); `remaining` still counts the whole mailbox. */
+  only?: ReadonlySet<string>
 }
 
 export interface ReadResult {
   messages: BoardMessage[]
   remaining: number
+  /** Cancelled receipts in this mailbox; drives the honest empty-read line. */
+  cancelled: number
 }
 
 export interface PruneOptions {
@@ -77,7 +101,27 @@ export interface PruneResult {
   receipts: number
 }
 
+export interface CancelResult {
+  message: BoardMessage
+  /** Receipts flipped to `cancelled` by this call. */
+  cancelled: string[]
+  /** Recipients left alone: already read/acked/superseded/cancelled, or no receipt. */
+  skipped: { recipient: string; state: ReceiptState | "missing" }[]
+}
+
 export type InboxSummary = Record<ReceiptState, number>
+
+export interface BoardObservation {
+  messages: BoardMessage[]
+  receipts: MessageReceipt[]
+  threads: Record<string, string[]>
+  presences: Record<string, Presence>
+  streaks: Record<string, WaitStreak>
+  notifications: Record<string, NotificationMarker>
+  counters: Record<string, { count: number }>
+  sequenceCounters: Record<string, { next: number }>
+  ledger?: { version: number }
+}
 
 export interface NotificationSummary {
   target: string
@@ -93,6 +137,26 @@ interface Unread {
 
 /** Notifier heartbeat: how often a waiting notifier refreshes its marker while the batch builds. */
 const HEARTBEAT_MS = 5_000
+
+/** `kill(pid, 0)` probes without signalling; EPERM still means the process exists. */
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch(error) {
+    return isErrno(error, "EPERM")
+  }
+}
+
+/**
+ * Whether a live waiter picks up `fresh` itself: any wait sees any mail; a thread-scoped wait
+ * sees only its thread. A mismatch means the waiter never wakes for this mail, so it still gets
+ * pasted.
+ */
+function waiterSees(expect: Presence["expect"] | undefined, fresh: { message: BoardMessage }[]): boolean {
+  if (expect === undefined) return false
+  return expect === "any" || fresh.some(({ message }) => message.threadId === expect.threadId)
+}
 
 /**
  * The durable message board for one tmux session. Pure filesystem: delivering text to a window is
@@ -113,6 +177,39 @@ export class Board {
     this.stateRoot = join(options.sessionRoot, "state")
     this.locksRoot = join(options.sessionRoot, "locks")
     this.threadsRoot = join(options.sessionRoot, "threads")
+  }
+
+  /** Observational view: no locks, expiry settlement, index rebuilds, or writes. */
+  async observe(): Promise<BoardObservation> {
+    const result: BoardObservation = {
+      messages: await readJsonTree<BoardMessage>(this.messagesRoot),
+      receipts: await readJsonTree<MessageReceipt>(this.mailboxesRoot),
+      threads: {}, presences: {}, streaks: {}, notifications: {}, counters: {}, sequenceCounters: {},
+    }
+    const entries = await readdir(this.threadsRoot).catch((error: unknown) => {
+      if (isErrno(error, "ENOENT")) return []
+      throw error
+    })
+    for (const name of entries.filter(name => name.endsWith(".json"))) {
+      const ids = await readJsonIfExists<string[]>(join(this.threadsRoot, name)).catch(() => undefined)
+      if (ids) result.threads[name.slice(0, -5)] = ids
+    }
+    for (const agent of await this.mailboxNames()) {
+      const read = <T>(suffix: string): Promise<T | undefined> => readJsonIfExists<T>(join(this.stateRoot, `${agent}.${suffix}.json`)).catch(() => undefined)
+      const presence = await read<Presence>("waiting")
+      const streak = await read<WaitStreak>("wait")
+      const notification = await read<NotificationMarker>("notification")
+      const counter = await read<{ count: number }>("unread")
+      const sequence = await read<{ next: number }>("seq")
+      if (presence) result.presences[agent] = presence
+      if (streak) result.streaks[agent] = streak
+      if (notification) result.notifications[agent] = notification
+      if (counter) result.counters[agent] = counter
+      if (sequence) result.sequenceCounters[agent] = sequence
+    }
+    const version = await this.schemaVersion()
+    if (version !== undefined) result.ledger = { version }
+    return result
   }
 
   async send(from: string, recipients: string[], body: string, options: SendOptions): Promise<SendResult> {
@@ -147,6 +244,7 @@ export class Board {
     await this.appendThreadIndex(message.threadId, messageId)
 
     const notifications: NotificationMarker[] = []
+    const waiting: string[] = []
     for (const target of targets) {
       const marker = await this.withMailboxLock(target, async() => {
         if (message.replaceKey) await this.supersedeUnlocked(message, target)
@@ -159,11 +257,114 @@ export class Board {
           seq: await this.nextSeqUnlocked(target),
         })
         await this.addUnreadUnlocked(target, 1)
+        // A live waiter delivers this itself; pasting would wake a turn that is already listening.
+        if (await this.presenceUnlocked(target)) {
+          waiting.push(target)
+          return undefined
+        }
         return options.priority === MessagePriority.Normal ? this.ensureMarkerUnlocked(target) : undefined
       })
       if (marker) notifications.push(marker)
     }
-    return { message, notifications }
+    return { message, notifications, waiting }
+  }
+
+  /** The receipt directory for `agent`, created if missing so it can be watched before any mail arrives. */
+  async mailboxPath(agent: string): Promise<string> {
+    assertName(agent, "agent name")
+    const path = join(this.mailboxesRoot, agent)
+    await mkdir(path, { recursive: true })
+    return path
+  }
+
+  /**
+   * Announces that `agent` is blocked waiting for mail. Written after the caller armed its
+   * watcher so no receipt can land unseen between the two. Cancels any pending notification
+   * marker first: a waiter delivers its own mail, so a sleeping notifier must not paste mid-wait
+   * (it exits silently on the missing token). Returns the removal callback.
+   */
+  async announcePresence(agent: string, expect: Presence["expect"]): Promise<() => Promise<void>> {
+    assertName(agent, "agent name")
+    const path = this.presencePath(agent)
+    await this.withMailboxLock(agent, async() => {
+      await rm(this.markerPath(agent), { force: true })
+      await atomicWriteJson(path, { pid: process.pid, since: new Date().toISOString(), expect } satisfies Presence)
+    })
+    return async() => {
+      const current = await readJsonIfExists<Presence>(path).catch(() => undefined)
+      if (current?.pid === process.pid) await rm(path, { force: true })
+    }
+  }
+
+  /** The live presence for `agent`, if any; stale files (dead pid, too old) are removed on read. */
+  async presence(agent: string): Promise<Presence | undefined> {
+    return this.withMailboxLock(agent, () => this.presenceUnlocked(agent))
+  }
+
+  /**
+   * How long the next `read --wait` lasts: the explicit `--timeout` when given, else the base plus
+   * one ramp step per consecutive empty wait, capped at the max. A streak older than the cap is a
+   * new idle period and starts over at base.
+   */
+  async waitTimeout(agent: string, input: WaitTimeoutInput): Promise<WaitTimeout> {
+    if (input.explicitSeconds !== undefined) return { seconds: input.explicitSeconds, emptyStreak: 0 }
+    return this.withMailboxLock(agent, async() => {
+      const streak = await this.streakUnlocked(agent)
+      const emptyStreak = streak && Date.now() - Date.parse(streak.updatedAt) <= input.maxSeconds * 1_000
+        ? streak.emptyStreak
+        : 0
+      return { seconds: Math.min(input.baseSeconds + WAIT_RAMP_STEP_S * emptyStreak, input.maxSeconds), emptyStreak }
+    })
+  }
+
+  /**
+   * Records a finished `read --wait`: arrival deletes the streak (anything heard restarts at base),
+   * anything else extends it by one. `send --wait` never calls this: it awaits one thread, not
+   * idleness.
+   */
+  async noteWait(agent: string, empty: boolean): Promise<void> {
+    await this.withMailboxLock(agent, async() => {
+      const path = this.streakPath(agent)
+      if (!empty) {
+        await rm(path, { force: true })
+        return
+      }
+      const streak = await this.streakUnlocked(agent)
+      await atomicWriteJson(path, {
+        emptyStreak: (streak?.emptyStreak ?? 0) + 1,
+        updatedAt: new Date().toISOString(),
+      } satisfies WaitStreak)
+    })
+  }
+
+  /** The live streak for `agent`, if any; corrupt files are treated as no streak. */
+  private async streakUnlocked(agent: string): Promise<WaitStreak | undefined> {
+    const found = await readJsonIfExists<unknown>(this.streakPath(agent)).catch(() => undefined)
+    if (typeof found !== "object" || found === null) return undefined
+    const { emptyStreak, updatedAt } = found as { emptyStreak?: unknown; updatedAt?: unknown }
+    if (!Number.isInteger(emptyStreak) || (emptyStreak as number) < 0) return undefined
+    if (typeof updatedAt !== "string" || !Number.isFinite(Date.parse(updatedAt))) return undefined
+    return { emptyStreak: emptyStreak as number, updatedAt }
+  }
+
+  private streakPath(agent: string): string {
+    return join(this.stateRoot, `${agent}.wait.json`)
+  }
+
+  private async presenceUnlocked(agent: string): Promise<Presence | undefined> {
+    const path = this.presencePath(agent)
+    const found = await readJsonIfExists<Presence>(path).catch(() => undefined)
+    if (!found || !Number.isInteger(found.pid)) return undefined
+    const ageMs = Date.now() - Date.parse(found.since)
+    if (!isProcessAlive(found.pid) || !Number.isFinite(ageMs) || ageMs > PRESENCE_STALE_AFTER_MS) {
+      await rm(path, { force: true })
+      return undefined
+    }
+    return found
+  }
+
+  private presencePath(agent: string): string {
+    return join(this.stateRoot, `${agent}.waiting.json`)
   }
 
   async read(agent: string, options: ReadOptions): Promise<ReadResult> {
@@ -172,8 +373,10 @@ export class Board {
         a.message.timestamp.localeCompare(b.message.timestamp)
         || (a.receipt.seq ?? 0) - (b.receipt.seq ?? 0)
         || a.message.messageId.localeCompare(b.message.messageId)
-      const unread = (await this.unreadUnlocked(agent)).sort(byTime)
-      const selected = options.latest ? unread.slice(-options.max) : unread.slice(0, options.max)
+      const { unread: all, cancelled } = await this.mailboxStateUnlocked(agent)
+      const unread = all.sort(byTime)
+      const eligible = options.only ? unread.filter((item) => options.only!.has(item.message.messageId)) : unread
+      const selected = options.latest ? eligible.slice(-options.max) : eligible.slice(0, options.max)
 
       if (!options.peek) {
         const readAt = new Date().toISOString()
@@ -183,8 +386,22 @@ export class Board {
         await this.addUnreadUnlocked(agent, -selected.length)
       }
       const remaining = unread.length - (options.peek ? 0 : selected.length)
-      return { messages: selected.map((item) => item.message), remaining }
+      return { messages: selected.map((item) => item.message), remaining, cancelled }
     })
+  }
+
+  /**
+   * Unread counters for every mailbox, read without locks from `state/<name>.unread.json`.
+   * A counter mid-rewrite reads as its last complete value (atomic rename), so this is
+   * safe for display; mailboxes without a counter yet are omitted.
+   */
+  async unreadCounts(): Promise<Map<string, number>> {
+    const counts = new Map<string, number>()
+    for (const mailbox of await this.mailboxNames()) {
+      const indexed = await readJsonIfExists<{ count: number }>(this.unreadPath(mailbox)).catch(() => undefined)
+      if (indexed && Number.isInteger(indexed.count)) counts.set(mailbox, indexed.count)
+    }
+    return counts
   }
 
   async unreadCount(agent: string): Promise<number> {
@@ -197,7 +414,7 @@ export class Board {
 
   async inboxSummary(agent: string): Promise<InboxSummary> {
     return this.withMailboxLock(agent, async() => {
-      const summary: InboxSummary = { unread: 0, read: 0, acked: 0, superseded: 0 }
+      const summary: InboxSummary = { unread: 0, read: 0, acked: 0, superseded: 0, cancelled: 0 }
       for (const receipt of await this.receiptsUnlocked(agent)) summary[receipt.state] += 1
       return summary
     })
@@ -209,6 +426,9 @@ export class Board {
       if (!receipt) throw new Error(`message ${messageId} is not in ${agent}'s mailbox`)
       if (receipt.state === ReceiptState.Superseded) {
         throw new Error(`message ${messageId} was superseded by ${receipt.supersededBy ?? "another message"}`)
+      }
+      if (receipt.state === ReceiptState.Cancelled) {
+        throw new Error(`message ${messageId} was cancelled`)
       }
       if (receipt.state === ReceiptState.Unread) {
         const message = await this.findMessage(messageId).catch(() => undefined)
@@ -234,7 +454,7 @@ export class Board {
     })
   }
 
-  /** Marks every unacked, non-superseded receipt in `agent`'s mailbox acked. One lock, one timestamp. */
+  /** Marks every unacked, non-terminal receipt in `agent`'s mailbox acked. One lock, one timestamp. */
   async ackAll(agent: string, note?: string, actor?: Actor): Promise<MessageReceipt[]> {
     return this.withMailboxLock(agent, async() => {
       await this.expireUnlocked(agent)
@@ -261,6 +481,55 @@ export class Board {
       await this.addUnreadUnlocked(agent, -wasUnread)
       return acked
     })
+  }
+
+  /**
+   * Retracts a message before it is read: flips each recipient's `unread` receipt to `cancelled`
+   * and drops the unread counter. Only the sender may cancel. A recipient who already read or
+   * acked keeps its receipt. Returns the honest result even when nothing was unread; callers
+   * decide whether that is an error (explicit-id form) or a no-op (key form).
+   */
+  async cancel(messageId: string, by: string, actor?: Actor): Promise<CancelResult> {
+    assertName(by, "sender name")
+    const message = await this.findMessage(messageId)
+    if (message.from !== by) {
+      throw new Error(`only the sender can cancel ${messageId} (sent by ${message.from})`)
+    }
+    const cancelled: string[] = []
+    const skipped: CancelResult["skipped"] = []
+    for (const recipient of message.recipients) {
+      await this.withMailboxLock(recipient, async() => {
+        const receipt = await readJsonIfExists<MessageReceipt>(this.receiptPath(recipient, messageId))
+        if (!receipt) {
+          skipped.push({ recipient, state: "missing" })
+          return
+        }
+        if (receipt.state !== ReceiptState.Unread) {
+          skipped.push({ recipient, state: receipt.state })
+          return
+        }
+        await this.writeReceipt({
+          ...receipt,
+          state: ReceiptState.Cancelled,
+          cancelledAt: new Date().toISOString(),
+          ...(actor ? { cancelledBy: actor } : {}),
+        })
+        await this.addUnreadUnlocked(recipient, -1)
+        cancelled.push(recipient)
+      })
+    }
+    return { message, cancelled, skipped }
+  }
+
+  /** Every message `from` sent carrying `replaceKey` (any kind: message, reply, broadcast). */
+  async messagesByReplaceKey(from: string, replaceKey: string): Promise<BoardMessage[]> {
+    assertName(from, "sender name")
+    // ponytail: full messages-root walk, no index. `--replace` collapses same-recipient
+    // duplicates so this normally matches one or two messages; add an index only if a profile
+    // ever shows the walk.
+    const found = (await readJsonTree<BoardMessage>(this.messagesRoot))
+      .filter((message) => message.from === from && message.replaceKey === replaceKey)
+    return found.sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.messageId.localeCompare(b.messageId))
   }
 
   async messageStatus(messageId: string): Promise<{ message: BoardMessage; receipts: MessageReceipt[] }> {
@@ -370,67 +639,16 @@ export class Board {
   }
 
   /**
-   * Records the exact pane `window` sends from. Refresh on every send; overrides
-   * carry no pane and never call this. Last-writer-wins is benign, so no lock.
-   */
-  async registerPane(window: string, binding: { paneId: string; windowId: string; session?: string }): Promise<void> {
-    if (!binding.paneId || !binding.windowId) throw new Error("pane binding needs a pane id and a window id")
-    const all = await this.readPaneRegistry()
-    all[window] = { ...binding, updatedAt: new Date().toISOString() }
-    await atomicWriteJson(this.paneRegistryPath(), all)
-  }
-
-  /**
-   * The registered pane for `window`, or undefined when unknown, malformed, or
-   * unreadable. Never throws: delivery must fall back to the window, not fail.
-   */
-  async resolvePane(window: string): Promise<PaneBinding | undefined> {
-    const entry = (await this.readPaneRegistry())[window]
-    if (!entry || typeof entry.paneId !== "string" || !entry.paneId || typeof entry.windowId !== "string" || !entry.windowId) {
-      return undefined
-    }
-    return entry
-  }
-
-  /** Drops a dead binding; best-effort, never throws. */
-  async prunePane(window: string): Promise<void> {
-    try {
-      const all = await this.readPaneRegistry()
-      if (!(window in all)) return
-      const kept: Record<string, PaneBinding> = {}
-      for (const [name, binding] of Object.entries(all)) {
-        if (name !== window) kept[name] = binding
-      }
-      await atomicWriteJson(this.paneRegistryPath(), kept)
-    } catch {
-      // A broken registry heals on the next registerPane; delivery already fell back.
-    }
-  }
-
-  private paneRegistryPath(): string {
-    return join(this.stateRoot, "panes.json")
-  }
-
-  /** Missing or corrupt registry reads as empty; registerPane heals over corruption. */
-  private async readPaneRegistry(): Promise<Record<string, PaneBinding>> {
-    try {
-      return await readJsonIfExists<Record<string, PaneBinding>>(this.paneRegistryPath()) ?? {}
-    } catch {
-      return {}
-    }
-  }
-
-  /**
    * Garbage-collects terminal history: messages older than the cutoff whose every listed recipient holds a
-   * terminal (acked/superseded) receipt at least that old, plus orphan terminal receipts whose message is gone.
+   * terminal (acked/superseded/cancelled) receipt at least that old, plus orphan terminal receipts whose message is gone.
    * Unread/read history is never touched. Message files are removed before their receipts so a crash leaves
    * orphan receipts (reaped next run) rather than untracked messages.
    */
   async prune(options: PruneOptions): Promise<PruneResult> {
     const cutoff = Date.now() - options.olderThanMs
     const terminal = (receipt: MessageReceipt | undefined): receipt is MessageReceipt => {
-      if (!receipt || (receipt.state !== ReceiptState.Acked && receipt.state !== ReceiptState.Superseded)) return false
-      return Date.parse(receipt.ackedAt ?? receipt.supersededAt ?? receipt.enqueuedAt) <= cutoff
+      if (!receipt || (receipt.state !== ReceiptState.Acked && receipt.state !== ReceiptState.Superseded && receipt.state !== ReceiptState.Cancelled)) return false
+      return Date.parse(receipt.ackedAt ?? receipt.supersededAt ?? receipt.cancelledAt ?? receipt.enqueuedAt) <= cutoff
     }
     let messages = 0
     let receipts = 0
@@ -448,7 +666,7 @@ export class Board {
           try {
             await this.withMailboxLock(entry.recipient, async() => {
               const current = await readJsonIfExists<MessageReceipt>(this.receiptPath(entry.recipient, message.messageId))
-              if (current && (current.state === ReceiptState.Acked || current.state === ReceiptState.Superseded)) {
+              if (current && (current.state === ReceiptState.Acked || current.state === ReceiptState.Superseded || current.state === ReceiptState.Cancelled)) {
                 await rm(this.receiptPath(entry.recipient, message.messageId), { force: true })
                 receipts += 1
               }
@@ -490,6 +708,7 @@ export class Board {
     target: string,
     token: string,
     deliver: (summary: NotificationSummary) => Promise<void>,
+    prepare?: () => Promise<void>,
   ): Promise<boolean> {
     const markerPath = this.markerPath(target)
     const pending = await readJsonIfExists<NotificationMarker>(markerPath)
@@ -508,6 +727,11 @@ export class Board {
       if (!live) return false
     }
 
+    // Slow delivery preparation must not block reads, acknowledgements, or senders.
+    // The token, unread receipts, and presence are checked again under the lock below.
+    if ((await readJsonIfExists<NotificationMarker>(markerPath))?.token !== token) return false
+    await prepare?.()
+
     return this.withMailboxLock(target, async() => {
       const marker = await readJsonIfExists<NotificationMarker>(markerPath)
       if (marker?.token !== token) return false
@@ -515,6 +739,13 @@ export class Board {
       const unread = await this.unreadUnlocked(target)
       const fresh = unread.filter((item) => !item.receipt.notifiedAt)
       if (fresh.length === 0) {
+        await rm(markerPath, { force: true })
+        return false
+      }
+      // A live waiter delivers its own mail; pasting now would interrupt a turn that is already
+      // listening. The marker goes, the receipts stay unread and unnotified, and the next send
+      // re-arms if the waiter leaves without reading.
+      if (waiterSees((await this.presenceUnlocked(target))?.expect, fresh)) {
         await rm(markerPath, { force: true })
         return false
       }
@@ -544,6 +775,8 @@ export class Board {
     await this.withMailboxLock(recipient, async() => {
       const receipt = await readJsonIfExists<MessageReceipt>(this.receiptPath(recipient, message.messageId))
       if (receipt?.state !== ReceiptState.Unread) return
+      // A matching waiter wakes on the receipt write itself; pasting would interrupt its turn.
+      if (waiterSees((await this.presenceUnlocked(recipient))?.expect, [{ message }])) return
       await deliver(message)
       await this.writeReceipt({ ...receipt, notifiedAt: new Date().toISOString() })
     })
@@ -654,10 +887,13 @@ export class Board {
     return readJsonTree<MessageReceipt>(join(this.mailboxesRoot, agent))
   }
 
-  private async unreadUnlocked(agent: string): Promise<Unread[]> {
+  /** One receipt walk: unread messages plus the cancelled-receipt count (for the empty-read line). */
+  private async mailboxStateUnlocked(agent: string): Promise<{ unread: Unread[]; cancelled: number }> {
     await this.expireUnlocked(agent)
     const unread: Unread[] = []
+    let cancelled = 0
     for (const receipt of await this.receiptsUnlocked(agent)) {
+      if (receipt.state === ReceiptState.Cancelled) cancelled += 1
       if (receipt.state !== ReceiptState.Unread) continue
       try {
         unread.push({ receipt, message: await this.findMessage(receipt.messageId) })
@@ -665,7 +901,11 @@ export class Board {
         // A missing message must not make the whole inbox unusable.
       }
     }
-    return unread
+    return { unread, cancelled }
+  }
+
+  private async unreadUnlocked(agent: string): Promise<Unread[]> {
+    return (await this.mailboxStateUnlocked(agent)).unread
   }
 
   /**
@@ -710,6 +950,22 @@ export class Board {
    * One-time counter builder used by the v5→v6 migration: recomputes the unread counter for every
    * mailbox. Returns the mailbox count. Idempotent.
    */
+  /**
+   * Drops the v6 pane registry (`state/panes.json`); v7 keeps pane ownership in tmux itself
+   * (`@ttt_agent`). Returns whether a file was there, so the migration can count.
+   */
+  async dropPaneRegistry(options: { dryRun: boolean }): Promise<boolean> {
+    const path = join(this.stateRoot, "panes.json")
+    try {
+      await stat(path)
+    } catch(error) {
+      if (isErrno(error, "ENOENT")) return false
+      throw error
+    }
+    if (!options.dryRun) await rm(path, { force: true })
+    return true
+  }
+
   async rebuildUnreadIndex(): Promise<number> {
     let mailboxes = 0
     for (const mailbox of await this.mailboxNames()) {
