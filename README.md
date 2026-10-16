@@ -64,6 +64,20 @@ node packages/cli/dist/ttt.mjs --help
 See [CHANGELOG.md](https://github.com/tasarren/ttt/blob/main/CHANGELOG.md) for release history,
 unreleased changes, and upgrade notes.
 
+Check a checkout with the same isolated Docker matrix as CI (no host Node/tmux setup needed):
+
+```sh
+sh .orchestrator/scripts/verify-container.sh       # tmux 3.2, 3.4, 3.8
+sh .orchestrator/scripts/verify-container.sh 3.4   # one version
+TMUX_VERSION=3.4 docker compose run --build --rm verify # direct Compose equivalent
+```
+
+Each container runs `pnpm run check` and packed CLI tests; see [development](docs/development.md).
+Tmux machine output uses UTF-8 even when the invoking environment uses the C locale.
+On older tmux, detached `doctor` checks omit the unavailable client message log and still report
+session/profile/skill findings.
+Pastes reject already-dead panes before reaching tmux, avoiding the tmux 3.2 dead-pane paste crash.
+
 ## UI library
 
 `packages/ui-lib` is one private `@ttt/ui` workspace package. It exports Vue components, styles,
@@ -431,7 +445,8 @@ report only; "lower-only" = pin only when the current value is higher.
 | `monitor-activity` | window | off | pin | pastes are activity; the badge is the signal |
 | `pane-border-status`, `pane-border-format` | window | top, `#{?@ttt_agent,#{@ttt_agent},#{?@ttt_title,#{@ttt_title},pane #{pane_index} · #{pane_current_command}}}#{?@ttt_harness, #{@ttt_harness},} #{s\|$HOME\|~\|:pane_current_path}#{?pane_dead, [dead],}` | pin | borders name the pane's owner, then harness, cwd, dead |
 | `window-status-format`, `window-status-current-format` | window | `#I:#W#{?@ttt_unread,[#{@ttt_unread}],}#{?window_flags,#{window_flags}, }` (current: bold) | pin | tabs show the unread badge |
-| `base-index`, `pane-base-index` | session | 1 | pin | numbers on the bar match `prefix+N` |
+| `base-index` | session | 1 | pin | window numbers on the bar match `prefix+N` |
+| `pane-base-index` | window | 1 | pin | panes in existing and future windows use the same numbering |
 | `renumber-windows` | session | on | pin | no gaps after closing |
 | `history-limit` | session | 10000 | pin | capture depth |
 | `destroy-unattached`, `detach-on-destroy` | session | off | pin | detached sessions survive; killing one does not detach |
@@ -446,6 +461,8 @@ Worth knowing:
 - Nothing is ever written with `-g`; the only server-scope writes are `escape-time` and
   `focus-events`. Your mouse, prefix, shell, and config files are never touched.
 - Options your own config already satisfies are not pinned, so "N options pinned" varies by machine.
+- On tmux before 3.7, `history-limit` changes affect new panes only. The initial setup pane keeps
+  its creation-time limit; `doctor` reports short history. tmux 3.7+ updates existing panes too.
 - Window options are applied per window id, and to windows opened later by a session hook — tmux
   has no session-level window-option layer (`set -w -t SESSION` leaks to every session). The hook
   `after-new-window` runs `ttt tmux _normalize-window #{window_id}` with an absolute binary path,
@@ -486,7 +503,11 @@ error names the file and the path, exit 2.
 }
 ```
 
-- `layout` is tmux's own layout string (`#{window_layout}`); required when a window has more than
+- `layout` is tmux's legacy checksum layout string (`cccc,WxH,X,Y...`, nested `{`/`[` included),
+  what `#{window_layout}` printed through tmux 3.7. tmux 3.8 prints JSON from a normal client and
+  has no legacy format; `ttt tmux save` reads the old string with one `tmux -C display-message`
+  (no attach). A floating pane (`"z"` in the JSON) is refused: the legacy line would drop it.
+  Required when a window has more than
   one pane, and its cell count must equal `panes.length` — tmux silently accepts a mismatch, ttt
   does not. There is no layout parser: the string round-trips exactly through `select-layout`,
   nested layouts included, and a layout saved at 160x40 restores at any size (tmux rescales on

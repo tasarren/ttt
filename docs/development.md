@@ -28,8 +28,8 @@ Ownership rules:
   `TmuxFailure` vocabulary (`no_server`, `no_session`, `no_target`, `pane_dead`, `bad_option`,
   `no_client`, `timeout`, `unknown`); options are written with explicit targets, never `-g`. It owns
   the `@ttt_*` option names (`UserOption` in `options.ts`); nothing else spells them.
-- `process.env` is read in exactly one file, `packages/cli/src/settings.ts` (`TTT_HOME`, `TMUX_PANE`).
-  Everything else receives the resolved `Settings` object.
+- Application `process.env` reads live in `packages/cli/src/settings.ts` (`TTT_HOME`, `TMUX_PANE`).
+  Application code receives typed options; tests and verification may set isolated child environments.
 - `packages/cli/src/context.ts` is the composition root: it resolves settings, detects the tmux context,
   and constructs one `Tmux` and one `Board` per invocation. Commands are `(argv, ctx) => Promise<void>`
   and are dispatched from a single map in `main.ts`.
@@ -89,7 +89,29 @@ pnpm web:start       # localhost host with built client/SSR output
 Reusable maintenance and verification scripts live in `.orchestrator/scripts/`. Scratch files,
 audit logs, downloads, and disposable checkouts belong in the ignored `.orchestrator/tmp/` directory.
 Release roadmaps live in `.orchestrator/plans/`. Record user-facing changes in root `CHANGELOG.md`.
-CI uses Node `24.11.0` and pnpm `11.24.0`, including packed tests on the minimum supported runtime.
+CI uses the same multi-stage Docker verification as local release checks: Node `24.11.0`, pnpm
+`11.24.0`, and a tmux matrix covering `3.2` (supported minimum), `3.4` (Ubuntu runner baseline),
+and `3.8` (current upstream release). Each version runs the full workspace check and packed tests.
+
+```sh
+sh .orchestrator/scripts/verify-container.sh       # entire CI matrix, Docker only required
+sh .orchestrator/scripts/verify-container.sh 3.4   # reproduce one matrix job
+TMUX_VERSION=3.4 docker compose build verify       # build without running checks
+TMUX_VERSION=3.4 docker compose run --build --rm verify # build + check one version
+```
+
+`Dockerfile` has `base`, `tmux-build`, `dependencies`, and `verify` stages. Tmux release archives
+are SHA-256 checked using `.orchestrator/scripts/tmux-checksums.sha256`; pnpm installs the frozen
+lockfile; the Node base image is digest-pinned. Add new tmux versions to that checksum file and the
+CI matrix together. Checks run with `LC_ALL=C` to catch locale-dependent machine-output bugs. The script builds
+images tagged `ttt-verify:tmux-VERSION` through `compose.yaml`, with `init: true` and no host mounts.
+`TMUX_VERSION` is the only Compose build argument (default `3.4`); `run --rm` removes test containers.
+Builds download dependencies; test containers run without external networking (`network_mode: none`).
+User config, `.git`, host dependencies, and build/scratch output are excluded by `.dockerignore`.
+All generated files and private tmux servers stay in disposable containers; Docker retains images
+and build cache for subsequent runs. CI runs the same script; release verification reuses that workflow.
+
+For checks on an already configured development host:
 `verify-candidate.mjs [NODE]` checks a fresh snapshot of current tracked/unignored files;
 `verify-packed.mjs [NODE]` accepts a different Node executable for minimum-runtime checks;
 `verify-upgrade.mjs CANDIDATE_BIN [NODE]` downloads the integrity-checked `0.1.3` artifact and
@@ -321,7 +343,7 @@ Source is ~5,030 lines across the four packages.
 
 Releases are owner-gated in two steps: publishing a GitHub Release (tag `vX.Y.Z`, matching
 `packages/cli` version) runs `.github/workflows/release.yml`, which verifies version sync and the
-tag's exact checkout SHA, runs the full workspace check and packed CLI tests, then *stages* the
+tag's exact checkout SHA, runs the full containerized tmux verification matrix, then *stages* the
 package on npm via OIDC trusted publishing. A maintainer then approves it
 (`pnpm stage approve <id>` with 2FA, or the Approve button on npmjs.com) and only then does the version
 go live. Merging to `main` never publishes; neither does a bare tag push without a release. Prereleases

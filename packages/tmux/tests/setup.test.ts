@@ -57,6 +57,14 @@ const PROFILE: SetupProfile = {
   ],
 }
 
+test("hook diagnostics tolerate an unavailable client log but propagate other failures", async() => {
+  const missingClient = new Tmux(DEFAULT_TMUX_OPTIONS, async() => { throw new TmuxError(TmuxFailure.NoClient, "show-messages", "no current client") })
+  assert.deepEqual(await missingClient.hooks.failures("_normalize-window"), [])
+  const missingServer = new TmuxError(TmuxFailure.NoServer, "show-messages", "no server running")
+  const offline = new Tmux(DEFAULT_TMUX_OPTIONS, async() => { throw missingServer })
+  await assert.rejects(offline.hooks.failures("_normalize-window"), (error) => error === missingServer)
+})
+
 test("apply pins only what the effective value misses, saves originals, and is idempotent", async() => {
   const { tmux, explicit, hooks } = fakeServer({ "allow-rename": "on", "base-index": "1", "escape-time": "500", "aggressive-resize": "off" })
   const report = await tmux.setup.apply("work", PROFILE, "run-shell x")

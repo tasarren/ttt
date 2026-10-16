@@ -28,7 +28,7 @@ export interface SetupProfile {
  * unstamped `pane N · command`, so exactly one pane per window carries the agent's name; then the
  * harness when ttt started one there, the cwd, and a dead marker.
  */
-export const PANE_BORDER_FORMAT = `#{?${UserOption.Agent},#{${UserOption.Agent}},#{?${UserOption.Title},#{${UserOption.Title}},pane #{pane_index} · #{pane_current_command}}}#{?${UserOption.Harness}, #{${UserOption.Harness}},} #{s|$HOME|~|:pane_current_path}#{?pane_dead, [dead],}`
+export const PANE_BORDER_FORMAT = `#{?${UserOption.Agent},#{${UserOption.Agent}},#{?${UserOption.Title},#{${UserOption.Title}},pane #{pane_index} · #{pane_current_command}}}#{?${UserOption.Harness}, #{${UserOption.Harness}},} #{s|#{HOME}|~|:pane_current_path}#{?pane_dead, [dead],}`
 
 /**
  * Window tabs: a trailing `·` when no pane in the window is stamped (furniture: nobody reads a
@@ -67,7 +67,7 @@ export const AGENTS_PROFILE: SetupProfile = {
     window("pane-border-status", "top", "borders show which pane the agent owns"),
     window("pane-border-format", PANE_BORDER_FORMAT, "border text: agent, harness, cwd, dead marker"),
     session("base-index", "1", "window numbers on the bar match prefix+N"),
-    session("pane-base-index", "1", "pane numbers match window numbers"),
+    window("pane-base-index", "1", "pane numbers match window numbers"),
     session("renumber-windows", "on", "closing a window leaves no gap in the numbering"),
     session("history-limit", "10000", "`ttt capture` can look back this far"),
     session("destroy-unattached", "off", "a session created detached must survive until someone attaches"),

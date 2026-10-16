@@ -1,3 +1,4 @@
+import { TmuxError, TmuxFailure } from "./runner.ts"
 import type { TmuxRunner } from "./runner.ts"
 
 export interface SessionHook {
@@ -26,9 +27,13 @@ export class Hooks {
   /**
    * Server message log lines mentioning `needle`, newest last. A `run-shell` hook that failed
    * leaves `'<command>' returned <code>` here; that is the only trace tmux keeps.
+   * Older tmux requires an attached client to read the log; detached servers have no log to inspect.
    */
   async failures(needle: string): Promise<string[]> {
-    const stdout = await this.run(["show-messages"])
+    const stdout = await this.run(["show-messages"]).catch((error: unknown) => {
+      if (error instanceof TmuxError && error.code === TmuxFailure.NoClient) return ""
+      throw error
+    })
     return stdout.split("\n").filter((line) => line.includes(needle) && / returned \d+$/.test(line))
   }
 

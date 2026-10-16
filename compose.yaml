@@ -1,0 +1,10 @@
+services:
+  verify:
+    image: ttt-verify:tmux-${TMUX_VERSION:-3.4}
+    build:
+      context: .
+      target: verify
+      args:
+        TMUX_VERSION: ${TMUX_VERSION:-3.4}
+    init: true
+    network_mode: none

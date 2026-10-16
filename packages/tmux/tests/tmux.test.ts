@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { Tmux, parsePaneAddress, resolveAgent } from "../src/index.ts"
+import { Tmux, TmuxError, TmuxFailure, parsePaneAddress, resolveAgent } from "../src/index.ts"
 import type { LivePane, TmuxOptions } from "../src/index.ts"
 
 const NO_WAIT: TmuxOptions = { inputSettleMs: 0, postPasteMs: 0, enterPresses: 2, postSendMs: 0 }
@@ -101,6 +101,20 @@ test("winnersByName keeps the lowest id per window name", async() => {
   ]])
 })
 
+test("windows.layout reads native legacy geometry and rejects missing or lossy control output", async() => {
+  const layout = "d67e,80x24,0,0{40x24,0,0,0,39x24,41,0[39x12,41,0,1,39x11,41,13,2]}"
+  const responses = { "display-message": JSON.stringify({ V: 2, L: {} }), "-C": `%begin 1 2 0\n${layout}\n%end 1 2 0\n%exit\n` }
+  const { tmux, calls } = fakeTmux(responses)
+  assert.equal(await tmux.windows.layout("@1"), layout)
+  assert.deepEqual(calls[1], ["-C", "display-message", "-p", "-t", "@1", "#{window_layout}"])
+  for (const reply of ["%begin 1 2 0\n%error 1 2 0\nno such window\n%exit\n", "%begin 1 2 0\n%end 1 2 0\n"]) {
+    responses["-C"] = reply
+    await assert.rejects(tmux.windows.layout("@1"), /no legacy layout/)
+  }
+  responses["display-message"] = JSON.stringify({ V: 2, L: { z: 0 } })
+  await assert.rejects(tmux.windows.layout("@1"), /floating pane/)
+})
+
 test("compareWindowIds orders numerically, not lexicographically", async() => {
   const { compareWindowIds } = await import("../src/index.ts")
   assert.ok(compareWindowIds("@2", "@10") < 0)
@@ -114,20 +128,34 @@ test("sendText waits for seat quiet, then clears, pastes through a private buffe
   const verbs = calls.map((args) => args[0])
   assert.deepEqual(verbs.slice(0, 9), Array(9).fill("capture-pane"), "one arming sample plus eight steady ones")
   assert.deepEqual(verbs.slice(9), [
-    "send-keys", "set-buffer", "paste-buffer", "send-keys", "send-keys", "delete-buffer",
+    "send-keys", "display-message", "set-buffer", "paste-buffer", "send-keys", "send-keys", "delete-buffer",
   ])
-  const buffer = calls[10]![2]
-  assert.deepEqual(calls[10]!.slice(3), ["--", "hello"])
-  assert.deepEqual(calls[11], ["paste-buffer", "-b", buffer, "-d", "-p", "-t", "@2"])
-  assert.deepEqual(calls[12], ["send-keys", "-t", "@2", "Enter"])
+  const buffer = calls[11]![2]
+  assert.deepEqual(calls[10], ["display-message", "-p", "-t", "@2", "#{pane_dead}"])
+  assert.deepEqual(calls[11]!.slice(3), ["--", "hello"])
+  assert.deepEqual(calls[12], ["paste-buffer", "-b", buffer, "-d", "-p", "-t", "@2"])
+  assert.deepEqual(calls[13], ["send-keys", "-t", "@2", "Enter"])
 })
 
 test("sendText with quiet false skips the gate for urgent delivery", async() => {
   const { tmux, calls } = fakeTmux()
   await tmux.input.sendText("@2", "now", { quiet: false })
   assert.deepEqual(calls.map((args) => args[0]), [
-    "send-keys", "set-buffer", "paste-buffer", "send-keys", "send-keys", "delete-buffer",
+    "send-keys", "display-message", "set-buffer", "paste-buffer", "send-keys", "send-keys", "delete-buffer",
   ])
+})
+
+test("type and sendText refuse a dead pane before allocating a buffer or pasting", async() => {
+  const { tmux, calls } = fakeTmux({ "display-message": "1\n" })
+  await assert.rejects(tmux.input.type("%9", "x"), (error: unknown) => {
+    assert.ok(error instanceof TmuxError)
+    assert.equal(error.code, TmuxFailure.PaneDead)
+    return true
+  })
+  assert.deepEqual(calls, [["display-message", "-p", "-t", "%9", "#{pane_dead}"]])
+  calls.length = 0
+  await assert.rejects(tmux.input.sendText("%9", "x", { quiet: false }), (error: unknown) => error instanceof TmuxError && error.code === TmuxFailure.PaneDead)
+  assert.deepEqual(calls.map((args) => args[0]), ["send-keys", "display-message"])
 })
 
 test("capture asks for the last N lines and joins wrapped lines on request", async() => {

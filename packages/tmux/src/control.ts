@@ -27,7 +27,7 @@ export class ControlClient {
 
   constructor(session: string, server: TmuxServer = {}) {
     const socket = server.socketPath ? ["-S", server.socketPath] : server.socket ? ["-L", server.socket] : []
-    this.child = spawn("tmux", [...socket, "-C", "attach-session", "-t", session, "-f", "no-output,ignore-size,active-pane"], { stdio: "pipe" })
+    this.child = spawn("tmux", ["-u", ...socket, "-C", "attach-session", "-t", session, "-f", "no-output,ignore-size,active-pane"], { stdio: "pipe" })
     let initialized = false
     let buffer = ""
     let stderr = ""

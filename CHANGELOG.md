@@ -36,6 +36,9 @@ Prepared locally; not yet published. Release evidence and remaining maintainer s
 - Copyable agent skill included in the CLI tarball; generated CLI/skill version consistency check.
 - Root changelog and versioned release roadmap; reusable scripts under `.orchestrator/scripts/`
   and ignored audit/scratch files under `.orchestrator/tmp/`.
+- Shared local/CI Docker Compose verification with isolated tmux `3.2`, `3.4`, and `3.8` builds,
+  checksum-verified sources, frozen dependencies, full workspace and packed CLI checks.
+  Release staging depends on the same matrix; host installs and config mounts are unnecessary.
 
 ### Changed
 
@@ -58,6 +61,20 @@ Prepared locally; not yet published. Release evidence and remaining maintainer s
 
 ### Fixed
 
+- Apply `pane-base-index` per window, including windows created after setup; user tmux config
+  no longer masks inconsistent pane numbering in verification. Test first-pane history against
+  actual tmux state because versions before 3.7 retain creation-time history limits.
+- Keep tmux machine output in UTF-8 even under the C locale; tmux 3.2 otherwise replaces field
+  separators with underscores, breaking inventory and session/window creation.
+- Allow `ttt tmux doctor` on detached older tmux servers whose message log requires an attached
+  client; other server errors still propagate.
+- Expand home directories in pane borders through tmux's native `#{HOME}` format, avoiding
+  tmux 3.4's escaped-dollar option values and false doctor mismatches.
+- Read tmux 3.8 layouts through its native legacy control query without attaching a client;
+  nested geometry stays compatible with existing saved layouts. Floating panes are refused
+  because the legacy layout format cannot preserve them.
+- Reject pastes to already-dead panes before allocating a buffer; tmux 3.2 can crash its server
+  if `paste-buffer` reaches a dead pane. Real tests assert the server survives rejection.
 - Await identity stamps before short-lived CLI commands exit.
 - Preserve pane ownership and prevent a second pane from taking the main agent's name.
 - Refuse renames that would orphan an existing mailbox or inherit another agent's old mailbox.

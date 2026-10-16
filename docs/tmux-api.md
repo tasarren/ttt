@@ -108,7 +108,7 @@ Data:
 | `open` | `(input: OpenWindowInput) => Promise<{ windowId, paneId }>` | Creates a detached window; returns its id and first pane id. |
 | `close` | `(windowId: string) => Promise<void>` | Kills the window. |
 | `rename` | `(windowId: string, name: string) => Promise<void>` | `rename-window` on the id. The CLI refuses to rename a window whose name is a mailbox key (its main agent's identity), and refuses a NEW that is a live agent name. |
-| `layout` | `(windowId: string) => Promise<string>` | The window's `#{window_layout}` string: pane geometry that `applyLayout` replays exactly. |
+| `layout` | `(windowId: string) => Promise<string>` | Legacy checksum layout (`cccc,WxH,X,Y...`), nested `{`/`[` included. tmux 3.2/3.4 `#{window_layout}` is returned as-is. tmux 3.8 prints JSON V2 from a normal client; `tmux -C display-message` (no attach) still prints the old string. A `"z"` floating pane is refused, because that legacy line omits it. |
 | `applyLayout` | `(windowId, layout) => Promise<void>` | `select-layout` replay onto a window that already has the same number of panes. |
 
 ## panes.ts

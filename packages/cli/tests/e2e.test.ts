@@ -57,7 +57,8 @@ before(async() => {
     // a deterministic "harness" for the suite: a POSIX shell whose prompt is the ready line
     "harnesses": { "shell": { "bin": "sh", "ready": "^[^ ]*[$#] *$", "default": true }, "codex": {} },
   }`)
-  await tmux("new-session", "-d", "-s", SESSION, "-n", "A", "-x", "160", "-y", "40", "sh")
+  await tmux("-f", "/dev/null", "new-session", "-d", "-s", SESSION, "-n", "A", "-x", "160", "-y", "40", "sh")
+  await tmux("set-option", "-gw", "pane-base-index", "1")
   await tmux("new-window", "-t", SESSION, "-n", "B", "sh")
   socketPath = (await tmux("display-message", "-p", "#{socket_path}")).trim()
   for (const window of ["A", "B"]) {
@@ -597,6 +598,8 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
   const outside = async(...args: string[]): Promise<string> => (await execFileAsync(process.execPath, [BIN, ...args], { env })).stdout.trim()
   const server = async(...args: string[]): Promise<string> => (await execFileAsync("tmux", args, { env })).stdout
   try {
+    // Start the private server without user config; setup must work from tmux defaults.
+    await server("-f", "/dev/null", "new-session", "-d", "-s", "anchor", "sh")
     const created = await outside("tmux", "setup", "--name", "team")
     assert.match(created, /^ttt: session team set up with profile agents: \d+ options? pinned, hook after-new-window installed\.$/m)
     assert.match(created, /attach with: tmux attach -t team/)
@@ -608,6 +611,7 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
     const first = (await server("display-message", "-p", "-t", "team:1", "#{window_id}")).trim()
     assert.equal((await server("show-options", "-wA", "-v", "-t", first, "remain-on-exit")).trim(), "on")
     assert.equal((await server("show-options", "-wA", "-v", "-t", first, "allow-rename")).trim(), "off")
+    assert.equal((await server("display-message", "-p", "-t", first, "#{pane_index}")).trim(), "1")
     assert.match(await server("show-options", "-wA", "-v", "-t", first, "pane-border-format"), /@ttt_agent/)
     assert.doesNotMatch(await server("show-options", "-g"), /@ttt_/, "nothing is written globally")
 
@@ -630,6 +634,8 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
       await sleep(100)
     }
     assert.equal((await server("show-options", "-wA", "-v", "-t", human, "remain-on-exit")).trim(), "on")
+    assert.equal((await server("display-message", "-p", "-t", human, "#{pane_index}")).trim(), "1", "new windows inherit normalization through the hook")
+    assert.equal((await server("display-message", "-p", "-t", "anchor", "#{pane_index}")).trim(), "0", "setup does not change another session's pane numbering")
     assert.equal((await server("display-message", "-p", "-t", human, "#{window_name}")).trim(), "HUMAN", "a window named by its creator keeps the name")
     // A window tmux named itself (prefix c) becomes W-N: a scratch window, visibly nobody's chosen name.
     const unnamed = (await server("new-window", "-t", "team", "-P", "-F", "#{window_id}", "sh")).trim()
@@ -641,7 +647,7 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
       await sleep(100)
     }
     assert.equal((await server("display-message", "-p", "-t", unnamed, "#{@ttt_agent}")).trim(), "", "a scratch window is not stamped")
-    assert.match(await server("display-message", "-p", "-t", unnamed, "#{T:window-status-format}"), /^\d+:W-1·/, "the tab marks a window without an agent")
+    assert.match(await server("-u", "display-message", "-p", "-t", unnamed, "#{T:window-status-format}"), /^\d+:W-1·/, "the tab marks a window without an agent")
     assert.match(await outside("--session", "team", "tmux", "rename", "W-1", "SCRATCH"), /^renamed W-1 to SCRATCH @\d+$/)
     await assert.rejects(outside("--session", "team", "tmux", "rename", "SCRATCH", "THIRTEEN-CHAR"), /longer than 12 characters/)
     // Creation refuses existing windows without restarting or registering their process.
@@ -670,12 +676,16 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
     assert.match(shown, /^ {2}\d+:HUMAN @\d+/m)
     const asJson = JSON.parse(await outside("--session", "team", "tmux", "tree", "--json")) as { windows: Array<{ id: string; name: string; panes: Array<{ historyLimit: number }> }> }
     assert.deepEqual(asJson.windows.map((window) => window.id).sort(), [human, first].sort())
-    assert.equal(asJson.windows[0]!.panes[0]!.historyLimit, 10_000)
+    // tmux < 3.7 keeps the creation-time limit; 3.7+ updates existing panes too.
+    const firstHistory = Number((await server("display-message", "-p", "-t", first, "#{history_limit}")).trim())
+    assert.equal(asJson.windows.find((window) => window.id === first)!.panes[0]!.historyLimit, firstHistory, "tree reports the actual pane history limit")
+    assert.equal(asJson.windows.find((window) => window.id === human)!.panes[0]!.historyLimit, 10_000, "panes created after setup inherit the profile's history limit")
 
     const report = await outside("--session", "team", "tmux", "doctor")
     assert.match(report, /^ok {3}setup: profile agents, recorded /m)
-    assert.match(report, /^(ok {3}|warn) skill /m, "doctor reports skill installs, read-only")
+    assert.match(report, /^(ok {3}|warn) skill[ :]/m, "doctor reports installed or missing skills, read-only")
     assert.match(report, /^warn clients: no client attached/m)
+    if (firstHistory < 10_000) assert.match(report, new RegExp(`keeps only ${firstHistory} lines of history`))
     assert.match(report, /^ok {3}window HUMAN: unregistered: pane 1 receives until something there runs ttt$/m)
     assert.match(report, /^ok {3}harnesses: shell, codex; declared in .*settings\.jsonc; default shell$/m)
     assert.match(report, /^ok {3}harness shell: \/.*\/sh$/m, "the declared bin is resolved on PATH")
@@ -720,7 +730,7 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
     assert.equal(helper!.startCommand, "sleep 300")
     assert.equal(helper!.cwd, "/")
     assert.equal(duo.windows[1]!.panes[0]!.agent, "LEAD", "a window without a panes list is one agent pane")
-    const geometry = (await server("display-message", "-p", "-t", "duo:CODER", "#{window_layout}")).trim()
+    const geometry = (await server("-C", "display-message", "-p", "-t", "duo:CODER", "#{window_layout}")).split("\n").find((line) => /^[0-9a-f]{4},/.test(line))!
     assert.match(geometry, /^[0-9a-f]{4},160x40,0,0\{111x40,0,0,\d+,48x40,112,0,\d+\}$/, "saved geometry replayed exactly")
     const coderWindow = (await server("display-message", "-p", "-t", "duo:CODER", "#{window_id}")).trim()
     assert.equal((await server("show-options", "-wA", "-v", "-t", coderWindow, "allow-rename")).trim(), "off", "layout windows are normalized too")
@@ -796,9 +806,9 @@ test("tmux setup creates a normalized session, the hook normalizes new windows, 
     assert.equal(await server("list-panes", "-t", "team:CODER", "-F", "#{pane_id}"), paneCount)
     await server("select-pane", "-t", commandPane)
     await outside("--session", "team", "tmux", "type", "CODER", "--", "echo typed-ok")
-    assert.doesNotMatch(await server("capture-pane", "-p", "-t", coderPane), /^typed-ok$/m, "type presses no Enter")
+    assert.doesNotMatch(await server("capture-pane", "-p", "-t", coderPane), /^typed-ok[ \t]*$/m, "type presses no Enter")
     await outside("--session", "team", "tmux", "press", "CODER", "Enter")
-    assert.equal(await outside("--session", "team", "tmux", "wait", "CODER", "--for", "^typed-ok$", "--timeout", "5"), "typed-ok")
+    assert.equal(await outside("--session", "team", "tmux", "wait", "CODER", "--for", "^typed-ok[ \\t]*$", "--timeout", "5"), "typed-ok")
     assert.doesNotMatch(await server("capture-pane", "-p", "-t", commandPane), /typed-ok/, "the focused command pane got nothing")
     await outside("--session", "team", "tmux", "type", "CODER", "--", "sleep 100")
     await outside("--session", "team", "tmux", "press", "CODER", "Enter")

@@ -5,13 +5,18 @@ permissions:
   contents: read
   id-token: write # OIDC trusted publishing, no NPM_TOKEN
 jobs:
+  verify:
+    if: github.event.release.prerelease == false
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
   publish:
     if: github.event.release.prerelease == false # prereleases never reach npm
+    needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y tmux
       - uses: pnpm/action-setup@v4
         with: { version: 11.24.0 }
       - uses: actions/setup-node@v4
@@ -19,8 +24,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: node .orchestrator/scripts/verify-release.mjs "$RELEASE_TAG"
         env: { RELEASE_TAG: "${{ github.event.release.tag_name }}" }
-      - run: pnpm run check
-      - run: pnpm run verify:packed
       - run: pnpm --filter @tasarren/ttt stage publish --access public --no-git-checks
         # Staged publishing: CI uploads, a maintainer approves on npmjs.com (or `pnpm stage approve`).
         # The trusted publisher entry is stage-only on purpose. --no-git-checks: release checkouts are

@@ -12,6 +12,7 @@ test("classifyFailure maps every stderr shape tmux 3.7 emits to its code", () =>
     ["can't find pane: %99", TmuxFailure.NoTarget],
     ["can't find window: 7", TmuxFailure.NoTarget],
     ["target pane has exited", TmuxFailure.PaneDead],
+    ["server exited unexpectedly", TmuxFailure.Unknown],
     ["invalid option: no-such-option", TmuxFailure.BadOption],
     ["empty value", TmuxFailure.BadOption],
     ["no current client", TmuxFailure.NoClient],

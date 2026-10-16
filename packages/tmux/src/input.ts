@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto"
 import { setTimeout as sleep } from "node:timers/promises"
 
+import { TmuxError, TmuxFailure } from "./runner.ts"
 import type { TmuxRunner } from "./runner.ts"
 import type { Screen } from "./screen.ts"
 
@@ -55,6 +56,7 @@ export class Input {
     const { inputSettleMs, postPasteMs, enterPresses, postSendMs } = this.options
     await this.run(["send-keys", "-t", target, Key.ClearLine])
     if (inputSettleMs > 0) await sleep(inputSettleMs)
+    await this.requireLive(target)
     const buffer = await this.fillBuffer(text)
     try {
       await this.pasteBuffer(buffer, target, true)
@@ -71,6 +73,7 @@ export class Input {
 
   /** Pastes without clearing or pressing Enter; bracketed so TUIs treat it as one paste. */
   async type(target: string, text: string): Promise<void> {
+    await this.requireLive(target)
     const buffer = await this.fillBuffer(text)
     try {
       await this.pasteBuffer(buffer, target, true)
@@ -86,6 +89,12 @@ export class Input {
 
   async interrupt(target: string): Promise<void> {
     await this.press(target, Key.Interrupt)
+  }
+
+  /** paste-buffer on a dead pane kills the tmux 3.2 server. Refuse before the paste. */
+  private async requireLive(target: string): Promise<void> {
+    const dead = (await this.run(["display-message", "-p", "-t", target, "#{pane_dead}"])).trim()
+    if (dead === "1") throw new TmuxError(TmuxFailure.PaneDead, "paste-buffer", `tmux paste-buffer: pane ${target} is dead`)
   }
 
   private async fillBuffer(text: string): Promise<string> {

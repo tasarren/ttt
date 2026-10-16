@@ -1,10 +1,13 @@
 # v0.2.0 release roadmap
 
 Audit date: 2026-10-16. Target: **`@tasarren/ttt@0.2.0`**, PR **`next` into `main`**.
-Status: **local release preparation implemented and verified**.
-Node 24.11.0 full check passes 170 tests; packed CLI passes 25 tests; upgrade/backup rollback passes.
-Remote CI, trusted-publisher confirmation, PR/merge, tagging, staging, and approval remain maintainer
-steps. Changes are uncommitted; no project history rewrite or remote mutation performed.
+Status: **local Docker matrix green; PR CI follow-up awaiting GitHub verification**.
+Node 24.11.0 / pnpm 11.24.0 on tmux 3.2, 3.4, and 3.8: 173 source tests and 25 packed tests pass
+per version, with zero failures/skips and 66 stories / 176 variants. Upgrade/backup rollback passes.
+PR [#11](https://github.com/tasarren/ttt/pull/11) contains release-preparation commit `c6437fd`.
+First GitHub run exposed tmux fixture assumptions and incorrect pane-index option scope; follow-up
+fix and verification are recorded in `verification.md`. Green CI, merge, trusted-publisher
+confirmation, tagging, staging, and approval remain release gates.
 
 ## Decision
 
@@ -15,8 +18,8 @@ steps. Changes are uncommitted; no project history rewrite or remote mutation pe
   the CLI release, but the full workspace must still pass `pnpm run check`.
 - Preserve `next` history. Do not rebase merely to remove the webapp: `main` is already an
   ancestor, and UI-era commits also change shared CLI/tmux behavior.
-- No pushes, commits, tags, PR creation, publication, or remote settings changes were performed
-  for this audit. The publication steps below are a future maintainer runbook.
+- Initial audit was read-only remotely. After authorization, release prep was committed and pushed
+  to `next`, and PR #11 opened. No tags, publication, or remote settings changes performed.
 
 ## Context and artifacts
 
@@ -44,8 +47,7 @@ Files: `.github/workflows/ci.yml`, `.github/workflows/release.yml`,
 - [x] Keep the existing CI pnpm `11.24.0` selection unless an independently verified tooling
   update is required. Clean install and full check already passed with that pnpm version.
 - [x] Add a release preflight on the exact release commit: version consistency, tag/version
-  match, and evidence that the commit passed the required full check. Simplest enforceable
-  option: install tmux and run `pnpm run check` in the release job before staging.
+  match, and full checks. Release verification now reuses the CI Docker matrix before staging.
 - [x] Put reusable release validation in `.orchestrator/scripts/`, replacing the inline
   `node -e` guard when extending it. A script must reject mismatched tags and versions.
 - [ ] Confirm OIDC trusted publisher still permits this repository/workflow/environment and
@@ -144,6 +146,11 @@ It copies current tracked/unignored files into ignored scratch without creating 
 then runs frozen install, full check, and pack dry-run. `pnpm run verify:packed [NODE]` validates
 and tests a real tarball; `verify-upgrade.mjs CANDIDATE_BIN [NODE]` exercises upgrade and rollback.
 
+For CI parity without host toolchain changes, prefer
+`sh .orchestrator/scripts/verify-container.sh`: the same full-check/packed-test container runs
+against tmux 3.2, 3.4, and 3.8 locally and in GitHub Actions. Pass one version to reproduce one job.
+Source archives are checksum-verified; host files/configs are not mounted into the container.
+
 - [x] Check tarball allowlist: `dist/ttt.mjs`, `package.json`, `README.md`, `LICENSE`, and
   `skills/ttt/SKILL.md`. If adding the changelog to the tarball, update prepack/postpack/files
   and the expected manifest together; current README uses a repository URL instead.
@@ -159,6 +166,8 @@ and tests a real tarball; `verify-upgrade.mjs CANDIDATE_BIN [NODE]` exercises up
   old binary. Do not point the old writer at the migrated live board as a rollback strategy.
 - [x] Finish final clean-snapshot frozen install / full check / pack dry-run on Node 24.11.0:
   170 tests, zero failures/skips; 66 stories / 176 variants. See `verification.md` for evidence.
+- [x] Verify CI follow-up in isolated Docker Compose containers on tmux 3.2, 3.4, and 3.8:
+  each passes the full 173-test workspace check, 25 packed tests, and 66 stories / 176 variants.
 
 **Acceptance:** green full check, green packed suite and hook-path regression, clean manifest,
 verified migration/backup restoration, and all unresolved findings listed in release notes.

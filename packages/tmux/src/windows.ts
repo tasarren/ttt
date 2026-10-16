@@ -68,9 +68,20 @@ export class Windows {
     await this.run(["rename-window", "-t", windowId, name])
   }
 
-  /** The window's `#{window_layout}` string: pane geometry that `applyLayout` can replay exactly. */
+  /**
+   * Legacy checksum layout (`cccc,WxH,X,Y...`), nested containers included.
+   * tmux 3.2/3.4 `display-message` still prints it. tmux 3.8 prints JSON V2 and has no legacy
+   * format variable; `tmux -C display-message` (no attach) still prints the old string between
+   * `%begin` and `%end`.
+   */
   async layout(windowId: string): Promise<string> {
-    return (await this.run(["display-message", "-p", "-t", windowId, "#{window_layout}"])).trim()
+    const reported = (await this.run(["display-message", "-p", "-t", windowId, "#{window_layout}"])).trim()
+    if (/^[0-9a-f]{4},/.test(reported)) return reported
+    if (/"z"\s*:/.test(reported)) throw new Error(`tmux window ${windowId} has a floating pane; legacy layout cannot keep it`)
+    const reply = await this.run(["-C", "display-message", "-p", "-t", windowId, "#{window_layout}"])
+    const layout = reply.split("\n").find((line) => /^[0-9a-f]{4},\d+x\d+,\d+,\d+/.test(line))
+    if (layout === undefined) throw new Error("tmux control reply has no legacy layout")
+    return layout
   }
 
   /**

@@ -16,6 +16,8 @@ before changing a package.
 ## Standards
 
 - Corepack/pnpm only; never npm, tsx, or Bun. CI selects its Node and pnpm versions.
+- Reproduce CI with `sh .orchestrator/scripts/verify-container.sh [TMUX_VERSION ...]`.
+  Keep alternate runtimes/tmux builds inside Docker; no host installs or configuration mounts.
 - Put reusable maintenance and verification scripts in `.orchestrator/scripts/`, not inline shell
   heredocs or workflow bodies. Keep inline commands to short, one-off operations or script invocations.
 - Use `.orchestrator/tmp/` for scratch files, audit logs, downloads, and disposable checkouts, not

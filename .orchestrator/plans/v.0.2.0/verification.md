@@ -2,11 +2,14 @@
 
 ## Implemented candidate — 2026-10-16
 
-Local candidate version: **0.2.0**. Project refs remain at audit baseline; changes are uncommitted.
+Candidate version: **0.2.0**. Release preparation committed/pushed as `c6437fd`; PR
+[#11](https://github.com/tasarren/ttt/pull/11) targets `main`. The Docker matrix below verifies its
+compatibility follow-up; earlier host/snapshot checks are retained as historical evidence.
 The historical audit below is retained as before/after evidence, not the current readiness verdict.
 
 | Gate | Current result | Evidence |
 |---|---|---|
+| Local Docker Compose matrix | PASS | tmux 3.2 / 3.4 / 3.8, Node 24.11.0 / pnpm 11.24.0: each passes 173 source tests + 25 packed tests, zero failed/skipped, all builds and 66 stories / 176 variants |
 | Full working checkout on minimum Node | PASS | Node 24.11.0 / pnpm 11.24.0; 170 tests, zero failed/skipped, all builds and stories |
 | Final clean candidate snapshot | PASS | No copied node_modules/build output; frozen pnpm 11.24.0 install, full 170-test check, 66 stories / 176 variants, pack dry-run on Node 24.11.0 |
 | Packed CLI on minimum Node | PASS | All 24 existing E2E tests plus real hook-path regression: 25/25, zero skipped |
@@ -16,11 +19,13 @@ The historical audit below is retained as before/after evidence, not the current
 | Version | PASS | CLI/generated constant/bundled skill 0.2.0; engines >=24.11.0; registry still latest 0.1.3 and 0.2.0 absent |
 | Package boundary | PASS | Exactly five files; built bin; no runtime deps; TypeScript AST checks built-in imports/no dynamic loads; bundler module inventory only CLI/board/tmux/migrations/jsonc-parser |
 | Remaining dependency audit | TRIAGED | Two unpatched Histoire-only advisories; see below; no suppression |
-| GitHub/OIDC upload | PENDING MAINTAINER | No remote writes; prior 0.1.3 provenance names this repository's release.yml, but current trusted-publisher settings require maintainer confirmation |
+| GitHub CI | FOLLOW-UP | First run failed two tmux E2E checks; see findings below |
+| OIDC upload | PENDING MAINTAINER | No package upload; prior 0.1.3 provenance names this repository's release.yml, but current trusted-publisher settings require maintainer confirmation |
 
 Reusable checks: `.orchestrator/scripts/verify-{release,packed,upgrade,candidate}.mjs`.
 Source hook and release regression tests run in ordinary `pnpm run check`; CI and release jobs also
-run `pnpm run verify:packed`. Both select Node 24.11.0 explicitly, preserving pnpm 11.24.0.
+run `pnpm run verify:packed`. Both use the same Docker matrix (tmux 3.2, 3.4, 3.8) through
+`verify-container.sh`, selecting Node 24.11.0 explicitly and preserving pnpm 11.24.0.
 Release staging follows a full check of the tag's exact checkout, rather than relying on old CI runs.
 
 Evidence under `.orchestrator/tmp/release-audit-2026-10-16/`: `candidate-check.log`,
@@ -28,6 +33,62 @@ Evidence under `.orchestrator/tmp/release-audit-2026-10-16/`: `candidate-check.l
 `clean-candidate.log`. Packed module inventory/tarball live in `.orchestrator/tmp/p-C5IUyl/`;
 upgrade hashes/backups/result live in `.orchestrator/tmp/upgrade-am5Gp4/`.
 Final clean snapshot: `.orchestrator/tmp/c-spLptb/`. Later edits only record these results in docs.
+
+## PR CI follow-up
+
+First run [38949964892](https://github.com/tasarren/ttt/actions/runs/38949964892), Node 24.11.0 /
+pnpm 11.24.0 / Ubuntu tmux 3.4: **168/170 tests passed**, two E2E failures; packed step did not run.
+
+- Seat-list assertions assumed pane numbering starts at 1; the private server read developer
+  configuration locally, while CI used tmux defaults. Start with `-f /dev/null` and explicitly
+  configure the messaging fixture's pane numbering. Setup fixture instead starts from defaults.
+- Initial setup pane had 2,000 history lines on tmux 3.4, versus 10,000 locally on 3.7c.
+  [tmux 3.7 changed history-limit updates to affect existing panes](https://github.com/tmux/tmux/blob/3.7/CHANGES).
+  Assert tree output against real pane state and retain a strict 10,000-line assertion for a newly
+  created pane; check doctor's short-history warning on older tmux.
+- Removing local config exposed a real profile bug: `pane-base-index` was classified as session
+  scope, changing only one window and bypassing later-window normalization. Correct to window
+  scope; assert first/new windows start at 1 and a separate session stays at 0.
+- The isolated tmux 3.2 container exposed C-locale output sanitization: literal tab separators
+  became underscores. `createRunner` and `ControlClient` now use tmux `-u` so machine output stays
+  UTF-8 regardless of locale. Container checks explicitly run with `LC_ALL=C` to retain coverage.
+- Detached tmux 3.4 cannot read `show-messages` without a client. Hook diagnostics tolerate only
+  the typed `no_client` failure; all other failures propagate. Doctor still reports detached clients.
+- Clean images have no installed agent skills. Doctor's E2E accepts the documented missing-skill
+  warning as well as installed-skill findings, instead of depending on developer home contents.
+- tmux 3.2 `capture-pane -J` pads terminal rows. E2E matching permits trailing terminal whitespace;
+  capture output remains byte-preserving.
+- tmux 3.4 escapes `$` in `set-option` values. Pane borders now use native `#{HOME}` expansion;
+  no generic unescaping changes user option values. Real-container probe confirms `~` rendering.
+- tmux 3.8 changes ordinary `window_layout` output to JSON V2. The existing layout contract stays
+  compatible through native `tmux -C display-message` output, with no attached observer or custom
+  geometry conversion. Nested horizontal/vertical geometry is replayed and compared pane-by-pane.
+  Floating panes are rejected because legacy output would silently omit them.
+- tmux 3.2 crashes on `paste-buffer` to a dead pane. Input now checks pane liveness before allocating
+  the buffer; tests assert rejection and server survival. Unexpected server exits remain `unknown`,
+  never relabeled as ordinary dead-pane errors.
+
+Final Docker Compose matrix passes on all three versions:
+
+| tmux | Source tests | Packed tests | Stories / variants | Failures / skipped |
+|---|---|---|---|---|
+| 3.2 | 173 | 25 | 66 / 176 | 0 / 0 |
+| 3.4 | 173 | 25 | 66 / 176 | 0 / 0 |
+| 3.8 | 173 | 25 | 66 / 176 | 0 / 0 |
+
+Logs: `container-3.2-final.log`, `container-3.4-final.log`, `container-3.8-final.log` under the
+ignored audit directory. Earlier `pr-11-failure.log`, `pr-11-full.log`, `ci-fixture-focused.log`,
+`ci-fixture-check.log`, and `container-matrix.log` document diagnosis, not final results.
+GitHub verification of the follow-up remains pending at this commit.
+
+Docker verification uses stages for the digest-pinned Node/pnpm base, checksum-verified tmux builds,
+frozen dependencies, and test runtime. `compose.yaml` selects `TMUX_VERSION`; local and CI
+invocations run identical scripts with no bind mounts or external test-container networking;
+private servers, dependency trees, and generated output stay inside disposable containers. Release
+workflow calls the same matrix, then validates the exact tag/commit in its OIDC publishing job.
+Independent context probe confirmed only verification inputs: 296 files / 1,298,876 bytes at review
+time; scratch, plans, project identity, Git, environment files, and credentials absent. Explicit
+Dockerfile COPY lists and runtime scratch/config assertions enforce that boundary.
 
 ## Dependency triage after implementation
 

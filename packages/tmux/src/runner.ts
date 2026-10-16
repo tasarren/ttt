@@ -41,7 +41,7 @@ export class TmuxError extends Error {
   }
 }
 
-/** Stderr patterns observed on tmux 3.2..3.7; order matters, first hit wins. */
+/** Stderr patterns observed on tmux 3.2..3.8; order matters, first hit wins. */
 const FAILURE_PATTERNS: ReadonlyArray<readonly [TmuxFailure, RegExp]> = [
   [TmuxFailure.NoServer, /^(?:no server running|error connecting to)/m],
   [TmuxFailure.NoSession, /^can't find session/m],
@@ -68,7 +68,8 @@ export function createRunner(server: TmuxServer = {}): TmuxRunner {
   const timeout = server.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS
   return (args) => new Promise((resolve, reject) => {
     const verb = args[0] ?? "tmux"
-    execFile("tmux", [...prefix, ...args], { timeout, maxBuffer: 64 * 1024 * 1024 }, (error, stdout, stderr) => {
+    // Machine-readable formats must keep tabs/UTF-8 even when the caller uses the C locale.
+    execFile("tmux", ["-u", ...prefix, ...args], { timeout, maxBuffer: 64 * 1024 * 1024 }, (error, stdout, stderr) => {
       if (!error) {
         resolve(stdout)
         return

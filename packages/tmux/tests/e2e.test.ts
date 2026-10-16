@@ -24,7 +24,7 @@ const tmux = new Tmux(
 )
 
 before(async() => {
-  await raw("new-session", "-d", "-s", SESSION, "-n", "A", "-x", "160", "-y", "40", "sh")
+  await raw("-f", "/dev/null", "new-session", "-d", "-s", SESSION, "-n", "A", "-x", "160", "-y", "40", "sh")
 })
 
 after(async() => {
@@ -72,11 +72,28 @@ test("windows.open creates a detached named window and windows.find resolves it 
 test("panes.split adds a pane in the asked direction and panes.kill removes it", async() => {
   const window = (await tmux.windows.find(SESSION, "B"))!
   const paneId = await tmux.panes.split({ target: window.id, direction: SplitDirection.Horizontal, sizePercent: 30, command: "sh" })
-  const layout = (await raw("display-message", "-p", "-t", window.id, "#{window_layout}")).trim()
-  assert.match(layout, /\{/, "a horizontal split produces a {left,right} layout")
+  const layout = await tmux.windows.layout(window.id)
+  assert.match(layout, /^[0-9a-f]{4},\d+x\d+,0,0\{/, "layout is the legacy checksum string, including on tmux 3.8")
   const width = Number((await raw("display-message", "-p", "-t", paneId, "#{pane_width}")).trim())
   assert.ok(width > 40 && width < 60, `30% of 160 columns, got ${width}`)
+  const nestedPane = await tmux.panes.split({ target: paneId, direction: SplitDirection.Vertical, command: "sh" })
+  const geometry = () => raw("list-panes", "-t", window.id, "-F", "#{pane_id}|#{pane_left}|#{pane_top}|#{pane_width}|#{pane_height}")
+  const before = await geometry()
+  const nested = await tmux.windows.layout(window.id)
+  assert.match(nested, /\{.*\[.*\]\}/, "both split directions survive the native layout read")
+  await raw("select-layout", "-t", window.id, "even-horizontal")
+  await tmux.windows.applyLayout(window.id, nested)
+  assert.equal(await geometry(), before, "native layout replays every pane's original geometry")
+  assert.equal((await raw("list-clients")).trim(), "", "layout queries never attach a client")
+  await tmux.panes.kill(nestedPane)
   await tmux.panes.kill(paneId)
+  const version = (await raw("-V")).trim()
+  if (version.startsWith("tmux 3.8")) {
+    const floated = (await raw("split-window", "-t", window.id, "-h", "-P", "-F", "#{pane_id}", "sh")).trim()
+    await raw("break-pane", "-W", "-s", floated, "-t", window.id)
+    await assert.rejects(tmux.windows.layout(window.id), /floating pane/)
+    await tmux.panes.kill(floated)
+  }
   const remaining = (await tmux.inventory.listAllPanes()).filter((pane) => pane.windowId === window.id)
   assert.equal(remaining.length, 1)
 })
@@ -97,13 +114,14 @@ test("input.sendText lands in the pane and input.type pastes without Enter", asy
   await tmux.input.sendText(window.id, "echo split-ok")
   await sleep(300)
   const shown = await tmux.screen.capture(window.id, 20, true)
-  assert.match(shown, /^split-ok$/m)
+  // tmux 3.2 `capture-pane -J` pads each row with trailing spaces out to the pane width.
+  assert.match(shown, /^split-ok[ \t]*$/m)
 
   await tmux.input.type(window.id, "echo typed-only")
   await sleep(200)
   const typed = await tmux.screen.capture(window.id, 20, true)
   assert.match(typed, /echo typed-only/)
-  assert.doesNotMatch(typed, /^typed-only$/m, "no Enter was pressed")
+  assert.doesNotMatch(typed, /^typed-only[ \t]*$/m, "no Enter was pressed")
   await tmux.input.press(window.id, "C-u")
   assert.equal((await raw("list-buffers")).trim(), "", "private buffers are always deleted")
 })
@@ -125,7 +143,7 @@ test("sendText brackets multiline text and special characters before the submit 
     command: `"${process.execPath}" -e '${reader}'`,
   })
   try {
-    assert.equal((await tmux.screen.waitFor({ target: paneId, pattern: /^ready$/, timeoutMs: 5_000, pollMs: 50 })).outcome, WaitOutcome.Matched)
+    assert.equal((await tmux.screen.waitFor({ target: paneId, pattern: /^ready[ \t]*$/, timeoutMs: 5_000, pollMs: 50 })).outcome, WaitOutcome.Matched)
     const text = "Let's resume!!\n\nKeep \"quotes\" and `backticks` literal."
     await tmux.input.sendText(paneId, text, { quiet: false })
     // tmux's default paste separator converts LF to CR, inside the bracketed-paste delimiters.
@@ -139,11 +157,11 @@ test("sendText brackets multiline text and special characters before the submit 
 
 test("screen.waitFor resolves when a line appears and times out otherwise", async() => {
   const window = (await tmux.windows.find(SESSION, "B"))!
-  const waiting = tmux.screen.waitFor({ target: window.id, pattern: /^waited-for$/, timeoutMs: 5_000, pollMs: 50 })
+  const waiting = tmux.screen.waitFor({ target: window.id, pattern: /^waited-for[ \t]*$/, timeoutMs: 5_000, pollMs: 50 })
   await tmux.input.sendText(window.id, "sleep 0.3; echo waited-for")
   const result = await waiting
   assert.equal(result.outcome, WaitOutcome.Matched)
-  assert.equal(result.line, "waited-for")
+  assert.match(result.line ?? "", /^waited-for[ \t]*$/)
   const missed = await tmux.screen.waitFor({ target: window.id, pattern: /never-printed/, timeoutMs: 200, pollMs: 50 })
   assert.equal(missed.outcome, WaitOutcome.TimedOut)
 })
@@ -192,6 +210,7 @@ test("failures carry the tmux code: no_target, pane_dead, no_client", async() =>
     assert.equal(error.code, TmuxFailure.PaneDead)
     return true
   })
+  assert.equal(await tmux.inventory.hasSession(SESSION), true, "rejected paste must not kill the tmux 3.2 server")
   await tmux.panes.respawn(paneId, "sh")
   assert.equal(await tmux.panes.isDead(paneId), false)
 
