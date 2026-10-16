@@ -148,21 +148,26 @@ ttt ack --all -- cleared      # ack everything at once
 Teammates, the second way — start one that is actually ready before you message it:
 
 ```sh
-ttt tmux open --window REVIEWER --harness claude --cwd ~/proj
-# opened REVIEWER @12 pane %31 (ready after 2.1s)
-ttt send REVIEWER --wait -- Review src/wait.ts for lost-wakeup bugs and reply with findings.
+ttt create --window REVIEWER --harness claude --cwd ~/proj
+# created REVIEWER @12 pane %31 (claude, ready after 2.1s)
+ttt send REVIEWER --wait -- 'Review src/wait.ts for lost-wakeup bugs and reply with findings.'
 ```
 
 An *agent* is a name with a mailbox whose notifications land in exactly one pane (its seat). Every
 window has a main agent named like the window — it exists the moment the window does, whether or
 not anything there has run ttt. A *second agent* is another ttt user in the same window, named
-`WINDOW-N` or a name given to `ttt tmux open --pane NAME --harness`, stamped on its own pane and
+`WINDOW-N` or a name given to `ttt create --pane NAME`, stamped on its own pane and
 messageable by name. *Registered* means a pane carries the stamp; *unregistered* (tab dot, `(unregistered)`)
-means nothing there has run ttt yet — information, never a refusal: a message to the window lands
+means no pane carries an agent stamp — information, never a refusal: a message to the window lands
 in its first pane. A *scratch window* is a hook-named `W-N`; the only windows `broadcast --all`
 skips.
 
 ## Identity
+
+Identity is automatic inside tmux: omit global `--session` and `--from` for normal commands.
+`ttt create` registers every new shell, harness, or command pane immediately; no `whoami`
+setup step is needed. Use `ttt whoami` only to inspect identity or diagnose a broken runner.
+`ttt inbox --from NAME` is a sender filter, separate from the global identity override.
 
 ttt has no accounts. Your name is what `ttt whoami` prints as `name:` — your window's name unless
 you registered as a second agent (`WINDOW-N`) in someone's window — and `ttt whoami` prints the
@@ -174,7 +179,7 @@ Window names are expected to be unique. When two windows share a name, the lowes
 so either twin can `ttt read` the same messages.
 
 A window named like a command (`send`, `read`, `inbox`, `status`, `thread`, `capture`, `broadcast`,
-`reply`, `windows`, `whoami`, `prune`, `migrate`, `tmux`) needs the explicit `ttt send` form. The
+`reply`, `windows`, `whoami`, `prune`, `migrate`, `create`, `tmux`) needs the explicit `ttt send` form. The
 shorthand `ttt NAME -- MESSAGE` resolves the command first.
 
 Acking without a prior `ttt read` warns on stderr. The receipt is still marked acked.
@@ -210,6 +215,7 @@ Ways to catch up. Reading marks messages read; triage does not:
 |---|---|
 | `ttt read [--max N] [--peek] [--latest]` | Print unread messages (oldest first) and mark them read. Every message states its reply obligation explicitly (`reply: ...` or `reply: none needed`). | `--peek` keeps them unread. `--latest` picks the newest N. Partial reads report `N shown, M still unread`. An empty read reports `(N cancelled)` when senders have retracted mail. |
 | `ttt read --headers-only` | Headers + one-line previews. No bodies, no state change. |
+| `ttt read --gui` | Stamp this pane as a GUI seat (`@ttt_gui`): notification pastes are suppressed here and mail waits for a background `ttt read`. |
 | `ttt inbox [--count]` | Counts by state (unread/read/acked/superseded/cancelled). `--count` prints only the unread number. |
 | `ttt inbox --detail [--max N] [--from NAME]` | Headers + previews for the oldest unread. `--from` filters by sender. |
 | `ttt ack MESSAGE_ID [NOTE]` | Mark a message handled. The note needs no `--`. Board state only; nothing is sent. |
@@ -280,6 +286,13 @@ errors.
   input line (`C-u`) before pasting, so it can clobber in-progress typing. Urgent broadcasts paste
   serially, one recipient at a time. Like batched notifications, the paste targets the
   recipient's seat.
+- **GUI seats.** A tmux window can seat a GUI app (ChatGPT Desktop, a browser agent) whose pane console
+  has no reader: a notification paste there lands in the void. Run `ttt read --gui` once from that
+  pane (a background `ttt read --wait` loop restamps on every call) to stamp the pane `@ttt_gui`.
+  The notifier then pastes nothing at that seat: batched and urgent mail stays unread and unnotified
+  (the badge still shows it), and a background `ttt read` in the same pane picks the batch up. A
+  recipient blocked in `--wait` was already pasted nothing; the stamp covers the gaps between waits.
+  Terminal seats are unchanged.
 - **Replace, expiry, and cancel.** `--replace KEY` marks your earlier unread messages with the same KEY as
   superseded, so a busy recipient reads only the latest status. `--ttl SECONDS` lapses unread receipts
   to `superseded` after the deadline instead. `ttt cancel` retracts a message you sent from recipients
@@ -367,7 +380,7 @@ vocabulary (agent, seat, second agent, registered, scratch window) is stated in
 unread badges, so agents and humans share one normalized environment. Requires tmux 3.2 or newer.
 Setup creates the session or errors; it never reworks a session that already exists.
 
-`ttt tmux` is its own composition root: no board, no sender identity. `--session NAME` alone is
+`ttt create` and `ttt tmux` share a composition root: no board, no sender identity. `--session NAME` alone is
 allowed before the command; `--from` is rejected; running outside tmux is fine.
 
 | Command | What it does |
@@ -519,9 +532,10 @@ and hand-editable jsonc.
 
 ## Tmux commands
 
-`capture`, `windows`, and `whoami` stay top-level. Everything else tmux-shaped lives behind
-`ttt tmux` (`ttt --help` lists them all). `tmux` itself is a reserved window name. Run outside tmux,
-the verbs need `--session S` before the command, and none touch the message board.
+`create`, `capture`, `windows`, `panes`, and `whoami` are top-level commands. Other tmux
+operations live behind `ttt tmux`. `ttt create --help` and `ttt tmux --help` work without
+settings or a tmux session. Outside tmux, select the session with `--session S` before
+`create` or `tmux`; these commands never touch the message board.
 
 An agent's seat is where its messages land: the pane stamped `@ttt_agent=NAME` anywhere in the
 session, else — for the window named NAME — its first pane (lowest index). So every window is
@@ -536,8 +550,8 @@ name is `refusing to send a message to yourself`.
 The bar and borders follow the stamps. Tabs: `3:W-1·` is unregistered (trailing `·`, no stamp in
 the window), `2:DOCUMENTER` is registered; the unread badge `[2]` is unchanged. Pane borders show
 the harness in every branch: `DOCUMENTER opencode ~/proj` for a stamped pane (main or second
-agent), `tests ~/proj` for a titled helper (`open --pane tests -- pnpm test --watch`), `pane 2 ·
-bash ~/proj` for any unnamed pane (a human `prefix "` split, `--pane ""`).
+agent), `tests ~/proj` for a titled helper from a saved layout, `pane 2 ·
+bash ~/proj` for any unnamed pane (a human `prefix "` split).
 
 Hand-made windows (`prefix c`) get the profile pinned by the `after-new-window` hook and, when tmux
 named the window itself (no window-local `automatic-rename`), a `W-N` name — lowest free N against
@@ -551,12 +565,11 @@ printing `ttt: skipping W-1: scratch window` on stderr.
 
 | Command | What it does |
 |---|---|
-| `ttt tmux open --window NAME\|auto [--harness [NAME]] [--ready REGEX\|none] [--ready-timeout SECONDS] [--cwd DIR] [-- COMMAND]` | The main agent of a new detached window (or a scratch shell). Exactly one of `--window`/`--pane` is required. NAME: same charset as window names, at most 12 characters (fits the bar); `auto` names it `HARNESS-N` from the resolved harness (`OPENCODE-1`), `W-N` for a shell — lowest N that is neither a live window, a live stamp, nor an existing mailbox directory, printed. Resolution of `--harness`/`--ready`: see below. With a harness or COMMAND, the pane is stamped `@ttt_agent=NAME`, `@ttt_harness` (when a harness), `@ttt_command`; a plain-shell `--window` stays unregistered (tab `W-1·`) until something runs ttt in it. Prints `opened NAME @id pane %id (opencode, ready after 1.5s)` — harness name first, then ready time, nothing in parentheses for a shell. Timeout: exit 1, `NAME did not become ready (/REGEX/) within Ns; the window @id stays open` (plus the preset's note — codex's trust prompt, claude's trust-configuration prompt; the note also ends the timeout message). Readiness polls only the pane's visible screen. Adoption: when NAME already exists and is unregistered with exactly one pane, ttt kills it, restarts it under the harness command (with `--cwd`), stamps it, and waits for readiness — prints `adopted NAME @id pane %id (ready after 1.2s)`. Refusals: NAME a live stamp anywhere -> exit 1, `agent NAME already exists in S: pane %id of WINDOW; pick another name or --window auto`; registered window -> `tmux window already exists: S:NAME (its agent is seated in %id; pick another name or --window auto)`; several panes and no registered agent -> `window NAME has N panes and no registered agent; adopting needs exactly one pane (close the others, or pick another name)`. Errors: exists (exit 1), too long (exit 2, `window name "X" is longer than 12 characters; it must fit the status bar`), `--in`/`--horizontal`/`--size` with `--window` (exit 2, `--in applies to --pane only`). |
-| `ttt tmux open --pane [TITLE\|AGENT] [--harness [NAME]] [--ready REGEX\|none] [--ready-timeout SECONDS] [--in WINDOW] [--horizontal] [--size PERCENT] [--cwd DIR] [-- COMMAND]` | A pane next to an agent. `--in` defaults to the caller's own window; outside an agent window it is required (exit 2). `--horizontal` puts it to the right (below by default), `--size` takes 1..99. Three shapes: with a harness and no name (`--pane --harness`) a second agent registered as `WINDOW-N` immediately; with a harness and a name (`--pane NAME --harness`, NAME checked like a window name) a second agent registered as NAME — refused, exit 1, when NAME is already a live stamp (`agent NAME already exists in S: pane %id of WINDOW`) or a window (`agent NAME already exists in S: window NAME`); without a harness a titled helper (`--pane TITLE`, may be empty: `--pane ""`), stamped `@ttt_title` only, which becomes `WINDOW-N` the day something in it runs ttt. A bare `--pane` followed by another flag is fine. Prints `opened pane %id in WINDOW (agent REVIEWER-2, opencode, ready after 1.0s)` with only the parts that apply. Timeout: exit 1, `pane %id in WINDOW did not become ready (/REGEX/) within Ns; the pane stays open`. |
+| `ttt create --window NAME\|auto [--shell \| --harness [NAME]] [--ready REGEX\|none] [--ready-timeout SECONDS] [--cwd DIR] [-- COMMAND]` | Creates a detached window and registers its main agent immediately. Defaults to the session's shell. `auto` generates `HARNESS-N` for a harness or `SHELL-N` otherwise, avoiding live windows, agent names, and old mailboxes. Names use the window charset and fit within 12 characters. Existing window or agent names are refused, with no restart or adoption. Prints `created NAME @id pane %id`, adding the harness and ready time when applicable. `--in`, `--horizontal`, and `--size` apply only to panes. |
+| `ttt create --pane [NAME] [--shell \| --harness [NAME]] [--ready REGEX\|none] [--ready-timeout SECONDS] [--in WINDOW] [--horizontal] [--size PERCENT] [--cwd DIR] [-- COMMAND]` | Creates a registered teammate pane, including shells and custom commands. `--in` defaults to your own window; outside tmux it is required. A nameless pane becomes `WINDOW-N` (N starts at 2), avoiding windows, agents, and old mailboxes. Named panes follow the same validation and collision rules as windows. `--horizontal` places it to the right, otherwise below; `--size` is 1..99 percent. Prints `created pane %id in WINDOW (agent NAME[, harness, ready after Ns])`. |
 | `ttt tmux close NAME` | Kills the window; refuses to close the window the command itself runs in (exit 1). Prints `closed NAME @id`. The board on disk is untouched. Takes any window, registered or not. |
 | `ttt tmux close --pane TARGET` | Kills one pane (`NAME`, `NAME.N`, or `%id`) in the selected session. Refuses the pane the command itself runs in. Closing the last pane closes its window. Message history remains on disk. |
-| `ttt tmux rename OLD NEW` | Renames a window: prints `renamed OLD to NEW @id`, plus `(agent pane %id follows)` when the main agent's stamp moves with the name (second agents keep theirs). Refused, exit 1, when a mailbox would be affected: OLD has one (`OLD has a mailbox; renaming would orphan it. Close OLD and open NEW instead`) or NEW has an old one (`NEW has an old mailbox that OLD would inherit; pick another name`), or when NEW is a live stamp: `agent NEW already exists in S: pane %id of WINDOW`. NEW obeys the 12-char rule. |
-| `ttt tmux split NAME ...` | Deprecated alias of `ttt tmux open --pane --in NAME`; prints a one-line notice on stderr; removed next release. |
+| `ttt tmux rename OLD NEW` | Renames a window: prints `renamed OLD to NEW @id`, plus `(agent pane %id follows)` when the main agent's stamp moves with the name (second agents keep theirs). Refused, exit 1, when a mailbox would be affected: OLD has one (`OLD has a mailbox; renaming would orphan it. Close OLD and create NEW instead`) or NEW has an old one (`NEW has an old mailbox that OLD would inherit; pick another name`), or when NEW is a live stamp: `agent NEW already exists in S: pane %id of WINDOW`. NEW obeys the 12-char rule. |
 | `ttt tmux respawn NAME [-- COMMAND]` | Restarts NAME's seat's command — any agent's, second agents included: `COMMAND`, else the recorded `@ttt_command`, else the default shell. Re-stamps agent and harness. Prints `respawned NAME pane %id[ with: COMMAND]`. The fix for a `[dead]` pane. |
 | `ttt tmux type NAME -- TEXT` | Bracketed paste into NAME's seat, no Enter. Not for messages — those go through `ttt send`. Prints `typed into NAME pane %id`. |
 | `ttt tmux press NAME KEY` | One tmux key name (`Enter`, `Escape`, `Tab`, `C-c`, `M-x`, ...). Prints `pressed KEY in NAME pane %id`. |
@@ -569,31 +582,36 @@ printing `ttt: skipping W-1: scratch window` on stderr.
 dead; run: ttt tmux respawn NAME` — tmux's `send-keys` into a dead pane silently succeeds, so the
 refusal is the point) and a window with `synchronize-panes` on (keys would reach every pane).
 
-Both `open` containers resolve `--harness` the same way. No `--harness`: the session's default
-shell; nothing stamped as harness, no wait. `--harness` bare: the default harness; exit 2 without
-one: `no default harness; set harnesses.NAME.default to true in ~/.ttt/settings.jsonc (shipped: claude, opencode, opencode2, codex)`.
-`--harness NAME`: that declared harness; exit 2 otherwise:
-`unknown harness "gemini"; declared in /home/haze/.ttt/settings.jsonc: opencode2, opencode, claude, codex`
-(or `; shipped: claude, opencode, opencode2, codex` without a section). `--ready REGEX` and `--ready none`
-still override the harness's regex; `--ready` with neither harness nor COMMAND: exit 2,
-`--ready needs something to wait for: pass --harness or -- COMMAND`. `--ready-timeout` defaults to
-`wait.seconds`, capped by `wait.maxSeconds`.
+Both `create` containers default to the session's shell; `--shell` selects that explicitly.
+Every new pane gets `@ttt_agent`; harnesses also get `@ttt_harness`, and explicit commands
+get `@ttt_command`. You can launch a harness manually inside a registered shell later.
+`--harness` bare selects the settings' default; `--harness NAME` selects a declared harness.
+Unknown harnesses or a missing default are exit 2. Shell, harness, and `-- COMMAND` choices
+are mutually exclusive. There is no helper flag.
 
-Driving verbs (`type`, `press`, `interrupt`, `wait`, `open --pane --in`) take a pane target:
+Harnesses wait for their configured ready prompt. `--ready REGEX` overrides it; `--ready none`
+skips the wait. Custom commands do not wait unless given `--ready`. Plain shells reject
+`--ready` and `--ready-timeout`. The timeout defaults to `wait.seconds`, capped by
+`wait.maxSeconds`. A timeout exits 1, names the unmatched pattern, and leaves the created
+window or pane available. Readiness reads only the visible screen, not old scrollback.
+
+Driving verbs (`type`, `press`, `interrupt`, `wait`, `create --pane --in`) take a pane target:
 NAME (the seat of the agent called NAME — its stamp anywhere in the session, else the first pane
 of the window called NAME), NAME.N (`pane_index` N — base-index 1 under the agents profile), or
 %id. A target that is neither a live stamp nor a live window is exit 1,
 `tmux window does not exist: S:NAME`; a wrong pane index is
 `window NAME has no pane 7`. `respawn` stays NAME-only (it re-stamps); `close` takes any window.
 
-`open --window NAME` on an existing, unregistered, single-pane window is the adoption path. "Use
-W-2 for the verification run":
+To prepare teammate shells without starting a harness automatically:
 
 ```sh
-ttt tmux open --window W-2 --harness claude --cwd ~/proj   # adopts W-2: adopted W-2 @9 pane %17 (ready after 1.2s)
-ttt tmux open --pane REVIEWER-2 --harness --in W-2         # a second agent in W-2, messageable by name
-ttt send REVIEWER-2 --wait -- Run the suite and reply with findings.
+ttt create --window REVIEWER --shell
+ttt create --pane TESTER --in REVIEWER
+# Launch claude, opencode2, or another program manually in either shell when ready.
+# Both names are already registered; whoami is optional.
 ```
+
+`ttt tmux open` and `ttt tmux split` have been removed. Use `ttt create`; no aliases remain.
 
 `ttt tmux setup` without `--name`, on a terminal, is a wizard: `Session name:`, then
 `Layout (none, a, b) [none]:` when layouts exist, then `Working directory [cwd]:`. `--layout`/`--cwd`
@@ -654,7 +672,9 @@ pane stands in for its main agent until registered.
 `ttt --session NAME --from WINDOW <command>` runs a command as if from that window, from anywhere.
 The flags only come as a pair; a lone `--from` is rejected. The detached notifier uses them, and
 so should any runner whose tmux environment is broken (wrong `whoami` → prefix every command with
-the pair until the runner is fixed).
+the pair until the runner is fixed). When overrides match the detected identity, ttt warns
+once on stderr to omit them and still honors them. Different identities and detached callers
+do not warn. For `create` and `tmux`, a matching redundant `--session` warns in the same way.
 
 ## Agents
 

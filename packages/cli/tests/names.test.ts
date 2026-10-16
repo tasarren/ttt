@@ -11,7 +11,7 @@ test("generateWindowName picks the lowest free HARNESS-N and never a taken name"
   assert.equal(generateWindowName("claude", new Set()), "CLAUDE-1")
   assert.equal(generateWindowName("claude", new Set(["CLAUDE-1", "CLAUDE-2"])), "CLAUDE-3")
   assert.equal(generateWindowName("claude", new Set(["CLAUDE-2"])), "CLAUDE-1", "gaps are reused")
-  assert.equal(generateWindowName("W", new Set()), "W-1", "a shell window is scratch: W-N")
+  assert.equal(generateWindowName("W", new Set()), "W-1", "the hook names hand-made scratch windows W-N")
   assert.equal(generateSeatName("REVIEWER", new Set()), "REVIEWER-2", "the window's own name is seat 1")
   assert.equal(generateSeatName("REVIEWER", new Set(["REVIEWER-2", "REVIEWER-3"])), "REVIEWER-4")
   assert.equal(generateWindowName("open-code!", new Set()), "OPENCODE-1", "stems are letters and digits only")

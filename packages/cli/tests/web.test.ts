@@ -42,12 +42,17 @@ test("local Webapp validates requests and preserves JSONC with conflict protecti
     assert.equal(activity.board.activity.length, 50)
     assert.ok(activity.board.activity.some(entry => entry.type === "acked" && entry.detail === "handled"))
     assert.equal(activity.board.messages.length, 0)
-    assert.deepEqual(actionArgs({ action: "close-pane", session: "probe", target: "%1" }), ["close", "--pane", "%1"])
+    assert.deepEqual(actionArgs({ action: "close-pane", session: "probe", target: "%1" }), ["tmux", "close", "--pane", "%1"])
     assert.equal((await host.app.request("http://evil.test/api/state")).status, 403)
     assert.equal((await host.app.request("http://127.0.0.1/api/actions", { method: "POST", headers: { Origin: "http://evil.test", "Content-Type": "application/json" }, body: "{}" })).status, 403)
     const headers = { Origin: "http://127.0.0.1", "Content-Type": "application/json", "X-TTT-Token": state.token }
     assert.equal((await host.app.request("http://127.0.0.1/api/input", { method: "POST", headers, body: JSON.stringify({ session: "probe", pane: "%1", data: "x", arbitrary: true }) })).status, 400)
     assert.equal((await host.app.request("http://127.0.0.1/api/actions", { method: "POST", headers, body: JSON.stringify({ action: "close", session: "probe", arbitrary: true }) })).status, 400)
+    for (const action of ["open-window", "open-pane"]) {
+      assert.equal((await host.app.request("http://127.0.0.1/api/actions", { method: "POST", headers, body: JSON.stringify({ action, session: "probe" }) })).status, 400)
+    }
+    assert.deepEqual(actionArgs({ action: "create-window", session: "probe" }), ["create", "--window", "auto"])
+    assert.deepEqual(actionArgs({ action: "create-pane", session: "probe", target: "window", name: "TESTER", harness: "opencode2" }), ["create", "--pane", "TESTER", "--in", "window", "--harness", "opencode2"])
     const next = source.replace(": 5", ": 6")
     const result = await host.app.request("http://127.0.0.1/api/settings", { method: "PUT", headers, body: JSON.stringify({ source: next, etag: state.settings.etag }) })
     assert.equal(result.status, 200)
@@ -56,7 +61,7 @@ test("local Webapp validates requests and preserves JSONC with conflict protecti
     const latest = await host.state(new URL("http://127.0.0.1/settings"))
     const concurrent = await Promise.all([7, 8].map(async value => host.app.request("http://127.0.0.1/api/settings", { method: "PUT", headers, body: JSON.stringify({ source: source.replace(": 5", `: ${value}`), etag: latest.settings.etag }) })))
     assert.deepEqual(concurrent.map(response => response.status).sort(), [200, 409])
-    assert.deepEqual(actionArgs({ action: "open-pane", session: "probe", target: "window", command: "printf '$not_shell_expanded'" }), ["open", "--pane", "", "--in", "window", "--", "printf '$not_shell_expanded'"])
+    assert.deepEqual(actionArgs({ action: "create-pane", session: "probe", target: "window", command: "printf '$not_shell_expanded'" }), ["create", "--pane", "--in", "window", "--", "printf '$not_shell_expanded'"])
   } finally { host.close(); await rm(home, { recursive: true, force: true }) }
 })
 

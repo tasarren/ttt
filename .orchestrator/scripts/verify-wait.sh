@@ -19,8 +19,8 @@ cleanup() {
 trap cleanup EXIT
 
 step "two shell windows"
-$T tmux open --window V-A || exit 1
-$T tmux open --window V-B || exit 1
+$T create --window V-A || exit 1
+$T create --window V-B || exit 1
 
 step "a normal send during read --wait lands in the wait's output, never as a paste"
 $T tmux type V-A.1 -- "$T read --wait --timeout 15" >/dev/null

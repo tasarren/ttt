@@ -67,6 +67,13 @@ export async function createContext(overrides: GlobalOverrides, binPath: string)
     try {
       const actual = await tmux.identity.detect(settings.currentPane)
       actor = { window: actual.windowName, session: actual.session }
+      if (session === actual.session) {
+        const live = await tmux.inventory.listAllPanes().catch(() => [])
+        const me = live.find((pane) => pane.pane === actual.paneId)
+        const main = resolveAgent(live.filter((pane) => pane.session === session), { id: actual.windowId, name: actual.windowName }, actual.windowName)
+        const detectedName = me?.agent ?? (main?.paneId === actual.paneId ? actual.windowName : undefined)
+        if (senderName === detectedName) process.stderr.write("ttt: identity is automatic here; omit global --session and --from.\n")
+      }
     } catch {
       actor = undefined
     }

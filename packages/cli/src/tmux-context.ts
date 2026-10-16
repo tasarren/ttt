@@ -7,7 +7,7 @@ import { resolveSettings } from "./settings.ts"
 import type { Settings } from "./settings.ts"
 
 /**
- * What a `ttt tmux` verb needs. Lighter than `Context`: no board, no sender identity, and it
+ * What `ttt create` and `ttt tmux` need. Lighter than `Context`: no board, no sender identity, and it
  * works outside tmux (setup creates the session that does not exist yet). `--session` alone is
  * accepted here because no mailbox is involved.
  */
@@ -32,5 +32,6 @@ export async function createTmuxContext(sessionOverride: string | undefined, bin
   await tmux.requireVersion()
   // Outside tmux there is nothing to detect; `setup` is expected to run from there.
   const self = await tmux.identity.detect(settings.currentPane).catch(() => undefined)
+  if (sessionOverride !== undefined && sessionOverride === self?.session) process.stderr.write("ttt: session is automatic here; omit global --session.\n")
   return { settings, tmux, session: sessionOverride ?? self?.session, self, binPath, version: TTT_VERSION }
 }

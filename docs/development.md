@@ -33,9 +33,9 @@ Ownership rules:
 - `packages/cli/src/context.ts` is the composition root: it resolves settings, detects the tmux context,
   and constructs one `Tmux` and one `Board` per invocation. Commands are `(argv, ctx) => Promise<void>`
   and are dispatched from a single map in `main.ts`.
-- `packages/cli/src/tmux-context.ts` is the second composition root, for `ttt tmux` verbs only: no
+- `packages/cli/src/tmux-context.ts` is the second composition root, for `ttt create` and `ttt tmux`: no
   board, no sender identity. `--session NAME` alone is accepted and `--from` is rejected; running
-  outside tmux is fine. `main.ts` routes `tmux` before `createContext`.
+  outside tmux is fine. `main.ts` routes `create` and `tmux` before `createContext`; their targeted help bypasses settings and tmux detection.
 - `packages/cli/src/web.ts` composes the localhost Hono host with CLI-owned settings/layouts,
   observational board reads, and tmux. `packages/webapp` owns the SSR renderer, hydrated Vue app,
   terminal UI, and OpenAPI transport contract. Each SSR request gets its own Pinia and router.
@@ -93,7 +93,7 @@ that runs the current source. Edit, save, run: no build. `publishConfig.bin` swa
 (`packages/cli/tsdown.config.ts`, `deps.alwaysBundle`).
 
 Verify inside your own session with `ttt`, not with ad-hoc tmux servers: `.orchestrator/scripts/`
-holds `verify-wait.sh`, `verify-seats.sh`, `verify-open.sh`, `verify-teammate-flow.sh`, and
+holds `verify-wait.sh`, `verify-seats.sh`, `verify-create.sh`, `verify-teammate-flow.sh`, and
 `verify-furniture.sh`, run
 from inside the
 live ttt session (`sh .orchestrator/scripts/verify-wait.sh`). They exercise the real verbs end
@@ -114,7 +114,9 @@ windows with `V-`, and clean up after themselves via a trap.
    the one-line summary into the target's seat -- resolved by `resolveAgent` in
    `packages/tmux/src/panes.ts`: the pane stamped `@ttt_agent=NAME` anywhere in the session, else the
    first pane of the window called NAME, so an unregistered window still receives -- and marks the
-   receipts notified. A newer marker means a
+   receipts notified. A pane stamped `@ttt_gui=1` (`read --gui` seats a GUI app whose console has no
+   reader) swallows the paste instead: the marker is cancelled with no re-arm, receipts stay unread and
+   unnotified, and `pushUrgent` skips that seat the same way. A newer marker means a
    newer child owns the burst; the old one exits silently. A failed paste cancels the dead token and re-arms
    a live notifier.
    The optional `deliverNotification` preparation callback waits for screen quiet after batching,
@@ -239,7 +241,7 @@ stamp, else the first pane; a second pane becomes WINDOW-N, never the window's n
   `resolvePaneTarget` (`parsePaneAddress`: NAME -> seat, NAME.N -> `pane_index`, %id; `agent` is
   the agent seated there if any), and `requireTypable` (the two refusals: dead pane,
   `synchronize-panes` on).
-- `lifecycle.ts` is open/close/rename/split/respawn; `typing.ts` is type/press/interrupt; `screen.ts`
+- `lifecycle.ts` is create/close/rename/respawn; `typing.ts` is type/press/interrupt; `screen.ts`
   is wait/popup/flash. The interactive setup wizard lives in `setup.ts`. Pastes go through
   `Input.sendText` (`@ttt/tmux`), which waits for 2 s of screen quiet first
   (`Screen.waitForQuiet`, hashes only, 15 s cap, urgent skips it) so a notification never
@@ -258,12 +260,15 @@ stamp, else the first pane; a second pane becomes WINDOW-N, never the window's n
 - `lifecycle.ts` resolves what a pane runs: `withBareValues` (a lone `--harness` or `--pane` is a
   flag, not a value), `resolveProgram`/`pickHarness` (default or declared harness, the exact refusal
   lines), `pickWindow`/`takenNames` (a new name avoids live windows, live stamps, and mailboxes), and
-  `awaitReady` (harness regex or `--ready`, visible screen only). `open --pane` with a harness seats
-  a second agent (`@ttt_agent=NAME` on its own pane); without one it is a titled helper. A shell
-  `--window` start stamps nothing; only a harness or COMMAND stamps, and the harness stamps
-  `@ttt_harness` + `@ttt_command` alongside the agent stamp.
+  `awaitReady` (harness regex or `--ready`, visible screen only). `create --pane` seats
+  a second agent (`@ttt_agent=NAME` on its own pane), regardless of whether it runs a shell,
+  harness, or custom command. `create --window` always stamps its main agent; existing windows
+  are refused without restarting. Harnesses additionally stamp `@ttt_harness` and commands
+  stamp `@ttt_command`. Shells reject readiness flags. Global identity overrides that match
+  the detected identity warn once on stderr; matching session-only overrides on create/tmux
+  do the same. Overrides remain honored and never register a pane.
 - `names.ts` owns window names: `MAX_WINDOW_NAME` (12, fits the bar), `checkWindowName` (charset
-  plus the length error), `generateWindowName` (`<STEM>-N` from the resolved harness or `W`,
+  plus the length error), `generateWindowName` (`<STEM>-N` from the resolved harness or `SHELL` for create, `W` for the normalization hook,
   lowest N free of live windows *and* mailbox directories — a reused name would silently inherit an
   old inbox), `generateSeatName` (second agents: `WINDOW-N` counting from 2 — the window's own name
   is seat 1), and `mailboxNames`.

@@ -1,7 +1,7 @@
 ---
 name: ttt
 version: 0.1.3
-description: Message teammate agents that share your tmux session. Use when you see a line starting with `ttt:`, when you need to contact, reply to, check on, or retract a message to another agent window, or when instructions mention `ttt send`, `ttt read`, `ttt ack`, `ttt cancel`, or a teammate window name.
+description: Message teammate agents that share your tmux session. Use when you see a line starting with `ttt:`, when you need to contact, reply to, check on, or retract a message to another agent window, or when instructions mention `ttt send`, `ttt read`, `ttt ack`, `ttt cancel`, `ttt create`, windows or panes for teammates, or a teammate window name.
 ---
 
 # ttt — talk to teammates
@@ -13,6 +13,25 @@ you are a second agent (`WINDOW-N`) in someone's window. Other agents can belong
 any provider; they are not subagents. Every window has a main agent named like the window, messageable
 the moment the window exists; a second agent in the same window is messageable by its own name.
 `ttt panes` shows who sits where in a window, `ttt windows` lists names.
+
+## Start here
+
+Identity is automatic inside tmux. **Omit global `--session` and `--from` on normal commands.**
+`ttt whoami` is a diagnostic, never a required setup step. `ttt inbox --from NAME` filters senders;
+it does not override identity. Recovery overrides before a command select another mailbox;
+matching redundant overrides warn once and still work. Outside tmux, `--session S` alone selects
+where `create` or `tmux` operates.
+
+- New shell window: `ttt create --window REVIEWER` or explicitly `--shell`.
+- New shell pane: `ttt create --pane TESTER` (your window), or add `--in REVIEWER`.
+- Start the configured harness: `ttt create --window auto --harness` or `ttt create --pane --harness`.
+- Pick a harness: `ttt create --window REVIEWER --harness opencode2`.
+- Run a command: `ttt create --pane TESTS -- pnpm test --watch`.
+
+Every created pane is registered and messageable immediately, including shells and commands.
+No program flag means a plain shell; launch a harness manually there whenever you want.
+Shell, harness, and custom command choices are exclusive. Existing windows are refused;
+creation never adopts or restarts a running window. Use `ttt create --help` for options.
 
 ## The loop (follow it exactly)
 
@@ -53,10 +72,10 @@ When you have nothing else to do, wait instead of ending your turn:
 |---|---|
 | See the session: who owns which pane | `ttt tmux tree` |
 | Is the session set up right | `ttt tmux doctor` |
-| Start an agent and wait until it accepts input | `ttt tmux open --window auto --harness` (bare `--harness` = the default; `--harness claude` to pick) |
-| Turn an existing single-pane window into an agent | `ttt tmux open --window W-2 --harness` (adopts it), then `ttt tmux open --pane tests --in W-2 -- pnpm test --watch`, then `ttt send W-2 --wait -- 'task'` |
-| Second agent next to you, messageable by name | `ttt tmux open --pane --harness` (name chosen) or `--pane NAME --harness` to pick one; then `ttt send NAME --wait -- 'task'` |
-| Helper pane next to you (never messageable) | `ttt tmux open --pane tests -- pnpm test --watch` |
+| Start an agent and wait until it accepts input | `ttt create --window auto --harness` (bare `--harness` = the default; `--harness claude` to pick) |
+| Prepare a teammate shell for a manual harness launch | `ttt create --window REVIEWER --shell`; the name is registered immediately |
+| Second agent next to you, messageable by name | `ttt create --pane --harness` (name chosen) or `--pane NAME --harness` to pick one; then `ttt send NAME --wait -- 'task'` |
+| Command teammate pane next to you | `ttt create --pane tests -- pnpm test --watch` |
 | Which harnesses exist here | `ttt tmux doctor` (harness rows) |
 | Revive a dead agent pane | `ttt tmux respawn NAME` (any agent, second agents included) |
 | Stop what a teammate's pane is running | `ttt tmux interrupt NAME` (use before `--urgent` messages when a process, not the agent, is the problem) |
@@ -68,14 +87,14 @@ When you have nothing else to do, wait instead of ending your turn:
 
 ## Cheapest forms
 
-- `ttt tmux open --window auto --harness`: one agent on the default harness, name chosen for
+- `ttt create --window auto --harness`: one agent on the default harness, name chosen for
   you, returns when it accepts input. Then `ttt send NAME --wait -- 'task'`. Two commands, no
   `wait --for`, no `capture` to check readiness.
-- `ttt tmux open --pane --harness`: the cheapest second agent next to you — name chosen
+- `ttt create --pane --harness`: the cheapest second agent next to you — name chosen
   (`WINDOW-N`), messageable at once; `--pane NAME --harness` to pick the name. Then
   `ttt send NAME --wait -- 'task'`.
-- `ttt tmux open --window auto`: a scratch shell (`W-N`); use `NAME.1` targets to drive it; adopt
-  later with `ttt tmux open --window W-1 --harness`.
+- `ttt create --window auto`: a registered shell (`SHELL-N`), no harness and no wait.
+  A nameless shell pane (`ttt create --pane`) is registered as `WINDOW-N` immediately.
 - Skip `--cwd` when the agent should share your directory (it inherits the session's); skip
   `--ready` (the harness knows its prompt); skip `--ready-timeout` (settings `wait.seconds`).
 - Skip `--session` and `--from` on every command: identity is inherited from tmux. They exist only
@@ -93,7 +112,7 @@ When you have nothing else to do, wait instead of ending your turn:
 - Never poll. Do not run `ttt read` or `ttt inbox` in a loop; an empty `read --wait` already waits
   longer next time, and you will be notified the moment mail arrives — the wait itself is the
   notification, so while you wait nothing is pasted into your window.
-- Use `ttt tmux` verbs, never raw `tmux`, so identity and setup stay consistent.
+- Use `ttt create` for new teammates and `ttt tmux` for other terminal operations.
 - Keep teammate window names short: at most 12 characters, so they fit the status bar.
 - `ttt capture` to look, `ttt tmux wait` to wait for the screen, `ttt send --wait` to wait for an answer.
 - `--urgent` interrupts the teammate now. Use it only to stop harmful work or unblock a
@@ -109,7 +128,8 @@ When you have nothing else to do, wait instead of ending your turn:
   the main agent until something there runs ttt.
 - `broadcast --all` reaches one agent per window. If second agents share your window, relay to
   them yourself (`ttt send REVIEWER-2 -- 'message'`); their panes are not broadcast targets.
-- Never pass `--session` or `--from`: your session, name, and board are inherited from the tmux environment automatically. They are recovery-only — if `ttt whoami` shows the wrong window, prefix every command with `--session SESSION --from YOUR-WINDOW` until the runner is fixed.
+- For a broken runner only, put `--session SESSION --from YOUR-NAME` before a messaging command.
+  Use your pane's teammate name; a second agent's name differs from its window.
 - Bodies are plain text read by a model: request first, context second, keep them short.
 - A window named like a command needs the explicit form: `ttt send NAME -- 'message'`.
 

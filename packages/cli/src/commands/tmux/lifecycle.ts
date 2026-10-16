@@ -7,14 +7,14 @@ import { CliError, usageError } from "../../cli-error.ts"
 import type { HarnessSettings, ResolvedHarness } from "../../harnesses.ts"
 import type { TmuxVerb, TmuxVerbContext } from "../../tmux-context.ts"
 import { checkWindowName, generateSeatName, generateWindowName, mailboxNames } from "./names.ts"
-import { FURNITURE_STEM } from "./normalize-window.ts"
 import { requireSession, resolveAgentTarget, resolvePaneTarget } from "./target.ts"
 
-const OPEN_OPTIONS = {
+const CREATE_OPTIONS = {
   window: { type: "string" },
   pane: { type: "string" },
   in: { type: "string" },
   harness: { type: "string" },
+  shell: { type: "boolean", default: false },
   ready: { type: "string" },
   "ready-timeout": { type: "string" },
   horizontal: { type: "boolean", default: false },
@@ -22,33 +22,55 @@ const OPEN_OPTIONS = {
   cwd: { type: "string" },
 } as const
 
-const OPEN_USAGE = [
-  "usage: ttt tmux open --window NAME|auto [--harness [NAME]] [--ready REGEX|none] [--ready-timeout SECONDS] [--cwd DIR] [-- COMMAND]",
-  "       ttt tmux open --pane [TITLE|AGENT] [--harness [NAME]] [--ready REGEX|none] [--ready-timeout SECONDS] [--in WINDOW] [--horizontal] [--size PERCENT] [--cwd DIR] [-- COMMAND]",
-].join("\n")
+export const CREATE_USAGE = `ttt create — create a registered teammate window or pane
+
+Identity is automatic inside tmux. Omit global --session and --from.
+
+usage:
+  ttt create --window NAME|auto [--shell | --harness [NAME]] [--cwd DIR] [-- COMMAND]
+  ttt create --pane [NAME] [--in WINDOW] [--shell | --harness [NAME]] [--horizontal] [--size PERCENT] [--cwd DIR] [-- COMMAND]
+
+No program option starts the session's default shell; --shell makes that choice explicit.
+--harness starts the configured default harness; --harness NAME selects a declared harness.
+-- COMMAND starts a custom command. Shell, harness, and custom command choices are exclusive.
+Every creation registers its teammate name immediately. No whoami step is needed.
+auto names windows HARNESS-N or SHELL-N; a nameless pane becomes WINDOW-N.
+--in defaults to your own window. Existing window or agent names are refused.
+Harnesses wait for their ready prompt. Custom commands may use --ready REGEX|none.
+--ready-timeout SECONDS changes the readiness timeout; shells do not wait.
+Outside tmux, put --session NAME before create. --from does not apply.
+
+examples:
+  ttt create --window REVIEWER --shell
+  ttt create --pane TESTER --in REVIEWER
+  ttt create --window CODER --harness
+  ttt create --pane TESTS -- pnpm test --watch`
 
 /**
- * `ttt tmux open`: a window (`--window`: its main agent is named like it) or a pane in an existing
- * window (`--pane`: a titled helper, or with `--harness` a second agent registered under the given
- * name or `WINDOW-N`). The flag is required so the caller chooses on purpose. Either container
- * may run a harness (`--harness [NAME]`; bare means the settings' default), a command, or a shell.
+ * Creates a registered teammate, running a shell, a harness, or a custom command.
  */
-export const open: TmuxVerb = async(argv, ctx) => {
-  const { head, body } = splitAtTerminator(argv)
-  const { values, positionals } = parseCommandArgs(withBareValues(head), OPEN_OPTIONS)
-  if (positionals.length > 0) throw usageError(OPEN_USAGE)
-  const wantsWindow = values.window !== undefined
-  const wantsPane = values.pane !== undefined
-  if (wantsWindow === wantsPane) throw usageError(`open needs exactly one of --window or --pane\n${OPEN_USAGE}`)
-  const program = resolveProgram(ctx, values, body?.join(" ") || undefined)
-  if (wantsWindow) {
-    for (const flag of ["in", "horizontal", "size"] as const) {
-      if (values[flag] !== undefined && values[flag] !== false) throw usageError(`--${flag} applies to --pane only`)
+export const create: TmuxVerb = async(argv, ctx) => {
+  try {
+    const { head, body } = splitAtTerminator(argv)
+    const { values, positionals } = parseCommandArgs(withBareValues(head), CREATE_OPTIONS)
+    if (positionals.length > 0) throw usageError("create takes names through --window or --pane")
+    const wantsWindow = values.window !== undefined
+    const wantsPane = values.pane !== undefined
+    if (wantsWindow === wantsPane) throw usageError("create needs exactly one of --window or --pane")
+    if (body !== undefined && !body.join(" ").trim()) throw usageError("custom command must not be empty")
+    const program = resolveProgram(ctx, values, body?.join(" "))
+    if (wantsWindow) {
+      for (const flag of ["in", "horizontal", "size"] as const) {
+        if (values[flag] !== undefined && values[flag] !== false) throw usageError(`--${flag} applies to --pane only`)
+      }
+      await createWindow(ctx, values, program)
+      return
     }
-    await openWindow(ctx, values, program)
-    return
+    await createPane(ctx, values, program)
+  } catch(error) {
+    if (error instanceof CliError && error.exitCode === 2) throw new CliError(error.message.replace("(see: ttt --help)", "(see: ttt create --help)"), 2)
+    throw error
   }
-  await openPane(ctx, values, program)
 }
 
 const BARE_FLAGS = new Set(["--harness", "--pane"])
@@ -66,7 +88,7 @@ export function withBareValues(argv: string[]): string[] {
   })
 }
 
-type OpenValues = Parsed<typeof OPEN_OPTIONS>["values"]
+type CreateValues = Parsed<typeof CREATE_OPTIONS>["values"]
 
 /** What a new pane runs and what "ready" means for it: a declared harness, or a shell/command. */
 interface Program {
@@ -75,7 +97,10 @@ interface Program {
   ready: RegExp | undefined
 }
 
-function resolveProgram(ctx: TmuxVerbContext, values: OpenValues, commandArg: string | undefined): Program {
+function resolveProgram(ctx: TmuxVerbContext, values: CreateValues, commandArg: string | undefined): Program {
+  if (values.shell && (values.harness !== undefined || commandArg !== undefined)) throw usageError("--shell cannot be combined with --harness or -- COMMAND")
+  if (values.harness !== undefined && commandArg !== undefined) throw usageError("--harness cannot be combined with -- COMMAND")
+  if (values.harness === undefined && commandArg === undefined && (values.ready !== undefined || values["ready-timeout"] !== undefined)) throw usageError("shells do not wait; readiness options need --harness or -- COMMAND")
   const harness = values.harness === undefined ? undefined : pickHarness(ctx.settings.harnesses, values.harness)
   const command = commandArg ?? harness?.bin
   return { command, harness, ready: readinessOf(values, harness, command) }
@@ -95,7 +120,7 @@ function pickHarness(settings: HarnessSettings, requested: string): ResolvedHarn
 }
 
 /** `--ready REGEX` wins, `--ready none` opts out, else the harness's regex, else nothing to wait for. */
-function readinessOf(values: OpenValues, harness: ResolvedHarness | undefined, command: string | undefined): RegExp | undefined {
+function readinessOf(values: CreateValues, harness: ResolvedHarness | undefined, command: string | undefined): RegExp | undefined {
   if (values.ready === "none") return undefined
   if (values.ready !== undefined) {
     if (command === undefined) throw usageError("--ready needs something to wait for: pass --harness or -- COMMAND")
@@ -108,33 +133,16 @@ function readinessOf(values: OpenValues, harness: ResolvedHarness | undefined, c
   return harness?.ready
 }
 
-async function openWindow(ctx: TmuxVerbContext, values: OpenValues, program: Program): Promise<void> {
+async function createWindow(ctx: TmuxVerbContext, values: CreateValues, program: Program): Promise<void> {
   const session = requireSession(ctx)
-  const picked = await pickWindow(ctx, session, values.window!, program.harness?.name)
-  let windowId: string
-  let paneId: string
-  if (picked.adopt) {
-    // An unregistered one-pane window is adopted: its pane is restarted with the command, then stamped.
-    windowId = picked.adopt.windowId
-    paneId = picked.adopt.paneId
-    await ctx.tmux.panes.respawn(paneId, program.command, values.cwd)
-  } else {
-    const opened = await ctx.tmux.windows.open({ session, name: picked.name, ...(values.cwd !== undefined ? { cwd: values.cwd } : {}), ...(program.command ? { command: program.command } : {}) })
-    windowId = opened.windowId
-    paneId = opened.paneId
-  }
-  const name = picked.name
-  // A window running a harness or a command has its main agent seated from the start. A plain
-  // shell is left unregistered: its first pane receives until something there runs ttt.
-  if (program.command !== undefined) {
-    await ctx.tmux.panes.stamp(paneId, await ctx.tmux.inventory.listAllPanes(), {
-      agent: name,
-      ...(program.harness ? { harness: program.harness.name } : {}),
-      command: program.command,
-    })
-  }
-  const verb = picked.adopt ? "adopted" : "opened"
-  const head = `${verb} ${name} ${windowId} pane ${paneId}`
+  const name = await pickWindow(ctx, session, values.window!, program.harness?.name)
+  const { windowId, paneId } = await ctx.tmux.windows.open({ session, name, ...(values.cwd !== undefined ? { cwd: values.cwd } : {}), ...(program.command ? { command: program.command } : {}) })
+  await ctx.tmux.panes.stamp(paneId, await ctx.tmux.inventory.listAllPanes(), {
+    agent: name,
+    ...(program.harness ? { harness: program.harness.name } : {}),
+    ...(program.command !== undefined ? { command: program.command } : {}),
+  })
+  const head = `created ${name} ${windowId} pane ${paneId}`
   const waited = await awaitReady(ctx, values, program, paneId, `${name} did not become ready`, `the window ${windowId} stays open`)
   process.stdout.write(`${head}${waited === undefined ? "" : ` (${[program.harness?.name, waited].filter(Boolean).join(", ")})`}\n`)
 }
@@ -143,7 +151,7 @@ async function openWindow(ctx: TmuxVerbContext, values: OpenValues, program: Pro
  * Blocks until the harness's ready line shows (visible screen only: history may hold the previous
  * process's prompt). Returns the `ready after N.Ns` note, or undefined when there was nothing to wait for.
  */
-async function awaitReady(ctx: TmuxVerbContext, values: OpenValues, program: Program, paneId: string, failure: string, kept: string): Promise<string | undefined> {
+async function awaitReady(ctx: TmuxVerbContext, values: CreateValues, program: Program, paneId: string, failure: string, kept: string): Promise<string | undefined> {
   if (program.ready === undefined) return undefined
   const seconds = boundedInt(values["ready-timeout"], "--ready-timeout", ctx.settings.wait.seconds, ctx.settings.wait.maxSeconds)
   const started = Date.now()
@@ -154,29 +162,15 @@ async function awaitReady(ctx: TmuxVerbContext, values: OpenValues, program: Pro
   return `ready after ${((Date.now() - started) / 1_000).toFixed(1)}s`
 }
 
-interface PickedWindow {
-  name: string
-  /** Set when an existing window with that name is unregistered: it gets adopted instead of refused. */
-  adopt?: { windowId: string; paneId: string }
-}
-
-/**
- * `auto` generates `HARNESS-N`, or `W-N` for a shell. A given name must be valid and not be a
- * live stamp anywhere; if a window already carries it, it is adopted when unregistered with one
- * pane, and refused when its agent is seated.
- */
-async function pickWindow(ctx: TmuxVerbContext, session: string, requested: string, harness: string | undefined): Promise<PickedWindow> {
+/** A new name avoids live windows and stamps; auto also avoids old mailboxes. */
+async function pickWindow(ctx: TmuxVerbContext, session: string, requested: string, harness: string | undefined): Promise<string> {
   const live = (await ctx.tmux.inventory.listAllPanes()).filter((pane) => pane.session === session)
-  if (requested === "auto") return { name: generateWindowName(harness ?? FURNITURE_STEM, await takenNames(ctx, session, live)) }
+  if (requested === "auto") return generateWindowName(harness ?? "SHELL", await takenNames(ctx, session, live))
   checkWindowName(requested)
-  const existing = await ctx.tmux.windows.find(session, requested)
+  if (await ctx.tmux.windows.find(session, requested)) throw new CliError(`tmux window already exists: ${session}:${requested}; pick another name or --window auto`)
   const stamped = live.find((pane) => pane.agent === requested)
-  if (stamped && stamped.windowId !== existing?.id) throw new CliError(`agent ${requested} already exists in ${session}: pane ${stamped.pane} of ${stamped.window}; pick another name or --window auto`)
-  if (!existing) return { name: requested }
-  const panes = live.filter((pane) => pane.windowId === existing.id)
-  if (stamped) throw new CliError(`tmux window already exists: ${session}:${requested} (its agent is seated in ${stamped.pane}; pick another name or --window auto)`)
-  if (panes.length !== 1) throw new CliError(`window ${requested} has ${panes.length} panes and no registered agent; adopting needs exactly one pane (close the others, or pick another name)`)
-  return { name: requested, adopt: { windowId: existing.id, paneId: panes[0]!.pane } }
+  if (stamped) throw new CliError(`agent ${requested} already exists in ${session}: pane ${stamped.pane} of ${stamped.window}; pick another name or --window auto`)
+  return requested
 }
 
 /** Every name a new agent must avoid: live windows, live stamps, mailboxes on disk. */
@@ -188,25 +182,18 @@ async function takenNames(ctx: TmuxVerbContext, session: string, live: LivePane[
   ])
 }
 
-/**
- * With a harness the pane is a second agent in the window: registered as the given name, or
- * `WINDOW-N` when none is given, never as the window's own name. Without one it is a helper
- * (optionally titled) that becomes `WINDOW-N` the day something in it runs ttt.
- */
-async function openPane(ctx: TmuxVerbContext, values: OpenValues, program: Program): Promise<void> {
+/** Every new pane has its own teammate name, even when it starts a plain shell. */
+async function createPane(ctx: TmuxVerbContext, values: CreateValues, program: Program): Promise<void> {
   const given = values.pane === "" ? undefined : values.pane
   const windowName = values.in ?? ctx.self?.windowName
   if (windowName === undefined) throw usageError("--pane needs --in WINDOW when not run from inside an agent window")
   const target = await resolveAgentTarget(ctx, windowName)
-  let agent: string | undefined
-  if (program.harness) {
-    agent = given ?? generateSeatName(target.window.name, await takenNames(ctx, target.session, target.live))
-    if (given !== undefined) {
-      checkWindowName(given)
-      const stamped = target.live.find((pane) => pane.agent === given)
-      if (stamped) throw new CliError(`agent ${given} already exists in ${target.session}: pane ${stamped.pane} of ${stamped.window}`)
-      if (await ctx.tmux.windows.find(target.session, given)) throw new CliError(`agent ${given} already exists in ${target.session}: window ${given}`)
-    }
+  const agent = given ?? generateSeatName(target.window.name, await takenNames(ctx, target.session, target.live))
+  if (given !== undefined) {
+    checkWindowName(given)
+    const stamped = target.live.find((pane) => pane.agent === given)
+    if (stamped) throw new CliError(`agent ${given} already exists in ${target.session}: pane ${stamped.pane} of ${stamped.window}`)
+    if (await ctx.tmux.windows.find(target.session, given)) throw new CliError(`agent ${given} already exists in ${target.session}: window ${given}`)
   }
   const paneId = await ctx.tmux.panes.split({
     target: target.paneId,
@@ -215,32 +202,15 @@ async function openPane(ctx: TmuxVerbContext, values: OpenValues, program: Progr
     ...(values.cwd !== undefined ? { cwd: values.cwd } : {}),
     ...(program.command ? { command: program.command } : {}),
   })
-  const title = agent === undefined ? given : undefined
-  if (program.command || title !== undefined || agent !== undefined) {
-    await ctx.tmux.panes.stamp(paneId, await ctx.tmux.inventory.listAllPanes(), {
-      ...(agent !== undefined ? { agent } : {}),
-      ...(program.command ? { command: program.command } : {}),
-      ...(program.harness ? { harness: program.harness.name } : {}),
-      ...(title !== undefined ? { title } : {}),
-    })
-  }
+  await ctx.tmux.panes.stamp(paneId, await ctx.tmux.inventory.listAllPanes(), {
+    agent,
+    ...(program.command !== undefined ? { command: program.command } : {}),
+    ...(program.harness ? { harness: program.harness.name } : {}),
+  })
   const waited = await awaitReady(ctx, values, program, paneId, `pane ${paneId} in ${windowName} did not become ready`, "the pane stays open")
-  const notes = [agent !== undefined ? `agent ${agent}` : title, program.harness?.name, waited].filter((note) => note !== undefined)
-  process.stdout.write(`opened pane ${paneId} in ${windowName}${notes.length > 0 ? ` (${notes.join(", ")})` : ""}\n`)
+  const notes = [`agent ${agent}`, program.harness?.name, waited].filter((note) => note !== undefined)
+  process.stdout.write(`created pane ${paneId} in ${windowName} (${notes.join(", ")})\n`)
 }
-
-/** `ttt tmux split NAME ...`: the pre-`--pane` spelling, kept one release. */
-export const split: TmuxVerb = async(argv, ctx) => {
-  const { head, body } = splitAtTerminator(argv)
-  const { values, positionals } = parseCommandArgs(head, SPLIT_OPTIONS)
-  const [name, ...extra] = positionals
-  if (name === undefined || extra.length > 0) throw usageError("usage: ttt tmux split NAME [--horizontal] [--size PERCENT] [--cwd DIR] [-- COMMAND] (alias of: ttt tmux open --pane --in NAME ...)")
-  process.stderr.write("ttt: `split` is now `ttt tmux open --pane --in NAME`; the alias goes away in the next release.\n")
-  const forwarded = ["--pane", "", "--in", name, ...(values.horizontal ? ["--horizontal"] : []), ...(values.size !== undefined ? ["--size", values.size] : []), ...(values.cwd !== undefined ? ["--cwd", values.cwd] : []), ...(body ? ["--", ...body] : [])]
-  await open(forwarded, ctx)
-}
-
-const SPLIT_OPTIONS = { horizontal: { type: "boolean", default: false }, size: { type: "string" }, cwd: { type: "string" } } as const
 
 /** Close a window or one explicitly targeted pane; the mailbox on disk is untouched. */
 export const close: TmuxVerb = async(argv, ctx) => {
@@ -277,7 +247,7 @@ export const rename: TmuxVerb = async(argv, ctx) => {
   if (!window) throw new CliError(`tmux window does not exist: ${session}:${from}`)
   if (await ctx.tmux.windows.find(session, to)) throw new CliError(`tmux window already exists: ${session}:${to}`)
   const mailboxes = await mailboxNames(ctx.settings.boardRoot, session)
-  if (mailboxes.includes(from)) throw new CliError(`${from} has a mailbox; renaming would orphan it. Close ${from} and open ${to} instead`)
+  if (mailboxes.includes(from)) throw new CliError(`${from} has a mailbox; renaming would orphan it. Close ${from} and create ${to} instead`)
   if (mailboxes.includes(to)) throw new CliError(`${to} has an old mailbox that ${from} would inherit; pick another name`)
   const live = (await ctx.tmux.inventory.listAllPanes()).filter((pane) => pane.session === session)
   const stamped = live.find((pane) => pane.agent === to)

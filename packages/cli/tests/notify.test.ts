@@ -5,10 +5,10 @@ import { join } from "node:path"
 import { after, test } from "node:test"
 
 import { Board, MessageKind, MessagePriority } from "@ttt/board"
-import { Tmux } from "@ttt/tmux"
+import { Tmux, UserOption } from "@ttt/tmux"
 import type { TmuxOptions } from "@ttt/tmux"
 
-import { notify } from "../src/commands/notify.ts"
+import { notify, pushUrgent } from "../src/commands/notify.ts"
 import type { Context } from "../src/context.ts"
 import { defaultSettings } from "../src/settings.ts"
 
@@ -114,11 +114,12 @@ test("a failed paste re-arms a live marker instead of stranding the burst", asyn
   assert.equal(await board.unreadCount("B"), 1, "the message stays unread")
 })
 
-/** A tmux server that seats B in %5 but counts every paste. */
-function countingTmux(pasted: { count: number }): Tmux {
+/** A tmux server that seats B in %5 but counts every paste, and stamps `@ttt_gui` when `gui` is set. */
+function countingTmux(pasted: { count: number }, gui = false): Tmux {
   return new Tmux(NO_WAIT, async(args) => {
     if (args[0] === "list-windows") return "B\t@2\n"
     if (args[0] === "list-panes") return "work\tB\t@2\t%5\t1\t1234\tB\n"
+    if (args[0] === "show-options") return gui && args.includes(UserOption.Gui) ? "1\n" : ""
     if (args[0] === "load-buffer" || args[0] === "paste-buffer" || args[0] === "send-keys") {
       pasted.count += 1
       return ""
@@ -159,4 +160,70 @@ test("a notifier that fires while the target waits pastes nothing and drops the 
   await assert.rejects(readFile(join(sessionRoot, "state", "B.notification.json"), "utf8"), "the marker is dropped")
   assert.equal(await board.unreadCount("B"), 1, "the message stays unread and unnotified")
   await withdraw()
+})
+
+test("a gui seat swallows the batched paste and its marker without a re-arm", async() => {
+  const home = await mkdtemp(join(tmpdir(), "ttt-notify-"))
+  homes.push(home)
+  const sessionRoot = join(home, "boards", "work")
+  const board = new Board({ sessionRoot, notifySeconds: 0, lock: { timeoutMs: 2_000, staleMs: 60_000 } })
+  const sent = await board.send("A", ["B"], "hi", {
+    kind: MessageKind.Message,
+    priority: MessagePriority.Normal,
+    replyExpected: true,
+  })
+  const token = sent.notifications[0]!.token
+  const pasted = { count: 0 }
+  const ctx: Context = {
+    settings: defaultSettings(home),
+    session: "work",
+    senderName: "ttt",
+    windowName: "ttt",
+    senderId: "",
+    senderPane: "",
+    claimed: false,
+    actor: undefined,
+    via: "override",
+    tmux: countingTmux(pasted, true),
+    board,
+    binPath: join(home, "no-such-bin.mjs"),
+  }
+  await notify(["--target", "B", "--token", token], ctx)
+  assert.equal(pasted.count, 0, "a gui seat has no reader on its pane")
+  await assert.rejects(readFile(join(sessionRoot, "state", "B.notification.json"), "utf8"), "the marker is cancelled, not re-armed")
+  assert.equal(await board.unreadCount("B"), 1, "the message waits unread for a background read")
+})
+
+test("an urgent paste is skipped for a gui seat and the mail waits unread", async() => {
+  const home = await mkdtemp(join(tmpdir(), "ttt-notify-"))
+  homes.push(home)
+  const sessionRoot = join(home, "boards", "work")
+  const board = new Board({ sessionRoot, notifySeconds: 0, lock: { timeoutMs: 2_000, staleMs: 60_000 } })
+  const sent = await board.send("A", ["B"], "now", {
+    kind: MessageKind.Message,
+    priority: MessagePriority.Urgent,
+    replyExpected: true,
+  })
+  const message = sent.message
+  const pasted = { count: 0 }
+  const ctx: Context = {
+    settings: defaultSettings(home),
+    session: "work",
+    senderName: "A",
+    windowName: "A",
+    senderId: "",
+    senderPane: "",
+    claimed: false,
+    actor: undefined,
+    via: "override",
+    tmux: countingTmux(pasted, true),
+    board,
+    binPath: join(home, "no-such-bin.mjs"),
+  }
+  await pushUrgent(ctx, message, new Map([["B", {
+    window: { id: "@2", name: "B" },
+    seat: { windowId: "@2", windowName: "B", paneId: "%5", registered: false },
+  }]]))
+  assert.equal(pasted.count, 0, "urgent cannot wake a gui seat either")
+  assert.equal(await board.unreadCount("B"), 1, "the message waits unread for a background read")
 })

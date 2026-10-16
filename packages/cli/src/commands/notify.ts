@@ -6,6 +6,7 @@ import { parseCommandArgs } from "../args.ts"
 import { CliError, usageError } from "../cli-error.ts"
 import { NOTIFIER_NAME, requireAgent } from "../context.ts"
 import type { Context, Handler, Agent } from "../context.ts"
+import { OptionScope, UserOption } from "@ttt/tmux"
 
 /**
  * Starts a detached copy of this CLI that waits out the batching window and then pastes one summary line
@@ -46,14 +47,17 @@ export const notify: Handler = async(argv, ctx) => {
     await ctx.board.deliverNotification(target, token, async(summary) => {
       try {
         const { seat } = await requireAgent(ctx, target)
+        if (await isGuiSeat(ctx, seat.paneId)) throw new SkippedNotification(target)
         await pasteToAgent(ctx, seat.paneId, formatNotification(summary))
       } catch(error) {
+        if (error instanceof SkippedNotification) throw error
         process.stderr.write(`ttt: notification paste to ${target} failed: ${error instanceof Error ? error.message : String(error)}\n`)
         throw new CancelledNotification(target)
       }
     }, async() => {
       try {
         const { seat } = await requireAgent(ctx, target)
+        if (await isGuiSeat(ctx, seat.paneId)) return
         await ctx.tmux.screen.waitForQuiet(seat.paneId)
       } catch(error) {
         process.stderr.write(`ttt: notification preparation for ${target} failed: ${error instanceof Error ? error.message : String(error)}\n`)
@@ -61,11 +65,31 @@ export const notify: Handler = async(argv, ctx) => {
       }
     })
   } catch(error) {
+    if (error instanceof SkippedNotification) {
+      // A GUI seat has no reader on its pane: the paste would land in the void. The marker goes,
+      // the receipts stay unread and unnotified (the badge shows the mail), and there is no
+      // re-arm: the stamp is a standing condition, not a race.
+      await ctx.board.cancelNotification(target, token)
+      return
+    }
     if (!(error instanceof CancelledNotification)) throw error
     await ctx.board.cancelNotification(target, token)
     const marker = await ctx.board.scheduleNotification(target)
     if (marker) spawnNotifier(ctx, marker)
   }
+}
+
+/** Thrown when the target seats a GUI app; the marker is cancelled without a re-arm. */
+class SkippedNotification extends Error {
+  constructor(target: string) {
+    super(`notification to ${target} skipped: the seat is a GUI app`)
+    this.name = "SkippedNotification"
+  }
+}
+
+/** A pane stamped `@ttt_gui` seats a GUI app with no reader on its tty; a paste there lands in the void. */
+export async function isGuiSeat(ctx: Context, paneId: string): Promise<boolean> {
+  return await ctx.tmux.options.get({ scope: OptionScope.Pane, target: paneId, key: UserOption.Gui }) !== undefined
 }
 
 /** Thrown after a failed paste is re-armed, so the dead delivery is not retried or marked done. */
@@ -95,6 +119,8 @@ export function formatUrgent(message: BoardMessage): string {
 export async function pushUrgent(ctx: Context, message: BoardMessage, windows: Map<string, Agent>): Promise<void> {
   const failures: string[] = []
   for (const [name, agent] of windows) {
+    // A GUI seat has no reader on its pane; urgent mail waits unread there, like batched mail.
+    if (await isGuiSeat(ctx, agent.seat.paneId)) continue
     try {
       await ctx.board.deliverUrgent(message, name, (urgent) => pasteToAgent(ctx, agent.seat.paneId, formatUrgent(urgent)))
     } catch(error) {

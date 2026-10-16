@@ -129,7 +129,7 @@ Data:
 | `stamp` | `(paneId, live, stamp: PaneStamp) => Promise<void>` | Marks the pane with the given stamps. With `agent`, clears `@ttt_agent` from every other pane in the session carrying the same name, so one name sits in one pane (a dedupe, never a blanket clear — other agents' stamps are untouched). Writes only what differs; a pane already stamped costs nothing. |
 | `split` | `(input: SplitPaneInput) => Promise<string>` | Creates a detached pane; returns its id. |
 | `kill` | `(paneId: string) => Promise<void>` | Kills the pane. |
-| `respawn` | `(paneId: string, command?: string, cwd?: string) => Promise<void>` | Restarts the pane's command; `-k` kills a still-running one first, so the verb is idempotent. `cwd` starts it elsewhere (adoption). |
+| `respawn` | `(paneId: string, command?: string, cwd?: string) => Promise<void>` | Restarts the pane's command; `-k` kills a still-running one first, so the verb is idempotent. `cwd` starts it elsewhere. |
 | `isDead` | `(paneId: string) => Promise<boolean>` | `#{pane_dead}`. `send-keys` to a dead pane succeeds silently, so callers check first. |
 
 ## input.ts
@@ -197,7 +197,7 @@ settings file may override `bin`/`ready` and declare more.
 |---|---|---|
 | `Harness` | vocabulary | `as const`: `claude`, `opencode` (v1), `opencode2` (v2), `codex`. |
 | `HarnessPreset` | type | `{ command, ready: RegExp, note? }` — `ready` matches one screen line once the harness accepts input; `note` warns the operator (codex's trust prompt, claude's trust-configuration prompt). |
-| `HARNESS_PRESETS` | constant | The four presets, each with its verification comment (e.g. opencode2 2.0.12, 2026-09-24: the input placeholder). Notes where trusting is involved: claude — a folder with pre-approved permissions asks 'Only proceed if you trust this configuration' first; answer with `ttt tmux press NAME Down` then `Enter`, or start it in a trusted `--cwd`. codex — an unseen directory asks 'Do you trust the contents' first; answer with `ttt tmux press NAME Enter` or a trusted `--cwd`. The note is appended to the open timeout message and only while the preset's `ready` is still in use. |
+| `HARNESS_PRESETS` | constant | The four presets, each with its verification comment (e.g. opencode2 2.0.12, 2026-09-24: the input placeholder). Notes where trusting is involved: claude — a folder with pre-approved permissions asks 'Only proceed if you trust this configuration' first; answer with `ttt tmux press NAME Down` then `Enter`, or start it in a trusted `--cwd`. codex — an unseen directory asks 'Do you trust the contents' first; answer with `ttt tmux press NAME Enter` or a trusted `--cwd`. The note is appended to the create timeout message and only while the preset's `ready` is still in use. |
 | `harnessPreset` | function | `(name) => HarnessPreset | undefined` — lookup by name. |
 
 ## hooks.ts

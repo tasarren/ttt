@@ -9,10 +9,12 @@ import { panes } from "./commands/panes.ts"
 import { prune } from "./commands/prune.ts"
 import { broadcast, reply, send } from "./commands/send.ts"
 import { TMUX_USAGE, runTmuxVerb } from "./commands/tmux/index.ts"
+import { CREATE_USAGE, create } from "./commands/tmux/lifecycle.ts"
 import { windows } from "./commands/windows.ts"
 import { whoami } from "./commands/whoami.ts"
 import { createContext } from "./context.ts"
 import type { GlobalOverrides, Handler } from "./context.ts"
+import { createTmuxContext } from "./tmux-context.ts"
 
 /** Commands that only read: no receipt changes, so no badge to refresh. */
 const READ_ONLY = new Set(["inbox", "status", "thread", "capture", "windows", "panes", "whoami", "migrate", "prune"])
@@ -38,6 +40,15 @@ const COMMANDS: Record<string, Handler> = {
 
 export const USAGE = `ttt — durable, batched messaging between windows of the current tmux session
 
+Identity is automatic inside tmux. Omit global --session and --from; whoami is diagnostic.
+
+common tasks:
+  ttt create --window REVIEWER --shell          new teammate shell (also the default)
+  ttt create --window CODER --harness           new teammate using the default harness
+  ttt create --pane TESTER                      new teammate shell in your window
+  ttt send REVIEWER -- 'Please review this.'
+  ttt create --help                            creation options and examples
+
 usage:
   ttt send TARGET [options] -- 'MESSAGE'        ttt TARGET -- 'MESSAGE' (shorthand)
   ttt send TARGET [options] --file PATH         (or pipe the body on stdin)
@@ -48,6 +59,7 @@ usage:
 
   ttt read [--max COUNT] [--peek] [--latest] [--headers-only]
   ttt read --wait [--timeout SECONDS]           block until mail arrives, then print it
+  ttt read --gui                                stamp this pane as a GUI seat; no pastes land here
   ttt inbox [--count]                           ttt inbox --detail [--max COUNT] [--from NAME]
   ttt status MESSAGE_ID
   ttt thread MESSAGE_ID [--headers-only]
@@ -74,11 +86,15 @@ Shell-quote bodies, ACK notes, and subjects. -- ends options, not shell parsing.
 Example: ttt ack --all -- 'FOO BAR; BIZ'. Use --file for complex message bodies.
 
 Normal messages are queued. A target gets one notification per burst and reads the batch with
-"ttt read". A recipient blocked in --wait gets no paste at all: the wait returns the mail itself. ACK is board state only; it sends nothing. Cancel retracts a message you sent from recipients who had not read it; the same --replace KEY you sent with retracts every pending one. Settings: ~/.ttt/settings.jsonc
+"ttt read". A recipient blocked in --wait gets no paste at all: the wait returns the mail itself.
+A pane stamped with "ttt read --gui" seats a GUI app that has no reader on its console; notification
+pastes are suppressed there and mail waits unread until a background "ttt read" picks it up. ACK is board state only; it sends nothing. Cancel retracts a message you sent from recipients who had not read it; the same --replace KEY you sent with retracts every pending one. Settings: ~/.ttt/settings.jsonc
 Shorthand "ttt TARGET -- MESSAGE" sends; a window named like a command (send, read, inbox,
-status, thread, capture, cancel, broadcast, reply, windows, whoami, prune, migrate, tmux) needs the explicit "ttt send" form.
+status, thread, capture, cancel, broadcast, reply, windows, whoami, prune, migrate, create, tmux) needs the explicit "ttt send" form.
 Identity is automatic (PID ancestry, then TMUX_PANE) and never uses the active window.
 Recovery overrides only come as a pair: --session NAME --from WINDOW; lone --from is rejected.
+For create/tmux, --session alone selects a session outside tmux. Redundant overrides warn once.
+"ttt inbox --from NAME" filters senders; it does not override your identity.
 Capture output is cleaned of TUI chrome (borders, spinners) unless --raw is passed.`
 
 
@@ -90,7 +106,18 @@ export async function main(argv: string[], binPath: string): Promise<void> {
     return
   }
 
-  // `ttt tmux ...` has its own composition root: no board, no sender, works outside tmux.
+  if (first === "create") {
+    if (overrides.from !== undefined) throw usageError("--from does not apply to ttt create")
+    const args = rest.slice(1)
+    if (args[0] === "--help" || args[0] === "-h" || args[0] === "help") {
+      process.stdout.write(`${CREATE_USAGE}\n`)
+      return
+    }
+    await create(args, await createTmuxContext(overrides.session, binPath))
+    return
+  }
+
+  // Creation and tmux verbs share a composition root: no board or sender, works outside tmux.
   if (first === "tmux") {
     if (overrides.from !== undefined) throw usageError("--from does not apply to ttt tmux commands")
     await runTmuxVerb(rest.slice(1), overrides.session, binPath)
@@ -120,7 +147,7 @@ function parseGlobals(argv: string[]): { overrides: GlobalOverrides; rest: strin
   if (overrides.from !== undefined && overrides.session === undefined) {
     throw usageError("--from needs --session SESSION; overrides only come as a pair")
   }
-  if (overrides.session !== undefined && overrides.from === undefined && rest[0] !== "tmux") {
+  if (overrides.session !== undefined && overrides.from === undefined && rest[0] !== "tmux" && rest[0] !== "create") {
     throw usageError("--session needs --from NAME")
   }
   return { overrides, rest }

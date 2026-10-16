@@ -19,6 +19,8 @@ export const UserOption = {
   Command: "@ttt_command",
   /** Pane: a human-readable title for a helper pane (no identity), shown in the border. */
   Title: "@ttt_title",
+  /** Pane: set when the pane seats a GUI app; the notifier pastes nothing there. */
+  Gui: "@ttt_gui",
   /** Window: unread message count for the badge. */
   Unread: "@ttt_unread",
   /** Session: set once setup has normalized the session. */

@@ -247,8 +247,8 @@
         "properties": {
           "action": {
             "enum": [
-              "open-window",
-              "open-pane",
+              "create-window",
+              "create-pane",
               "close",
               "close-pane",
               "rename",

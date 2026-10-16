@@ -1,9 +1,10 @@
 import { assertName } from "@ttt/board"
 import type { BoardMessage, MessageReceipt } from "@ttt/board"
+import { OptionScope, UserOption } from "@ttt/tmux"
 
 import { boundedInt, parseCommandArgs, splitAtTerminator } from "../args.ts"
 import { usageError } from "../cli-error.ts"
-import type { Handler } from "../context.ts"
+import type { Context, Handler } from "../context.ts"
 import { WaitOutcome, waitForMail } from "../wait.ts"
 
 const READ_OPTIONS = {
@@ -12,12 +13,24 @@ const READ_OPTIONS = {
   latest: { type: "boolean", default: false },
   "headers-only": { type: "boolean", default: false },
   wait: { type: "boolean", default: false },
+  gui: { type: "boolean", default: false },
   timeout: { type: "string" },
 } as const
+
+/** `--gui` stamps this pane `@ttt_gui`: the notifier pastes nothing here, mail waits for `read`. Best-effort and idempotent — a background shell loop restamps on every call. */
+async function stampGuiSeat(ctx: Context): Promise<void> {
+  if (ctx.senderPane === "") return
+  try {
+    await ctx.tmux.options.set({ scope: OptionScope.Pane, target: ctx.senderPane, key: UserOption.Gui }, "1")
+  } catch {
+    // A failed stamp only means notification pastes continue; the read itself still works.
+  }
+}
 
 export const read: Handler = async(argv, ctx) => {
   const { values, positionals } = parseCommandArgs(argv, READ_OPTIONS)
   if (positionals.length > 0) throw usageError("read takes no positional arguments")
+  if (values.gui) await stampGuiSeat(ctx)
   const max = boundedInt(values.max, "--max", ctx.settings.readMax, 1_000)
   const headersOnly = values["headers-only"]
   if (values.timeout !== undefined && !values.wait) throw usageError("--timeout needs --wait")

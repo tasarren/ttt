@@ -33,7 +33,7 @@ export interface Settings {
     /** Mirror unread counts into `@ttt_unread` window options after each command. */
     badges: boolean
   }
-  /** Harnesses `ttt tmux open --harness` may start, and which one a bare `--harness` means. */
+  /** Harnesses `ttt create --harness` may start, and which one a bare `--harness` means. */
   harnesses: HarnessSettings
   /** `$TMUX_PANE`: the pane this process was started in, needed to identify the caller's window. */
   currentPane: string | undefined

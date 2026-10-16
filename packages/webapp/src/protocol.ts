@@ -42,7 +42,7 @@ export type TerminalEvent =
   | { type: "output"; pane: string; epoch: number; text: string }
   | { type: "error"; message: string }
 export const WebAction = {
-  OpenWindow: "open-window", OpenPane: "open-pane", Close: "close", ClosePane: "close-pane", Rename: "rename", Respawn: "respawn", Interrupt: "interrupt", Save: "save", Restore: "restore", Setup: "setup",
+  CreateWindow: "create-window", CreatePane: "create-pane", Close: "close", ClosePane: "close-pane", Rename: "rename", Respawn: "respawn", Interrupt: "interrupt", Save: "save", Restore: "restore", Setup: "setup",
 } as const
 export type WebAction = (typeof WebAction)[keyof typeof WebAction]
 export interface ActionRequest { action: WebAction; session: string; target?: string; name?: string; harness?: string; command?: string; cwd?: string; horizontal?: boolean }

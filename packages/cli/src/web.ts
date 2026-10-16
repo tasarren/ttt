@@ -270,7 +270,7 @@ export async function createWebApp(initialSettings?: Settings, server: TmuxServe
     const input = request
     assertName(input.session, "session name")
     const args = actionArgs(input)
-    const result = await execute(process.execPath, [cliPath, "--session", input.session, "tmux", ...args], { maxBuffer: 2_000_000, timeout: 180_000 })
+    const result = await execute(process.execPath, [cliPath, "--session", input.session, ...args], { maxBuffer: 2_000_000, timeout: 180_000 })
     revision++
     return c.json({ ok: true, output: result.stdout, warning: result.stderr })
   })
@@ -345,14 +345,14 @@ async function atomicSource(path: string, source: string): Promise<void> {
 export function actionArgs(input: ActionRequest): string[] {
   const required = (value: string | undefined, label: string): string => { if (!value) throw new Error(`${label} required`); return value }
   switch (input.action) {
-    case WebAction.OpenWindow: case WebAction.OpenPane:
-      return ["open", ...(input.action === WebAction.OpenWindow ? ["--window", input.name || "auto"] : ["--pane", ...(input.name ? [input.name] : input.harness ? [] : [""]), "--in", required(input.target, "window")]), ...(input.harness ? ["--harness", input.harness] : []), ...(input.cwd ? ["--cwd", input.cwd] : []), ...(input.horizontal ? ["--horizontal"] : []), ...(input.command ? ["--", input.command] : [])]
-    case WebAction.Close: case WebAction.Respawn: case WebAction.Interrupt: return [input.action, required(input.target, "target")]
-    case WebAction.ClosePane: return ["close", "--pane", required(input.target, "pane")]
-    case WebAction.Rename: return ["rename", required(input.target, "target"), required(input.name, "name")]
-    case WebAction.Save: return ["save", required(input.name, "layout name")]
-    case WebAction.Restore: return ["restore", required(input.name, "layout name"), "--as", input.session]
-    case WebAction.Setup: return ["setup", "--name", input.session, "--non-interactive", ...(input.name ? ["--layout", input.name] : [])]
+    case WebAction.CreateWindow: case WebAction.CreatePane:
+      return ["create", ...(input.action === WebAction.CreateWindow ? ["--window", input.name || "auto"] : ["--pane", ...(input.name ? [input.name] : []), "--in", required(input.target, "window")]), ...(input.harness ? ["--harness", input.harness] : []), ...(input.cwd ? ["--cwd", input.cwd] : []), ...(input.horizontal ? ["--horizontal"] : []), ...(input.command ? ["--", input.command] : [])]
+    case WebAction.Close: case WebAction.Respawn: case WebAction.Interrupt: return ["tmux", input.action, required(input.target, "target")]
+    case WebAction.ClosePane: return ["tmux", "close", "--pane", required(input.target, "pane")]
+    case WebAction.Rename: return ["tmux", "rename", required(input.target, "target"), required(input.name, "name")]
+    case WebAction.Save: return ["tmux", "save", required(input.name, "layout name")]
+    case WebAction.Restore: return ["tmux", "restore", required(input.name, "layout name"), "--as", input.session]
+    case WebAction.Setup: return ["tmux", "setup", "--name", input.session, "--non-interactive", ...(input.name ? ["--layout", input.name] : [])]
   }
 }
 
