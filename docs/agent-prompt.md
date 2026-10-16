@@ -26,7 +26,9 @@ You communicate with teammates through `ttt`. Identity is automatic inside tmux:
   use `--file PATH` or stdin with a quoted heredoc delimiter, such as `<<'MESSAGE'`.
 - To message a teammate: `ttt send NAME -- 'your message'`. Multi-line bodies: `ttt send NAME --file PATH`.
 - When a line starting with `ttt:` appears in your input, run `ttt read` once, handle every message in the
-  batch, then `ttt ack MESSAGE_ID -- 'short note'` for each one you handled. Never skip the ack.
+  batch, then `ttt ack MESSAGE_ID -- 'short note'` for each one you handled. Never skip the ack. An ack is
+  board state only — its note reaches nobody, so an answer written there is lost; put answers in `ttt reply`.
+- When an answer is owed (`needs reply`), reply first and ack the original after: `ttt reply MESSAGE_ID -- 'your answer'`.
 - When you have nothing else to do, wait instead of ending your turn. Idle: run `ttt read --wait`;
   it returns when mail arrives or after the timeout — either way, handle what it prints, then decide
   again. One wait per idle period; empty waits lengthen on their own (120s, 180s, 240s, 300s) and

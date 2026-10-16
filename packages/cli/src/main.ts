@@ -88,7 +88,7 @@ Example: ttt ack --all -- 'FOO BAR; BIZ'. Use --file for complex message bodies.
 Normal messages are queued. A target gets one notification per burst and reads the batch with
 "ttt read". A recipient blocked in --wait gets no paste at all: the wait returns the mail itself.
 A pane stamped with "ttt read --gui" seats a GUI app that has no reader on its console; notification
-pastes are suppressed there and mail waits unread until a background "ttt read" picks it up. ACK is board state only; it sends nothing. Cancel retracts a message you sent from recipients who had not read it; the same --replace KEY you sent with retracts every pending one. Settings: ~/.ttt/settings.jsonc
+pastes are suppressed there and mail waits unread until a background "ttt read" picks it up. ACK is board state only; it sends nothing, and an ACK note on a message that expected a reply warns you to use "ttt reply" instead. Cancel retracts a message you sent from recipients who had not read it; the same --replace KEY you sent with retracts every pending one. Settings: ~/.ttt/settings.jsonc
 Shorthand "ttt TARGET -- MESSAGE" sends; a window named like a command (send, read, inbox,
 status, thread, capture, cancel, broadcast, reply, windows, whoami, prune, migrate, create, tmux) needs the explicit "ttt send" form.
 Identity is automatic (PID ancestry, then TMUX_PANE) and never uses the active window.

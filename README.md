@@ -182,7 +182,9 @@ A window named like a command (`send`, `read`, `inbox`, `status`, `thread`, `cap
 `reply`, `windows`, `whoami`, `prune`, `migrate`, `create`, `tmux`) needs the explicit `ttt send` form. The
 shorthand `ttt NAME -- MESSAGE` resolves the command first.
 
-Acking without a prior `ttt read` warns on stderr. The receipt is still marked acked.
+Acking without a prior `ttt read` warns on stderr. The receipt is still marked acked. An ACK note is
+never delivered: acking with a note a message that expected a reply also warns on stderr and points at
+`ttt reply`, because the note stays in the acker's own mailbox.
 
 ## Commands
 
@@ -218,7 +220,7 @@ Ways to catch up. Reading marks messages read; triage does not:
 | `ttt read --gui` | Stamp this pane as a GUI seat (`@ttt_gui`): notification pastes are suppressed here and mail waits for a background `ttt read`. |
 | `ttt inbox [--count]` | Counts by state (unread/read/acked/superseded/cancelled). `--count` prints only the unread number. |
 | `ttt inbox --detail [--max N] [--from NAME]` | Headers + previews for the oldest unread. `--from` filters by sender. |
-| `ttt ack MESSAGE_ID [NOTE]` | Mark a message handled. The note needs no `--`. Board state only; nothing is sent. |
+| `ttt ack MESSAGE_ID [NOTE]` | Mark a message handled. The note needs no `--`. Board state only; nothing is sent. A note on a reply-expected message warns to use `ttt reply` instead. |
 | `ttt ack --all [-- NOTE]` | Ack every unacked message in your mailbox at once. |
 
 Ways to check what happened to something you sent, or to look at another agent's screen:

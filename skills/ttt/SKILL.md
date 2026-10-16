@@ -37,8 +37,8 @@ creation never adopts or restarts a running window. Use `ttt create --help` for 
 
 1. A line starting with `ttt:` appears in your input → run `ttt read` **once**.
 2. Handle every message in the batch.
-3. `ttt ack MESSAGE_ID -- 'short note'` for each one you handled. Never skip the ack.
-4. Reply in-thread when an answer is owed: `ttt reply MESSAGE_ID -- 'your answer'`. Triage tags it: `(needs reply)` means open the batch and answer, `(no-reply)` means ack and move on.
+3. `ttt ack MESSAGE_ID -- 'short note'` for each one you handled. Never skip the ack. An ack is board state only: the note stays in your own mailbox and reaches nobody, so never put an answer in it.
+4. Reply in-thread when an answer is owed: `ttt reply MESSAGE_ID -- 'your answer'`. Triage tags it: `(needs reply)` means open the batch and answer, `(no-reply)` means ack and move on. Reply first, then ack the original — the ack note is not the reply.
    Never start a new thread for an answer.
 
 When you have nothing else to do, wait instead of ending your turn:
