@@ -7,7 +7,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  check:
+  verify:
     name: check (tmux ${{ matrix.tmux }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -19,3 +19,11 @@ jobs:
       - uses: actions/checkout@v4
       - run: sh .orchestrator/scripts/verify-container.sh "$TMUX_VERSION"
         env: { TMUX_VERSION: "${{ matrix.tmux }}" }
+  check:
+    if: always()
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - run: test "$RESULT" = success
+        env: { RESULT: "${{ needs.verify.result }}" }

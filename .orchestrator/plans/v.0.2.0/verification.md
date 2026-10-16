@@ -19,7 +19,8 @@ The historical audit below is retained as before/after evidence, not the current
 | Version | PASS | CLI/generated constant/bundled skill 0.2.0; engines >=24.11.0; registry still latest 0.1.3 and 0.2.0 absent |
 | Package boundary | PASS | Exactly five files; built bin; no runtime deps; TypeScript AST checks built-in imports/no dynamic loads; bundler module inventory only CLI/board/tmux/migrations/jsonc-parser |
 | Remaining dependency audit | TRIAGED | Two unpatched Histoire-only advisories; see below; no suppression |
-| GitHub CI | FOLLOW-UP | First run failed two tmux E2E checks; see findings below |
+| GitHub Docker matrix | PASS | Run 38956199129 at 08f76f8; tmux 3.2 / 3.4 / 3.8 all succeeded |
+| Required check aggregation | FOLLOW-UP | Branch protection requires `check`; aggregate job preserves that context and fails unless the entire matrix succeeds |
 | OIDC upload | PENDING MAINTAINER | No package upload; prior 0.1.3 provenance names this repository's release.yml, but current trusted-publisher settings require maintainer confirmation |
 
 Reusable checks: `.orchestrator/scripts/verify-{release,packed,upgrade,candidate}.mjs`.
@@ -79,7 +80,11 @@ Final Docker Compose matrix passes on all three versions:
 Logs: `container-3.2-final.log`, `container-3.4-final.log`, `container-3.8-final.log` under the
 ignored audit directory. Earlier `pr-11-failure.log`, `pr-11-full.log`, `ci-fixture-focused.log`,
 `ci-fixture-check.log`, and `container-matrix.log` document diagnosis, not final results.
-GitHub verification of the follow-up remains pending at this commit.
+GitHub run [38956199129](https://github.com/tasarren/ttt/actions/runs/38956199129) passed all three
+matrix jobs at `08f76f8`. Merge remained blocked because branch protection requires context `check`,
+while the matrix reports `check (tmux VERSION)`. An `always()` aggregate job named `check` now
+requires the complete matrix result to be `success`; failure, cancellation, or skipping cannot
+produce a green required check. Repository protection is unchanged. Follow-up CI remains pending.
 
 Docker verification uses stages for the digest-pinned Node/pnpm base, checksum-verified tmux builds,
 frozen dependencies, and test runtime. `compose.yaml` selects `TMUX_VERSION`; local and CI

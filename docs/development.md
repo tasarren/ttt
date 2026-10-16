@@ -110,6 +110,7 @@ Builds download dependencies; test containers run without external networking (`
 User config, `.git`, host dependencies, and build/scratch output are excluded by `.dockerignore`.
 All generated files and private tmux servers stay in disposable containers; Docker retains images
 and build cache for subsequent runs. CI runs the same script; release verification reuses that workflow.
+The required `check` job aggregates the matrix and succeeds only when every version passes.
 
 For checks on an already configured development host:
 `verify-candidate.mjs [NODE]` checks a fresh snapshot of current tracked/unignored files;

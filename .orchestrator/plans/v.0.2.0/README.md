@@ -1,10 +1,13 @@
 # v0.2.0 release roadmap
 
 Audit date: 2026-10-16. Target: **`@tasarren/ttt@0.2.0`**, PR **`next` into `main`**.
-Status: **local Docker matrix green; PR CI follow-up awaiting GitHub verification**.
+Status: **local and GitHub Docker matrices green; required-check aggregation awaiting verification**.
 Node 24.11.0 / pnpm 11.24.0 on tmux 3.2, 3.4, and 3.8: 173 source tests and 25 packed tests pass
 per version, with zero failures/skips and 66 stories / 176 variants. Upgrade/backup rollback passes.
-PR [#11](https://github.com/tasarren/ttt/pull/11) contains release-preparation commit `c6437fd`.
+PR [#11](https://github.com/tasarren/ttt/pull/11) contains release-preparation commit `c6437fd`
+and compatibility follow-up `08f76f8`. GitHub run `38956199129` passed all three matrix jobs.
+Branch protection requires `check`; the aggregate job preserves that name and requires every
+matrix job to succeed. Its follow-up run must pass before merge.
 First GitHub run exposed tmux fixture assumptions and incorrect pane-index option scope; follow-up
 fix and verification are recorded in `verification.md`. Green CI, merge, trusted-publisher
 confirmation, tagging, staging, and approval remain release gates.
