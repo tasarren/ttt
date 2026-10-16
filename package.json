@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.24.0",
   "scripts": {
     "ttt": "node packages/cli/src/ttt.ts",
     "build": "pnpm --filter @ttt/tmux build && pnpm --filter @tasarren/ttt build && pnpm --filter @ttt/ui build && pnpm --filter @ttt/webapp build",
