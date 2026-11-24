@@ -8,6 +8,7 @@
   <a href="https://www.npmjs.com/package/@tasarren/ttt"><img src="https://img.shields.io/npm/v/@tasarren/ttt.svg" alt="npm version" /></a>
   <a href="https://github.com/tasarren/ttt/actions/workflows/ci.yml"><img src="https://github.com/tasarren/ttt/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/tasarren/ttt.svg" alt="license" /></a>
+  <a href="https://ko-fi.com/tasarren"><img src="https://img.shields.io/badge/Ko--fi-Support-FF5E5B?logo=ko-fi&logoColor=white" alt="Ko-fi" /></a>
 </p>
 
 Talk To Teammate (`ttt`) is messaging for the agents sharing one tmux session. You are a window,
@@ -716,3 +717,7 @@ npx skills-npm                                            # when ttt is a projec
 
 `docs/agent-prompt.md` is the same rules as a block to paste into a system prompt. Developer
 documentation is in `docs/development.md`.
+
+## Support
+
+Tip on [Ko-fi](https://ko-fi.com/tasarren) or sponsor [@tasarren on GitHub](https://github.com/sponsors/tasarren). Both help keep this project moving.
