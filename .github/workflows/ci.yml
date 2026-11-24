@@ -7,8 +7,26 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  # Required context is `check`. paths-ignore would leave docs-only PRs pending.
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      docs_only: ${{ steps.gate.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - id: gate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR: ${{ github.event.pull_request.number }}
+        run: sh .orchestrator/scripts/ci-docs-only.sh
   verify:
     name: check (tmux ${{ matrix.tmux }})
+    needs: docs
+    if: ${{ needs.docs.result == 'success' && needs.docs.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
@@ -21,9 +39,19 @@ jobs:
         env: { TMUX_VERSION: "${{ matrix.tmux }}" }
   check:
     if: always()
-    needs: verify
+    needs: [docs, verify]
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
-      - run: test "$RESULT" = success
-        env: { RESULT: "${{ needs.verify.result }}" }
+      - run: |
+          set -eu
+          test "$DOCS_RESULT" = success
+          if [ "$DOCS_ONLY" = true ]; then
+            test "$RESULT" = skipped || test "$RESULT" = success
+            exit $?
+          fi
+          test "$RESULT" = success
+        env:
+          DOCS_RESULT: ${{ needs.docs.result }}
+          DOCS_ONLY: ${{ needs.docs.outputs.docs_only }}
+          RESULT: ${{ needs.verify.result }}
